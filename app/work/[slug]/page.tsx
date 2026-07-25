@@ -1,8 +1,11 @@
+import "../../../redesign.css";
+import "../../../styles.css";
+import "../../../experience.css";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { getProject, projects } from "../../components/projectData";
-import { JoiMapNativeDemo, JoiNativeDemo } from "../../components/NativeProjectDemos";
-import { Live2DRouteMount } from "../../components/Live2DRouteMount";
+import { getProject, projects } from "../../../components/projectData";
+import { JoiMapNativeDemo, JoiNativeDemo } from "../../../components/NativeProjectDemos";
+import { Live2DRouteMount } from "../../../components/Live2DRouteMount";
 
 type ProjectPageProps = {
   params: Promise<{ slug: string }>;
@@ -36,8 +39,8 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
       <header className="project-detail-nav">
         <a className="wordmark" href={sitePath("/")}>GALLO</a>
         <nav aria-label="Project navigation">
-          <a href={sitePath("/#work")}>WORK</a>
-          <a href={sitePath("/#about")}>ABOUT</a>
+          <a href={sitePath("/selected-work")}>WORK</a>
+          <a href={sitePath("/about-me")}>ABOUT</a>
           <a href={project.repo} target="_blank" rel="noreferrer">GITHUB</a>
         </nav>
       </header>
@@ -47,6 +50,7 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
           <div className="project-detail-hero-top">
             <p className="project-detail-kicker">{project.index} / {project.kind}</p>
             <h1>{project.title}</h1>
+            {project.tagline && <p className="project-detail-tagline">{project.tagline}</p>}
           </div>
 
           <div className="project-detail-summary">
@@ -108,7 +112,7 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
             ))}
           </section>
 
-          <a className="project-next" href={sitePath(`/${project.nextSlug}`)}>
+          <a className="project-next" href={sitePath(`/work/${project.nextSlug}`)}>
             <span>NEXT PROJECT</span>
             <strong>{project.nextTitle}</strong>
           </a>

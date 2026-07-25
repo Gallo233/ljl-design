@@ -17,6 +17,8 @@ export type ProjectCase = {
   title: string;
   date: string;
   kind: string;
+  /** Optional line shown under the title on the detail page. */
+  tagline?: string;
   role: string;
   repo: string;
   summary: string;
@@ -40,6 +42,7 @@ export const projects: ProjectCase[] = [
     title: "JOI — PRESENCE",
     date: "MAY — JULY 2026",
     kind: "WINDOWS-FIRST MULTIMODAL COMPANION",
+    tagline: "A machine learning how to live with you.",
     role: "PRODUCT / DESIGN / DEVELOPMENT",
     repo: "https://github.com/Gallo233/Joi",
     summary:

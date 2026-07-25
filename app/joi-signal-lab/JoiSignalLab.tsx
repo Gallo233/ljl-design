@@ -1,18 +1,31 @@
 "use client";
 
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import * as THREE from "three";
 import { Joi9000Hero } from "./Joi9000Hero";
+import {
+  REEL_ANCHOR,
+  SECTIONS,
+  getSection,
+  progressWithin,
+  scrollTopForSection,
+  sectionAt,
+  type SectionId,
+} from "./sections";
 import styles from "./joi-signal-lab.module.css";
 
-type JoiSignalLabProps = { className?: string };
+type JoiSignalLabProps = {
+  className?: string;
+  /** Which section to land on. Each section has its own route but shares one scroll. */
+  initialSection?: SectionId;
+};
 
 const projects = [
-  { index: "01", title: "Joi Presence", subtitle: "Multimodal AI Companion", href: "/joi", palette: ["#07121d", "#f2eee7", "#ea6448"] },
-  { index: "02", title: "Joi Map", subtitle: "World-facing AI Guide", href: "/joi-map", palette: ["#b8c8cf", "#07121d", "#ea6448"] },
-  { index: "03", title: "Quiet Memory", subtitle: "Local Context System", href: "/joi", palette: ["#d8c69f", "#12100c", "#6c8fad"] },
-  { index: "04", title: "Action Ledger", subtitle: "Human-readable Autonomy", href: "/joi", palette: ["#0b2236", "#dce9ef", "#7caed0"] },
-  { index: "05", title: "Voice Field", subtitle: "Character & Expression", href: "/joi", palette: ["#43283f", "#f1dfda", "#ee795c"] },
+  { index: "01", title: "Joi Presence", subtitle: "Multimodal AI Companion", href: "/work/joi", palette: ["#07121d", "#f2eee7", "#ea6448"] },
+  { index: "02", title: "Joi Map", subtitle: "World-facing AI Guide", href: "/work/joi-map", palette: ["#b8c8cf", "#07121d", "#ea6448"] },
+  { index: "03", title: "Quiet Memory", subtitle: "Local Context System", href: "/work/joi", palette: ["#d8c69f", "#12100c", "#6c8fad"] },
+  { index: "04", title: "Action Ledger", subtitle: "Human-readable Autonomy", href: "/work/joi", palette: ["#0b2236", "#dce9ef", "#7caed0"] },
+  { index: "05", title: "Voice Field", subtitle: "Character & Expression", href: "/work/joi", palette: ["#43283f", "#f1dfda", "#ee795c"] },
   { index: "06", title: "Gallo / Joi", subtitle: "One Identity, Many Surfaces", href: "/", palette: ["#e9e3d8", "#111214", "#e55f43"] },
 ] as const;
 
@@ -620,7 +633,7 @@ function FilmCanvas({
   return <canvas ref={canvasRef} className={styles.filmCanvas} aria-label="Drag horizontally to browse Joi projects" />;
 }
 
-export function JoiSignalLab({ className = "" }: JoiSignalLabProps) {
+export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSignalLabProps) {
   const experienceRef = useRef<HTMLElement>(null);
   const filmActiveRef = useRef(false);
   const [step, setStep] = useState(0);
@@ -629,27 +642,43 @@ export function JoiSignalLab({ className = "" }: JoiSignalLabProps) {
   const [scrollProgress, setScrollProgress] = useState(0);
   const [particleForm, setParticleForm] = useState(0);
   const activeIndex = modulo(step, projects.length);
-  const filmReveal = smoothStep((scrollProgress - 0.66) / 0.22);
-  const filmActive = filmReveal > 0.55;
+
+  // The hero camera flight and the film entrance were tuned against a 0..1 range that ends when
+  // the reel has arrived. Remap onto that range so they keep their timing while the page grows.
+  const entry = Math.max(0, Math.min(1, scrollProgress / REEL_ANCHOR));
+  const filmReveal = smoothStep((entry - 0.66) / 0.22);
+  const filmActive = filmReveal > 0.55 && scrollProgress < getSection("about-me").start;
   const ready = filmReady && computerReady;
-  const heroOpacity = 1 - smoothStep(scrollProgress / 0.28);
-  const terminalOpacity = 1 - smoothStep(scrollProgress / 0.56);
+  // Spread the hero copy fade across most of the hero section rather than the first fraction of
+  // it — the page is much longer now than when these were 0.28 / 0.56 of the whole thing.
+  const heroOpacity = 1 - smoothStep(entry / 0.7);
+  const terminalOpacity = 1 - smoothStep(entry / 0.85);
   const computerOpacity = Math.max(0, 1 - filmReveal * 1.35);
+
+  // The two closing sections. Skeleton timing — content still to come.
+  const aboutProgress = progressWithin(getSection("about-me"), scrollProgress);
+  const contactProgress = progressWithin(getSection("contact"), scrollProgress);
+  const reelExit = smoothStep((scrollProgress - (getSection("about-me").start - 0.06)) / 0.06);
+  const activeSection = sectionAt(scrollProgress);
   filmActiveRef.current = filmActive;
 
   useEffect(() => {
-    document.body.classList.add("joi-signal-lab-active");
     const handleKey = (event: KeyboardEvent) => {
       if (!filmActiveRef.current) return;
       if (event.key === "ArrowLeft") setStep((value) => value - 1);
       if (event.key === "ArrowRight") setStep((value) => value + 1);
     };
     window.addEventListener("keydown", handleKey);
-    return () => {
-      document.body.classList.remove("joi-signal-lab-active");
-      window.removeEventListener("keydown", handleKey);
-    };
+    return () => window.removeEventListener("keydown", handleKey);
   }, []);
+
+  // Land on the section this route names, before the first paint. One scroll, four addresses.
+  useLayoutEffect(() => {
+    const experience = experienceRef.current;
+    if (!experience || initialSection === "hero") return;
+    const travel = Math.max(1, experience.offsetHeight - window.innerHeight);
+    window.scrollTo({ top: scrollTopForSection(initialSection, travel), behavior: "instant" as ScrollBehavior });
+  }, [initialSection]);
 
   useEffect(() => {
     let frame = 0;
@@ -666,14 +695,37 @@ export function JoiSignalLab({ className = "" }: JoiSignalLabProps) {
       if (!frame) frame = window.requestAnimationFrame(update);
     };
     update();
+    // A deep link scrolls before fonts and the 3D scene have settled the page height, so measure
+    // again once things stop moving. Without this the reader lands mid-page reading as progress 0.
+    const observer = new ResizeObserver(schedule);
+    observer.observe(experienceRef.current ?? document.body);
+    const settle = window.requestAnimationFrame(schedule);
     window.addEventListener("scroll", schedule, { passive: true });
     window.addEventListener("resize", schedule);
     return () => {
       window.cancelAnimationFrame(frame);
+      window.cancelAnimationFrame(settle);
+      observer.disconnect();
       window.removeEventListener("scroll", schedule);
       window.removeEventListener("resize", schedule);
     };
   }, []);
+
+  // Keep the address bar in step with where the reader actually is, without adding history
+  // entries — scrolling is not navigation.
+  useEffect(() => {
+    const section = getSection(activeSection);
+    if (window.location.pathname === section.path) return;
+    window.history.replaceState(null, "", section.path);
+    document.title = section.title;
+  }, [activeSection]);
+
+  const goToSection = (id: SectionId) => {
+    const experience = experienceRef.current;
+    if (!experience) return;
+    const travel = Math.max(1, experience.offsetHeight - window.innerHeight);
+    window.scrollTo({ top: scrollTopForSection(id, travel), behavior: "smooth" });
+  };
 
   return (
     <main
@@ -689,16 +741,19 @@ export function JoiSignalLab({ className = "" }: JoiSignalLabProps) {
         "--film-clip": `${(1 - filmReveal) * 4.5}%`,
         "--film-radius": `${(1 - filmReveal) * 34}px`,
         "--hero-opacity": heroOpacity,
-        "--hero-shift": `${scrollProgress * -28}px`,
+        "--hero-shift": `${entry * -28}px`,
         "--terminal-opacity": terminalOpacity,
-        "--terminal-shift": `${scrollProgress * 18}px`,
+        "--terminal-shift": `${entry * 18}px`,
+        "--reel-exit": reelExit,
+        "--about-progress": aboutProgress,
+        "--contact-progress": contactProgress,
       } as CSSProperties}
     >
       <div className={styles.stage}>
         <div className={styles.heroField} aria-hidden="true" />
         <div className={styles.computerLayer}>
           <Joi9000Hero
-            progress={scrollProgress}
+            progress={entry}
             onFormChange={setParticleForm}
             onReady={() => setComputerReady(true)}
           />
@@ -707,9 +762,9 @@ export function JoiSignalLab({ className = "" }: JoiSignalLabProps) {
         <section className={styles.heroCopy} aria-labelledby="joi9000-title">
           <p>PERSONAL AI SYSTEM · GUANGZHOU / 2026</p>
           <h1 id="joi9000-title">
-            <span>A MACHINE</span>
-            <span>LEARNING HOW TO</span>
-            <span>LIVE WITH YOU.</span>
+            <span>I DESIGN</span>
+            <span>HOW AI ENTERS</span>
+            <span>HUMAN LIFE.</span>
           </h1>
           <div className={styles.heroScrollPrompt}>
             <span>SCROLL TO ENTER SELECTED WORK</span>
@@ -758,18 +813,63 @@ export function JoiSignalLab({ className = "" }: JoiSignalLabProps) {
           <p className={styles.hint}>DRAG THE FILM <span>·</span> USE ARROW KEYS</p>
         </section>
 
+        {/* Skeleton. Copy and layout land once the assets are in — see docs/design-audits. */}
+        <section
+          className={`${styles.closingPanel} ${activeSection === "about-me" ? styles.closingPanelActive : ""}`}
+          aria-label="About me"
+        >
+          <p className={styles.closingKicker}>03 / GALLO</p>
+          <h2>
+            Curious about<br />what technology<br />changes in us.
+          </h2>
+          <p className={styles.closingBody}>
+            AI becomes interesting when it stops being only a feature.
+          </p>
+          <a className={styles.closingLink} href="/about-me">
+            THE ROOM, THE WORK, THE PERSON <span aria-hidden="true">→</span>
+          </a>
+        </section>
+
+        <section
+          className={`${styles.closingPanel} ${styles.contactPanel} ${activeSection === "contact" ? styles.closingPanelActive : ""}`}
+          aria-label="Contact"
+        >
+          <p className={styles.closingKicker}>04 / CONTACT</p>
+          <h2>
+            Let&apos;s make technology<br />people can live with.
+          </h2>
+          <div className={styles.closingActions}>
+            <a href="mailto:liujialuo233@gmail.com">EMAIL <span aria-hidden="true">↗</span></a>
+            <a href="https://github.com/Gallo233" target="_blank" rel="noreferrer">GITHUB <span aria-hidden="true">↗</span></a>
+            <a href="/resume/gallo-liu-resume-cn.pdf" target="_blank">RESUME <span aria-hidden="true">↗</span></a>
+          </div>
+        </section>
+
         <header className={styles.header}>
           <a className={styles.brand} href="/" aria-label="Back to Gallo home">
             <i aria-hidden="true" />
             <span>GALLO</span>
           </a>
+          <nav className={styles.sectionNav} aria-label="Sections">
+            {SECTIONS.map((section) => (
+              <a
+                key={section.id}
+                href={section.path}
+                className={activeSection === section.id ? styles.sectionNavActive : ""}
+                aria-current={activeSection === section.id ? "page" : undefined}
+                onClick={(event) => {
+                  event.preventDefault();
+                  goToSection(section.id);
+                }}
+              >
+                {section.label}
+              </a>
+            ))}
+          </nav>
           <div className={styles.headerProgress} aria-hidden="true">
             <span>JOI9000</span>
             <i style={{ transform: `scaleX(${Math.max(0.02, scrollProgress)})` }} />
           </div>
-          <button className={styles.menu} type="button" aria-label="JOI9000 and selected work experience">
-            <i /><i /><i />
-          </button>
         </header>
 
         <div className={styles.scanlines} aria-hidden="true" />
