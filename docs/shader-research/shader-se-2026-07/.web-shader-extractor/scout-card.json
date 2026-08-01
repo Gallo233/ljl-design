@@ -1,0 +1,109 @@
+{
+  "schemaVersion": 3,
+  "source": {
+    "url": "https://www.shader.se/",
+    "canonicalUrl": "https://www.shader.se/",
+    "route": "/",
+    "viewport": { "width": 1280, "height": 800, "dpr": 2 },
+    "browser": "Claude Code in-app browser (Chromium)",
+    "backend": "Three.js r183 WebGPURenderer",
+    "capturedAt": "2026-07-25"
+  },
+  "scope": "effect",
+  "targetDescription": "Whole-page render surface: the shared CRT composite, the hero (office) scene, and the Selected Work film reel.",
+  "candidates": [
+    {
+      "id": "surface-main",
+      "selector": "#scroll-container > div > div > canvas",
+      "frame": "main",
+      "context": "webgpu",
+      "owner": "React Three Fiber root; canvas carries data-engine=\"three.js r183 webgpu\"",
+      "visualCoverage": "total",
+      "temporalActivity": "continuous",
+      "ablationImpact": "not-run: the page has exactly one canvas and no competing DOM paint layer",
+      "evidence": ["evidence/scout/surface-inventory.json", "evidence/source/post-processing-chain.md"]
+    }
+  ],
+  "lockStatus": "locked",
+  "allowedLockStatus": ["unlocked", "provisional", "attributed", "locked"],
+  "allowedTruth": ["SOURCE", "PARTIAL", "GUESS"],
+  "targetSet": ["surface-main"],
+  "alternatives": [
+    { "id": "a11y-overlay", "excludedBecause": "every section carries class a11y-hidden at 1px height; it is a screen-reader mirror, not a paint layer" },
+    { "id": "fixed-html-overlay", "excludedBecause": "the z-40 fixed div is pointer-events-none and its only content is the canvas host" },
+    { "id": "iframe-or-video-layer", "excludedBecause": "zero iframes and zero attached video elements; videos are detached and used as textures" }
+  ],
+  "effectBoundary": "surface-only; the entire visible page including all typography is produced by the single canvas",
+  "hypotheses": [
+    {
+      "id": "hyp-1",
+      "statement": "One WebGPU canvas renders every page section, composited through a shared post-processing node graph.",
+      "status": "supported",
+      "evidenceFor": ["ev-surface", "ev-engine", "ev-post"],
+      "evidenceAgainst": [],
+      "truth": "SOURCE"
+    },
+    {
+      "id": "hyp-2",
+      "statement": "The CRT look is achieved with DOM/CSS overlays on top of a plain 3D render.",
+      "status": "contradicted",
+      "evidenceFor": [],
+      "evidenceAgainst": ["ev-surface", "ev-post"],
+      "truth": "SOURCE"
+    },
+    {
+      "id": "hyp-3",
+      "statement": "Page typography is DOM text positioned over the canvas.",
+      "status": "contradicted",
+      "evidenceFor": [],
+      "evidenceAgainst": ["ev-fonts", "ev-surface", "ev-post"],
+      "truth": "SOURCE"
+    }
+  ],
+  "allowedHypothesisStatus": ["untested", "supported", "contradicted"],
+  "interactions": [
+    { "input": "scroll", "response": "Lenis 1.3.3 smooths an overflow container whose spacer is 14259px = 17.8 viewport heights for 4 sections" },
+    { "input": "pointer drag", "response": "central GN({pageType,type:'drag',listeners}) registry routes canvas pointer events per page and sets document.body.style.cursor" },
+    { "input": "pointer hover", "response": "GN({type:'button'}) drives motion values animated at duration 0.15" }
+  ],
+  "scopeRisk": "low",
+  "blockingUnknowns": [],
+  "importantUnknowns": [
+    "Live in-browser render of the hero could not be captured: the asset preloader stalls behind blocked video autoplay in the in-app browser. Post-chain behaviour was instead confirmed against the boot screen, which renders through the same composite."
+  ],
+  "evidence": [
+    { "id": "ev-surface", "fact": "exactly one canvas exists; backing store 1920x1200 for a 1280x800 CSS box, i.e. pixel ratio clamped to 1.5 while the display reports dpr 2", "truth": "SOURCE", "path": "evidence/scout/surface-inventory.json" },
+    { "id": "ev-engine", "fact": "the canvas carries data-engine=\"three.js r183 webgpu\"; window.__THREE__ is \"183\"; navigator.gpu is present and getContext('webgpu') succeeds", "truth": "SOURCE", "path": "evidence/scout/surface-inventory.json" },
+    { "id": "ev-post", "fact": "a single TSL node graph composites every page: selective mip-map bloom, warm phosphor add, temporal persistence, sepia, brightness/contrast, lens distortion, rounded-bezel mask, UI-aware chromatic aberration, luminance-inverse Gaussian grain", "truth": "SOURCE", "path": "evidence/source/post-processing-chain.md" },
+    { "id": "ev-fonts", "fact": "the app loads stix_regular/medium/bold as .json + .png pairs, i.e. bitmap/MSDF font atlases sampled inside the canvas rather than DOM webfonts", "truth": "SOURCE", "path": "evidence/network/asset-index.md" },
+    { "id": "ev-pages", "fact": "pages are registered as portal scenes via Tl({pageType,type,fov,near,far,basePosition,baseRotation}); observed pageTypes are office, projects, project, about-us, contact, fwa", "truth": "SOURCE", "path": "evidence/source/post-processing-chain.md" },
+    { "id": "ev-assets", "fact": "5.2 MB preloaded before entry: 6 GLB props, rgba_noise, bank_* PBR textures, Mux stills at w800-h600, and prebaked AVIF sprite sheets for video", "truth": "SOURCE", "path": "evidence/network/asset-index.md" }
+  ],
+  "gateDecision": {
+    "targetAttributed": true,
+    "targetLocked": true,
+    "requiredEvidence": {
+      "visualAttribution": [{ "status": "passed", "evidenceId": "ev-surface", "path": "evidence/scout/surface-inventory.json", "truth": "SOURCE", "notes": "single surface; no competing paint layer to ablate against" }],
+      "targetSet": [{ "status": "passed", "evidenceId": "ev-surface", "path": "evidence/scout/surface-inventory.json", "truth": "SOURCE", "notes": "one canvas selected" }],
+      "contextAndOwner": [{ "status": "passed", "evidenceId": "ev-engine", "path": "evidence/scout/surface-inventory.json", "truth": "SOURCE", "notes": "main-thread R3F root on a WebGPU context" }],
+      "targetBoundSourceOrFramework": [{ "status": "passed", "evidenceId": "ev-post", "path": "evidence/source/post-processing-chain.md", "truth": "SOURCE", "notes": "post chain read out of the target-bound client chunk 0nr6lqdt2xw72.js" }],
+      "effectBoundary": [{ "status": "passed", "evidenceId": "ev-surface", "path": "evidence/scout/surface-inventory.json", "truth": "SOURCE", "notes": "surface-only" }],
+      "primaryTraceRoute": [{ "status": "passed", "evidenceId": "ev-post", "path": "evidence/source/post-processing-chain.md", "truth": "SOURCE", "notes": "narrow bundle slices; no source maps are published" }],
+      "alternativesExcluded": [{ "status": "passed", "evidenceId": "ev-surface", "path": "evidence/scout/surface-inventory.json", "truth": "SOURCE", "notes": "a11y mirror and pointer-events-none overlay excluded" }]
+    },
+    "blockers": [],
+    "decidedAt": "2026-07-25"
+  },
+  "nextProbe": {
+    "type": "none-gap-analysis",
+    "target": "surface-main",
+    "resolves": [],
+    "distinguishes": [],
+    "expectedOutcomes": []
+  },
+  "truthNotes": {
+    "source": ["surface count and pixel ratio", "renderer backend and version", "post-processing node graph and constants", "asset inventory", "page portal registry", "scroll length and driver"],
+    "partial": ["per-page camera values beyond office and projects", "exact Lenis easing configuration"],
+    "guess": []
+  }
+}

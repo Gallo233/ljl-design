@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
-import "../redesign.css";
-import "../styles.css";
-import "../experience.css";
+// The legacy light-site stylesheets load per-route now (see app/classic and app/work/[slug]).
+// Loading them globally made body a scroll container and broke the CRT experience.
+import "./globals.css";
 
 export const metadata: Metadata = {
   title: {

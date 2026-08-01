@@ -1,0 +1,40 @@
+/*
+ * Minimal global reset for the CRT experience.
+ *
+ * The legacy stylesheets (styles.css / redesign.css / experience.css) were written for the light
+ * editorial site and set `body { overflow: hidden }`, `body:not([data-state]) { overflow: auto }`
+ * and `html { overflow-x: clip }`. Those turn body into its own scroll container, which stops
+ * window scroll events from reaching the page and breaks painting of the fixed stage.
+ *
+ * They now load only on the routes that need them — /classic and /work/[slug].
+ */
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  min-height: 100%;
+  background: #05070b;
+}
+
+body {
+  margin: 0;
+  min-height: 100%;
+  background: #05070b;
+  color: #f2eee8;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+img,
+video,
+canvas {
+  display: block;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}

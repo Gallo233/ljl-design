@@ -7,7 +7,8 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import styles from "./joi-signal-lab.module.css";
 
 type Joi9000HeroProps = {
-  progress: number;
+  /** Live scroll progress, 0 at the top to 1 when the reel has arrived. */
+  progressRef: { current: number };
   onFormChange: (index: number) => void;
   onReady: () => void;
 };
@@ -549,13 +550,11 @@ function createParticleMaterial() {
   });
 }
 
-export function Joi9000Hero({ progress, onFormChange, onReady }: Joi9000HeroProps) {
+export function Joi9000Hero({ progressRef, onFormChange, onReady }: Joi9000HeroProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const progressRef = useRef(progress);
   const onFormChangeRef = useRef(onFormChange);
   const onReadyRef = useRef(onReady);
 
-  useEffect(() => { progressRef.current = progress; }, [progress]);
   useEffect(() => { onFormChangeRef.current = onFormChange; }, [onFormChange]);
   useEffect(() => { onReadyRef.current = onReady; }, [onReady]);
 

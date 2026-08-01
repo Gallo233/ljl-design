@@ -1,0 +1,59 @@
+{
+  "capturedAt": "2026-07-25 local session",
+  "url": "https://www.shader.se/",
+  "viewport": { "width": 1280, "height": 800, "devicePixelRatio": 2 },
+  "browser": "Claude Code in-app browser (Chromium)",
+  "canvases": [
+    {
+      "id": "surface-main",
+      "index": 0,
+      "selector": "body div > canvas",
+      "backingStore": [1920, 1200],
+      "cssSize": [1280, 800],
+      "effectivePixelRatio": 1.5,
+      "position": "static",
+      "zIndex": "auto",
+      "mixBlendMode": "normal",
+      "contextProbe": "webgpu",
+      "note": "Sole canvas on the page. getContext('webgpu') succeeded, so the live context is WebGPU."
+    }
+  ],
+  "iframes": [],
+  "videos": [],
+  "navigatorGpu": true,
+  "targetBoundGlobals": {
+    "__THREE__": "183",
+    "lenisVersion": "1.3.3",
+    "__next_f": "Next.js App Router flight stream present"
+  },
+  "domStructure": {
+    "#scroll-container": {
+      "class": "fixed inset-0 w-screen overflow-y-auto overflow-x-hidden",
+      "clientHeight": 800,
+      "scrollHeight": 14259,
+      "scrollScreens": 17.824,
+      "children": [
+        { "tag": "DIV", "height": 0, "role": "canvas host (static, unpositioned)" },
+        { "tag": "DIV", "class": "fixed inset-0 w-screen z-40 pointer-events-none", "height": 800, "role": "fixed HTML overlay layer" },
+        { "tag": "DIV", "class": "h-canvas-svh w-screen-svw pointer-events-none", "height": 14259, "role": "scroll spacer that sets total scroll length" }
+      ]
+    },
+    "#a11y-overlay": {
+      "note": "Accessibility-only DOM mirror. All four sections carry class a11y-hidden with height 1px.",
+      "sections": [
+        { "ariaLabel": "Hero", "text": "A Creative Development Studio, Plugged into the Future / Scroll to Inspect Our Closed Deals" },
+        { "ariaLabel": "Selected Work", "text": "Selected Work / Browse our project carousel to explore our selected work. / Project carousel / Previous project / View project / Next project" },
+        { "ariaLabel": "About Us", "text": "Making Digital Storytelling More Playful, Powerful, and Alive ..." },
+        { "ariaLabel": "Contact", "text": "Contact / hello@shader.se / Book a call / Laxholmstorget 3 ..." }
+      ]
+    }
+  },
+  "conclusions": [
+    "TRUTH=SOURCE: exactly one rendering surface exists; every visible pixel including all typography is produced by it.",
+    "TRUTH=SOURCE: the renderer backend is WebGPU (navigator.gpu present, getContext('webgpu') returns a context).",
+    "TRUTH=SOURCE: Three.js r183 is on the page and is the only 3D framework global present.",
+    "TRUTH=SOURCE: device pixel ratio is clamped to 1.5 even though the display reports 2.",
+    "TRUTH=SOURCE: scroll is driven by an overflow container (#scroll-container) with a 14259px spacer, i.e. ~17.8 viewport heights for 4 sections. Lenis 1.3.3 smooths it.",
+    "TRUTH=SOURCE: HTML is not the presentation layer. It is an a11y mirror plus one pointer-events-none fixed overlay."
+  ]
+}

@@ -1,10 +1,10 @@
 import "../../../redesign.css";
 import "../../../styles.css";
 import "../../../experience.css";
+import "./project-detail.css";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getProject, projects } from "../../../components/projectData";
-import { JoiMapNativeDemo, JoiNativeDemo } from "../../../components/NativeProjectDemos";
 import { Live2DRouteMount } from "../../../components/Live2DRouteMount";
 
 type ProjectPageProps = {
@@ -34,12 +34,12 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
   if (!project) notFound();
 
   return (
-    <main className="project-page">
-      <Live2DRouteMount />
+    <main className={`project-page project-page--${project.slug}`}>
+      {project.slug === "joi" && <Live2DRouteMount />}
       <header className="project-detail-nav">
         <a className="wordmark" href={sitePath("/")}>GALLO</a>
         <nav aria-label="Project navigation">
-          <a href={sitePath("/selected-work")}>WORK</a>
+          <a href={sitePath("/selected-work")}>BACK TO REEL</a>
           <a href={sitePath("/about-me")}>ABOUT</a>
           <a href={project.repo} target="_blank" rel="noreferrer">GITHUB</a>
         </nav>
@@ -61,7 +61,8 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
             <dl>
               <div><dt>PERIOD</dt><dd>{project.date}</dd></div>
               <div><dt>ROLE</dt><dd>{project.role}</dd></div>
-              <div><dt>TYPE</dt><dd>{project.kind}</dd></div>
+              <div><dt>STATUS</dt><dd>{project.status}</dd></div>
+              <div><dt>STACK</dt><dd>{project.stack}</dd></div>
             </dl>
           </div>
 
@@ -84,12 +85,47 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
             </div>
           </section>
 
-          <div className={`project-detail-live ${project.slug === "joi" ? "is-dark" : "is-light"}`}>
-            {project.slug === "joi" ? <JoiNativeDemo /> : <JoiMapNativeDemo />}
-          </div>
+          <figure className="project-detail-motion">
+            <video
+              autoPlay
+              controls
+              loop
+              muted
+              playsInline
+              poster={sitePath(project.motion.poster)}
+              preload="metadata"
+              aria-describedby={`${project.slug}-motion-caption`}
+            >
+              <source src={sitePath(project.motion.src)} type="video/mp4" />
+            </video>
+            <figcaption id={`${project.slug}-motion-caption`}>
+              <span>{project.motion.label}</span>
+              <p>{project.motion.caption}</p>
+            </figcaption>
+          </figure>
         </section>
 
         <div className="project-detail-body">
+          <section className="project-detail-loop" aria-labelledby={`${project.slug}-loop-title`}>
+            <header>
+              <p className="project-detail-kicker">THE PRODUCT LOOP</p>
+              <div>
+                <h2 id={`${project.slug}-loop-title`}>{project.loopTitle}</h2>
+                <p lang="zh-CN">{project.loopTitleZh}</p>
+              </div>
+            </header>
+            <ol>
+              {project.loop.map((step) => (
+                <li key={step.index}>
+                  <span>{step.index}</span>
+                  <strong>{step.label}</strong>
+                  <h3>{step.title}</h3>
+                  <p>{step.body}</p>
+                </li>
+              ))}
+            </ol>
+          </section>
+
           {project.sections.map((section) => (
             <section className="project-detail-section" key={section.heading}>
               <div>
@@ -104,8 +140,8 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
           ))}
 
           <section className="project-detail-gallery" aria-label={`${project.title} project figures`}>
-            {project.figures.map((figure) => (
-              <figure key={figure.src}>
+            {project.figures.map((figure, index) => (
+              <figure className={`project-detail-figure project-detail-figure--${index + 1}`} key={figure.src}>
                 <img src={sitePath(figure.src)} alt={figure.alt} loading="lazy" />
                 <figcaption>{figure.caption}</figcaption>
               </figure>

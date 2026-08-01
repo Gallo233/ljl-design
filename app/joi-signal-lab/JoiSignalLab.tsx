@@ -1,17 +1,20 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
+import { useRouter } from "next/navigation";
 import * as THREE from "three";
 import { Joi9000Hero } from "./Joi9000Hero";
 import {
   REEL_ANCHOR,
   SECTIONS,
+  TOTAL_SCREENS,
+  clamp01,
   getSection,
   progressWithin,
-  scrollTopForSection,
-  sectionAt,
+  smoothStep,
   type SectionId,
 } from "./sections";
+import { useScrollDriver } from "./useScrollDriver";
 import styles from "./joi-signal-lab.module.css";
 
 type JoiSignalLabProps = {
@@ -34,6 +37,12 @@ type ProjectSignal = (typeof projects)[number];
 const FRAME_WIDTH = (4 / 3) * 7.36 + 0.06;
 const BORDER_X = 0.03;
 const BORDER_Y = 0.07;
+const ATLAS_FRAME_WIDTH = 1024;
+const ATLAS_FRAME_HEIGHT = 768;
+const reelMotionSources = [
+  { projectIndex: 0, baseUrl: "/reel/01-joi" },
+  { projectIndex: 1, baseUrl: "/reel/02-joi-map" },
+] as const;
 const particleForms = [
   "FORM 00 / NEBULA",
   "FORM 01 / JOI",
@@ -45,9 +54,89 @@ function modulo(value: number, divisor: number) {
   return ((value % divisor) + divisor) % divisor;
 }
 
-function smoothStep(value: number) {
-  const amount = Math.max(0, Math.min(1, value));
-  return amount * amount * (3 - 2 * amount);
+type ReelSpriteManifest = {
+  version: number;
+  width: number;
+  height: number;
+  fps: number;
+  frameCount: number;
+  columns: number;
+  rows: number;
+  framesPerSheet: number;
+  posterFrame: number;
+  sheets: string[];
+};
+
+type ReelSpriteAsset = {
+  projectIndex: number;
+  manifest: ReelSpriteManifest;
+  still: HTMLImageElement;
+  sheets: HTMLImageElement[];
+};
+
+function loadImage(src: string) {
+  return new Promise<HTMLImageElement>((resolve, reject) => {
+    const image = new Image();
+    image.decoding = "async";
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error(`Unable to load reel image: ${src}`));
+    image.src = src;
+  });
+}
+
+async function loadReelSprite(
+  source: (typeof reelMotionSources)[number],
+): Promise<ReelSpriteAsset> {
+  const response = await fetch(`${source.baseUrl}/manifest.json`);
+  if (!response.ok) {
+    throw new Error(`Unable to load reel manifest: ${source.baseUrl}`);
+  }
+  const manifest = await response.json() as ReelSpriteManifest;
+  const [still, ...sheets] = await Promise.all([
+    loadImage(`${source.baseUrl}/still.avif`),
+    ...manifest.sheets.map((sheet) => loadImage(`${source.baseUrl}/${sheet}`)),
+  ]);
+  return { projectIndex: source.projectIndex, manifest, still, sheets };
+}
+
+function drawReelStill(
+  context: CanvasRenderingContext2D,
+  asset: ReelSpriteAsset,
+) {
+  context.drawImage(
+    asset.still,
+    asset.projectIndex * ATLAS_FRAME_WIDTH,
+    0,
+    ATLAS_FRAME_WIDTH,
+    ATLAS_FRAME_HEIGHT,
+  );
+}
+
+function drawReelFrame(
+  context: CanvasRenderingContext2D,
+  asset: ReelSpriteAsset,
+  frameIndex: number,
+) {
+  const { manifest } = asset;
+  const normalizedFrame = modulo(frameIndex, manifest.frameCount);
+  const sheetIndex = Math.floor(normalizedFrame / manifest.framesPerSheet);
+  const frameInSheet = normalizedFrame % manifest.framesPerSheet;
+  const column = frameInSheet % manifest.columns;
+  const row = Math.floor(frameInSheet / manifest.columns);
+  const sheet = asset.sheets[sheetIndex];
+  if (!sheet) return;
+
+  context.drawImage(
+    sheet,
+    column * manifest.width,
+    row * manifest.height,
+    manifest.width,
+    manifest.height,
+    asset.projectIndex * ATLAS_FRAME_WIDTH,
+    0,
+    ATLAS_FRAME_WIDTH,
+    ATLAS_FRAME_HEIGHT,
+  );
 }
 
 function ProjectTitleContent({ project }: { project: ProjectSignal }) {
@@ -302,34 +391,50 @@ function drawProjectArt(context: CanvasRenderingContext2D, projectIndex: number,
 
 function buildAtlas() {
   const canvas = document.createElement("canvas");
-  canvas.width = 4096;
-  canvas.height = 512;
+  canvas.width = ATLAS_FRAME_WIDTH * projects.length;
+  canvas.height = ATLAS_FRAME_HEIGHT;
   const context = canvas.getContext("2d");
   if (!context) return canvas;
-  const frameWidth = canvas.width / projects.length;
-  projects.forEach((_, index) => drawProjectArt(context, index, index * frameWidth, 0, frameWidth, canvas.height));
+  projects.forEach((_, index) => {
+    drawProjectArt(
+      context,
+      index,
+      index * ATLAS_FRAME_WIDTH,
+      0,
+      ATLAS_FRAME_WIDTH,
+      ATLAS_FRAME_HEIGHT,
+    );
+  });
   return canvas;
 }
 
 function FilmCanvas({
   step,
-  reveal,
+  revealRef,
   onStepChange,
+  onProjectOpen,
   onReady,
+  onDragStateChange,
 }: {
   step: number;
-  reveal: number;
+  /** Live reel reveal, 0 before it arrives to 1 once it has. */
+  revealRef: { current: number };
   onStepChange: (step: number) => void;
+  onProjectOpen: (href: string) => void;
   onReady: () => void;
+  /** Lets the scroll driver suspend snapping while the reader is dragging the reel. */
+  onDragStateChange: (active: boolean) => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const stepRef = useRef(step);
-  const revealRef = useRef(reveal);
   const onStepChangeRef = useRef(onStepChange);
+  const onProjectOpenRef = useRef(onProjectOpen);
   const onReadyRef = useRef(onReady);
+  const onDragStateChangeRef = useRef(onDragStateChange);
+  useEffect(() => { onDragStateChangeRef.current = onDragStateChange; }, [onDragStateChange]);
   useEffect(() => { stepRef.current = step; }, [step]);
-  useEffect(() => { revealRef.current = reveal; }, [reveal]);
   useEffect(() => { onStepChangeRef.current = onStepChange; }, [onStepChange]);
+  useEffect(() => { onProjectOpenRef.current = onProjectOpen; }, [onProjectOpen]);
   useEffect(() => { onReadyRef.current = onReady; }, [onReady]);
 
   useEffect(() => {
@@ -347,11 +452,29 @@ function FilmCanvas({
     const curveLength = curve.getLength();
     const geometry = buildFilmGeometry(curve);
     const atlas = buildAtlas();
+    const atlasContext = atlas.getContext("2d");
     const texture = new THREE.CanvasTexture(atlas);
     texture.colorSpace = THREE.SRGBColorSpace;
-    texture.minFilter = THREE.LinearMipmapLinearFilter;
+    texture.generateMipmaps = false;
+    texture.minFilter = THREE.LinearFilter;
     texture.magFilter = THREE.LinearFilter;
     texture.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+    let reelSpriteAssets: ReelSpriteAsset[] = [];
+    let reelSpriteDisposed = false;
+    let activeSpriteProject = -1;
+    let activeSpriteFrame = -1;
+    let activeSpriteStartedAt = performance.now();
+
+    void Promise.all(reelMotionSources.map(loadReelSprite))
+      .then((assets) => {
+        if (reelSpriteDisposed || !atlasContext) return;
+        reelSpriteAssets = assets;
+        assets.forEach((asset) => drawReelStill(atlasContext, asset));
+        texture.needsUpdate = true;
+      })
+      .catch((error) => {
+        console.warn("Reel motion assets could not be loaded.", error);
+      });
 
     let frontT = 0;
     let frontScore = -Infinity;
@@ -439,8 +562,10 @@ function FilmCanvas({
             texture2D(uMap, atlasUv).g,
             texture2D(uMap, atlasUv - vec2(chromaOffset, 0.0)).b
           );
+          float realFootage = 1.0 - step(1.5, frameIndex);
           float luminance = dot(image, vec3(0.299, 0.587, 0.114));
-          float monochrome = filmUv.x < 0.35 ? 0.82 : 0.34;
+          float placeholderMonochrome = filmUv.x < 0.35 ? 0.82 : 0.34;
+          float monochrome = mix(placeholderMonochrome, 0.0, realFootage);
           image = mix(image, vec3(luminance), monochrome);
           image = (image - 0.5) * 1.075 + 0.5;
 
@@ -455,16 +580,19 @@ function FilmCanvas({
           vec3 viewDirection = normalize(cameraPosition - vWorldPosition);
           float facing = abs(dot(normalize(vWorldNormal), viewDirection));
           float diffuse = 0.25 + 0.86 * pow(facing, 0.72);
+          diffuse = mix(diffuse, 0.88 + 0.12 * facing, realFootage);
           vec3 lightDirection = normalize(vec3(14.0, 7.0, 0.0) - vWorldPosition);
           float sideLight = pow(max(dot(lightDirection, normalize(vWorldNormal)), 0.0), 28.0) * 0.38;
           color = color * diffuse + vec3(0.42, 0.61, 0.78) * sideLight;
 
           float viewDistance = distance(cameraPosition, vWorldPosition);
           float farFade = smoothstep(12.0, 29.0, viewDistance);
-          color = mix(color, vec3(0.008, 0.026, 0.052), farFade * 0.88);
+          float farFadeStrength = mix(0.88, 0.46, realFootage);
+          color = mix(color, vec3(0.008, 0.026, 0.052), farFade * farFadeStrength);
           float filmGrain = hash(gl_FragCoord.xy + floor(uTime * 0.4)) - 0.5;
           float scratch = smoothstep(0.996, 1.0, hash(vec2(floor(gl_FragCoord.x * 0.24), 17.0)));
-          color += filmGrain * 0.032 + scratch * 0.035;
+          float grainStrength = mix(0.032, 0.014, realFootage);
+          color += filmGrain * grainStrength + scratch * 0.035;
 
           float depthVisibility = 1.0 - smoothstep(18.0, 30.0, viewDistance);
           float endVisibility = 1.0 - smoothstep(0.86, 1.0, filmUv.x);
@@ -524,6 +652,7 @@ function FilmCanvas({
     const handlePointerDown = (event: PointerEvent) => {
       pointerPosition(event);
       drag.active = true;
+      onDragStateChangeRef.current(true);
       drag.startX = event.clientX;
       drag.offset = 0;
       targetReelOffset = stepRef.current * FRAME_WIDTH;
@@ -537,9 +666,11 @@ function FilmCanvas({
       drag.offset = THREE.MathUtils.clamp(event.clientX - drag.startX, -limit, limit);
       targetReelOffset = stepRef.current * FRAME_WIDTH - drag.offset / (0.05 * width);
     };
-    const finishDrag = (event: PointerEvent) => {
+    const finishDrag = (event: PointerEvent, openOnTap: boolean) => {
       if (!drag.active) return;
       drag.active = false;
+      onDragStateChangeRef.current(false);
+      const wasTap = Math.abs(drag.offset) < 8;
       const crossedThreshold = Math.abs(drag.offset) > width * 0.1;
       const currentStep = stepRef.current;
       const nextStep = crossedThreshold ? currentStep - Math.sign(drag.offset) : currentStep;
@@ -550,7 +681,13 @@ function FilmCanvas({
       drag.offset = 0;
       if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
       canvas.classList.remove(styles.filmCanvasDragging);
+      const project = projects[modulo(currentStep, projects.length)];
+      if (openOnTap && wasTap && project && Number(project.index) <= 2) {
+        onProjectOpenRef.current(project.href);
+      }
     };
+    const handlePointerUp = (event: PointerEvent) => finishDrag(event, true);
+    const handlePointerCancel = (event: PointerEvent) => finishDrag(event, false);
     const handleLeave = () => { if (!drag.active) targetPointer.set(0, 0); };
     const handleWheel = (event: WheelEvent) => {
       if (Math.abs(event.deltaX) <= Math.abs(event.deltaY)) return;
@@ -569,8 +706,8 @@ function FilmCanvas({
 
     canvas.addEventListener("pointerdown", handlePointerDown);
     canvas.addEventListener("pointermove", handlePointerMove);
-    canvas.addEventListener("pointerup", finishDrag);
-    canvas.addEventListener("pointercancel", finishDrag);
+    canvas.addEventListener("pointerup", handlePointerUp);
+    canvas.addEventListener("pointercancel", handlePointerCancel);
     canvas.addEventListener("pointerleave", handleLeave);
     canvas.addEventListener("wheel", handleWheel, { passive: false });
     const resizeObserver = new ResizeObserver(resize);
@@ -582,6 +719,44 @@ function FilmCanvas({
       if (!drag.active && observedStep !== stepRef.current) {
         observedStep = stepRef.current;
         targetReelOffset = observedStep * FRAME_WIDTH;
+      }
+
+      const activeProject = modulo(stepRef.current, projects.length);
+      if (activeProject !== activeSpriteProject) {
+        const previousAsset = reelSpriteAssets.find(
+          (asset) => asset.projectIndex === activeSpriteProject,
+        );
+        if (previousAsset && atlasContext) {
+          drawReelStill(atlasContext, previousAsset);
+          texture.needsUpdate = true;
+        }
+        activeSpriteProject = activeProject;
+        activeSpriteFrame = -1;
+        activeSpriteStartedAt = performance.now();
+      }
+
+      const activeSpriteAsset = reelSpriteAssets.find(
+        (asset) => asset.projectIndex === activeSpriteProject,
+      );
+      const shouldAnimateSprite = (
+        Boolean(activeSpriteAsset)
+        && Boolean(atlasContext)
+        && !reducedMotion
+        && revealRef.current > 0.4
+      );
+      if (activeSpriteAsset && atlasContext && shouldAnimateSprite) {
+        const elapsed = (performance.now() - activeSpriteStartedAt) / 1000;
+        const nextSpriteFrame = Math.floor(elapsed * activeSpriteAsset.manifest.fps)
+          % activeSpriteAsset.manifest.frameCount;
+        if (nextSpriteFrame !== activeSpriteFrame) {
+          activeSpriteFrame = nextSpriteFrame;
+          drawReelFrame(atlasContext, activeSpriteAsset, nextSpriteFrame);
+          texture.needsUpdate = true;
+        }
+      } else if (activeSpriteAsset && atlasContext && activeSpriteFrame !== -1) {
+        activeSpriteFrame = -1;
+        drawReelStill(atlasContext, activeSpriteAsset);
+        texture.needsUpdate = true;
       }
 
       const revealAmount = revealRef.current * revealRef.current * (3 - 2 * revealRef.current);
@@ -614,12 +789,13 @@ function FilmCanvas({
     render();
 
     return () => {
+      reelSpriteDisposed = true;
       window.cancelAnimationFrame(frame);
       resizeObserver.disconnect();
       canvas.removeEventListener("pointerdown", handlePointerDown);
       canvas.removeEventListener("pointermove", handlePointerMove);
-      canvas.removeEventListener("pointerup", finishDrag);
-      canvas.removeEventListener("pointercancel", finishDrag);
+      canvas.removeEventListener("pointerup", handlePointerUp);
+      canvas.removeEventListener("pointercancel", handlePointerCancel);
       canvas.removeEventListener("pointerleave", handleLeave);
       canvas.removeEventListener("wheel", handleWheel);
       window.clearTimeout(wheel.resetTimer);
@@ -630,37 +806,49 @@ function FilmCanvas({
     };
   }, []);
 
-  return <canvas ref={canvasRef} className={styles.filmCanvas} aria-label="Drag horizontally to browse Joi projects" />;
+  const activeProject = projects[modulo(step, projects.length)];
+  const canOpen = Number(activeProject.index) <= 2;
+  const openActiveProject = () => {
+    if (canOpen) onProjectOpen(activeProject.href);
+  };
+
+  return (
+    <canvas
+      ref={canvasRef}
+      className={`${styles.filmCanvas} ${canOpen ? styles.filmCanvasOpenable : ""}`}
+      role={canOpen ? "link" : undefined}
+      tabIndex={canOpen ? 0 : -1}
+      aria-label={
+        canOpen
+          ? `Open ${activeProject.title} case study. Drag horizontally to browse projects.`
+          : "Drag horizontally to browse Joi projects"
+      }
+      onKeyDown={(event) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        openActiveProject();
+      }}
+    />
+  );
 }
 
 export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSignalLabProps) {
+  const router = useRouter();
   const experienceRef = useRef<HTMLElement>(null);
   const filmActiveRef = useRef(false);
   const [step, setStep] = useState(0);
   const [filmReady, setFilmReady] = useState(false);
   const [computerReady, setComputerReady] = useState(false);
-  const [scrollProgress, setScrollProgress] = useState(0);
   const [particleForm, setParticleForm] = useState(0);
+  const [activeSection, setActiveSection] = useState<SectionId>(initialSection);
   const activeIndex = modulo(step, projects.length);
-
-  // The hero camera flight and the film entrance were tuned against a 0..1 range that ends when
-  // the reel has arrived. Remap onto that range so they keep their timing while the page grows.
-  const entry = Math.max(0, Math.min(1, scrollProgress / REEL_ANCHOR));
-  const filmReveal = smoothStep((entry - 0.66) / 0.22);
-  const filmActive = filmReveal > 0.55 && scrollProgress < getSection("about-me").start;
   const ready = filmReady && computerReady;
-  // Spread the hero copy fade across most of the hero section rather than the first fraction of
-  // it — the page is much longer now than when these were 0.28 / 0.56 of the whole thing.
-  const heroOpacity = 1 - smoothStep(entry / 0.7);
-  const terminalOpacity = 1 - smoothStep(entry / 0.85);
-  const computerOpacity = Math.max(0, 1 - filmReveal * 1.35);
 
-  // The two closing sections. Skeleton timing — content still to come.
-  const aboutProgress = progressWithin(getSection("about-me"), scrollProgress);
-  const contactProgress = progressWithin(getSection("contact"), scrollProgress);
-  const reelExit = smoothStep((scrollProgress - (getSection("about-me").start - 0.06)) / 0.06);
-  const activeSection = sectionAt(scrollProgress);
-  filmActiveRef.current = filmActive;
+  // Scroll-derived values live in refs and go straight to CSS variables. Nothing here re-renders
+  // per frame — the reference keeps these in motion values for the same reason.
+  const entryRef = useRef(0);
+  const filmRevealRef = useRef(0);
+  const dragActiveRef = useRef(false);
 
   useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
@@ -674,42 +862,50 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
 
   // Land on the section this route names, before the first paint. One scroll, four addresses.
   useLayoutEffect(() => {
-    const experience = experienceRef.current;
-    if (!experience || initialSection === "hero") return;
-    const travel = Math.max(1, experience.offsetHeight - window.innerHeight);
-    window.scrollTo({ top: scrollTopForSection(initialSection, travel), behavior: "instant" as ScrollBehavior });
+    if (initialSection === "hero") return;
+    window.scrollTo({
+      top: getSection(initialSection).position * window.innerHeight,
+      behavior: "instant" as ScrollBehavior,
+    });
   }, [initialSection]);
 
-  useEffect(() => {
-    let frame = 0;
-    const update = () => {
-      frame = 0;
+  const { scrollToSection } = useScrollDriver({
+    // Runs every frame. Writes CSS variables and refs directly — no React state, no re-render.
+    onFrame: ({ screens }) => {
       const experience = experienceRef.current;
       if (!experience) return;
-      const bounds = experience.getBoundingClientRect();
-      const travel = Math.max(1, experience.offsetHeight - window.innerHeight);
-      const next = Math.max(0, Math.min(1, -bounds.top / travel));
-      setScrollProgress((current) => Math.abs(current - next) > 0.0005 ? next : current);
-    };
-    const schedule = () => {
-      if (!frame) frame = window.requestAnimationFrame(update);
-    };
-    update();
-    // A deep link scrolls before fonts and the 3D scene have settled the page height, so measure
-    // again once things stop moving. Without this the reader lands mid-page reading as progress 0.
-    const observer = new ResizeObserver(schedule);
-    observer.observe(experienceRef.current ?? document.body);
-    const settle = window.requestAnimationFrame(schedule);
-    window.addEventListener("scroll", schedule, { passive: true });
-    window.addEventListener("resize", schedule);
-    return () => {
-      window.cancelAnimationFrame(frame);
-      window.cancelAnimationFrame(settle);
-      observer.disconnect();
-      window.removeEventListener("scroll", schedule);
-      window.removeEventListener("resize", schedule);
-    };
-  }, []);
+
+      // The hero camera flight and the film entrance were tuned against a 0..1 range that ends
+      // when the reel has arrived. Remap onto that range so their timing survives page growth.
+      const entry = clamp01(screens / REEL_ANCHOR);
+      const filmReveal = smoothStep((entry - 0.66) / 0.22);
+      const aboutStart = getSection("about-me").position;
+      const reelExit = smoothStep((screens - (aboutStart - 0.6)) / 0.6);
+
+      entryRef.current = entry;
+      filmRevealRef.current = filmReveal;
+      filmActiveRef.current = filmReveal > 0.55 && screens < aboutStart - 0.3;
+
+      const style = experience.style;
+      style.setProperty("--journey", (screens / TOTAL_SCREENS).toFixed(4));
+      style.setProperty("--film-reveal", filmReveal.toFixed(4));
+      style.setProperty("--computer-opacity", Math.max(0, 1 - filmReveal * 1.35).toFixed(4));
+      style.setProperty("--film-shift", `${((1 - filmReveal) * 7).toFixed(3)}svh`);
+      style.setProperty("--film-scale", (0.955 + filmReveal * 0.045).toFixed(4));
+      style.setProperty("--film-clip", `${((1 - filmReveal) * 4.5).toFixed(3)}%`);
+      style.setProperty("--film-radius", `${((1 - filmReveal) * 34).toFixed(2)}px`);
+      style.setProperty("--hero-opacity", (1 - smoothStep(entry / 0.7)).toFixed(4));
+      style.setProperty("--hero-shift", `${(entry * -28).toFixed(2)}px`);
+      style.setProperty("--terminal-opacity", (1 - smoothStep(entry / 0.85)).toFixed(4));
+      style.setProperty("--terminal-shift", `${(entry * 18).toFixed(2)}px`);
+      style.setProperty("--reel-exit", reelExit.toFixed(4));
+      style.setProperty("--about-progress", progressWithin("about-me", screens).toFixed(4));
+      style.setProperty("--contact-progress", progressWithin("contact", screens).toFixed(4));
+    },
+    onSectionChange: setActiveSection,
+    // Don't snap out from under someone who is dragging the reel.
+    isLocked: () => filmActiveRef.current && dragActiveRef.current,
+  });
 
   // Keep the address bar in step with where the reader actually is, without adding history
   // entries — scrolling is not navigation.
@@ -720,40 +916,21 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
     document.title = section.title;
   }, [activeSection]);
 
-  const goToSection = (id: SectionId) => {
-    const experience = experienceRef.current;
-    if (!experience) return;
-    const travel = Math.max(1, experience.offsetHeight - window.innerHeight);
-    window.scrollTo({ top: scrollTopForSection(id, travel), behavior: "smooth" });
-  };
-
   return (
     <main
       ref={experienceRef}
       className={`${styles.experience} ${className}`}
       style={{
-        "--journey": scrollProgress,
-        "--film-reveal": filmReveal,
-        "--computer-opacity": computerOpacity,
+        // Scroll length comes from the section table, so adding a section extends the page.
+        height: `${TOTAL_SCREENS * 100}svh`,
         "--computer-scale": 1,
-        "--film-shift": `${(1 - filmReveal) * 7}svh`,
-        "--film-scale": 0.955 + filmReveal * 0.045,
-        "--film-clip": `${(1 - filmReveal) * 4.5}%`,
-        "--film-radius": `${(1 - filmReveal) * 34}px`,
-        "--hero-opacity": heroOpacity,
-        "--hero-shift": `${entry * -28}px`,
-        "--terminal-opacity": terminalOpacity,
-        "--terminal-shift": `${entry * 18}px`,
-        "--reel-exit": reelExit,
-        "--about-progress": aboutProgress,
-        "--contact-progress": contactProgress,
       } as CSSProperties}
     >
       <div className={styles.stage}>
         <div className={styles.heroField} aria-hidden="true" />
         <div className={styles.computerLayer}>
           <Joi9000Hero
-            progress={entry}
+            progressRef={entryRef}
             onFormChange={setParticleForm}
             onReady={() => setComputerReady(true)}
           />
@@ -782,15 +959,17 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
         </aside>
 
         <section
-          className={`${styles.filmLayer} ${filmActive ? styles.filmLayerActive : ""}`}
+          className={`${styles.filmLayer} ${activeSection === "selected-work" ? styles.filmLayerActive : ""}`}
           aria-label="Selected Joi work"
         >
           <div className={styles.blueField} aria-hidden="true" />
           <FilmCanvas
             step={step}
-            reveal={filmReveal}
+            revealRef={filmRevealRef}
             onStepChange={setStep}
+            onProjectOpen={(href) => router.push(href)}
             onReady={() => setFilmReady(true)}
+            onDragStateChange={(active: boolean) => { dragActiveRef.current = active; }}
           />
           <RollingProjectTitle step={step} />
 
@@ -810,7 +989,11 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
             <button type="button" onClick={() => setStep((value) => value + 1)} aria-label="Next project"><span>→</span></button>
           </div>
 
-          <p className={styles.hint}>DRAG THE FILM <span>·</span> USE ARROW KEYS</p>
+          <p className={styles.hint}>
+            {activeIndex < 2 ? "CLICK TO VIEW" : "DRAG THE FILM"}
+            <span>·</span>
+            {activeIndex < 2 ? "DRAG TO BROWSE" : "USE ARROW KEYS"}
+          </p>
         </section>
 
         {/* Skeleton. Copy and layout land once the assets are in — see docs/design-audits. */}
@@ -859,7 +1042,7 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
                 aria-current={activeSection === section.id ? "page" : undefined}
                 onClick={(event) => {
                   event.preventDefault();
-                  goToSection(section.id);
+                  scrollToSection.current(section.id);
                 }}
               >
                 {section.label}
@@ -868,7 +1051,7 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
           </nav>
           <div className={styles.headerProgress} aria-hidden="true">
             <span>JOI9000</span>
-            <i style={{ transform: `scaleX(${Math.max(0.02, scrollProgress)})` }} />
+            <i />
           </div>
         </header>
 
