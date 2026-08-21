@@ -100,18 +100,24 @@ export function GameHandheld() {
       if (mode === "menu") {
         if (key === "ArrowUp" || key === "w") {
           event.preventDefault();
+          const binding = bindings[key];
+          if (binding) press(binding.button, binding);
           setSelectedGame((value) => (value + gameSlots.length - 1) % gameSlots.length);
           setLastAction("SELECT PREVIOUS");
           return;
         }
         if (key === "ArrowDown" || key === "s") {
           event.preventDefault();
+          const binding = bindings[key];
+          if (binding) press(binding.button, binding);
           setSelectedGame((value) => (value + 1) % gameSlots.length);
           setLastAction("SELECT NEXT");
           return;
         }
         if (key === "Enter" || key === " " || key === "j") {
           event.preventDefault();
+          const binding = bindings[key];
+          if (binding) press(binding.button, binding);
           startSelectedGame();
           return;
         }
@@ -152,7 +158,13 @@ export function GameHandheld() {
         aria-label={`${label} button`}
         onPointerDown={(event) => {
           event.currentTarget.setPointerCapture(event.pointerId);
-          if (button === "start" && mode === "menu") startSelectedGame();
+          if (mode === "menu" && (button === "up" || button === "down")) {
+            setSelectedGame((value) => button === "up"
+              ? (value + gameSlots.length - 1) % gameSlots.length
+              : (value + 1) % gameSlots.length);
+            setLastAction(button === "up" ? "SELECT PREVIOUS" : "SELECT NEXT");
+          }
+          if (mode === "menu" && (button === "start" || button === "a")) startSelectedGame();
           press(button, binding);
         }}
         onPointerUp={() => release(button, binding)}
