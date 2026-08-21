@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
+import { GameHandheld } from "./GameHandheld";
 import styles from "./page.module.css";
-
-const NIGHT_TIDE_BUILD_URL = "https://gallo233.github.io/joi-doorway/night-tide/";
 
 export const metadata: Metadata = {
   title: "Zero Hour: Night Tide / 零刻：夜潮",
@@ -23,21 +22,7 @@ export default function NightTidePage() {
 
       <section className={styles.gameSection} aria-labelledby="night-tide-game-title">
         <h2 id="night-tide-game-title" className={styles.srOnly}>Play Zero Hour: Night Tide</h2>
-        <div className={styles.gameFrame}>
-          <iframe
-            title="Zero Hour: Night Tide playable demo"
-            src={NIGHT_TIDE_BUILD_URL}
-            allow="autoplay; fullscreen; gamepad"
-            allowFullScreen
-          />
-        </div>
-        <div className={styles.controls}>
-          <div>
-            <span className={styles.controlLabel}>CONTROLS</span>
-            <p>A / D move · Space jump · Shift dodge · J / K attack · L parry · E phase dash · R gravity collapse</p>
-          </div>
-          <p className={styles.note}>Click inside the game to capture keyboard input. Audio starts after your first interaction.</p>
-        </div>
+        <GameHandheld />
       </section>
     </main>
   );

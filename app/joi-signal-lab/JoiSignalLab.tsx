@@ -319,6 +319,110 @@ function buildAtlas() {
   return canvas;
 }
 
+function buildHandheldModel() {
+  const group = new THREE.Group();
+  const geometries: any[] = [];
+  const materials: any[] = [];
+  const pressables: Record<string, any> = {};
+
+  const mesh = (geometry: any, material: any, name: string, position: [number, number, number]) => {
+    geometries.push(geometry);
+    materials.push(material);
+    const item = new THREE.Mesh(geometry, material);
+    item.name = name;
+    item.position.set(...position);
+    group.add(item);
+    return item;
+  };
+
+  const bodyMaterial = new THREE.MeshStandardMaterial({ color: 0x1b2a3b, roughness: 0.52, metalness: 0.28 });
+  const faceMaterial = new THREE.MeshStandardMaterial({ color: 0x263b50, roughness: 0.44, metalness: 0.2 });
+  const bezelMaterial = new THREE.MeshStandardMaterial({ color: 0x050c14, roughness: 0.82, metalness: 0.08 });
+  const dpadMaterial = new THREE.MeshStandardMaterial({ color: 0x0e1825, roughness: 0.64, metalness: 0.24 });
+  const buttonMaterial = new THREE.MeshStandardMaterial({ color: 0x2f9ed0, emissive: 0x0b354e, emissiveIntensity: 0.62, roughness: 0.35, metalness: 0.26 });
+  const buttonAltMaterial = new THREE.MeshStandardMaterial({ color: 0xea6448, emissive: 0x4a160e, emissiveIntensity: 0.38, roughness: 0.38, metalness: 0.24 });
+
+  mesh(new THREE.BoxGeometry(5.9, 2.8, 0.56), bodyMaterial, "body", [0, 0, 0]);
+  mesh(new THREE.BoxGeometry(5.56, 2.46, 0.15), faceMaterial, "face-plate", [0, 0.02, 0.36]);
+  mesh(new THREE.BoxGeometry(3.72, 1.54, 0.14), bezelMaterial, "screen-bezel", [-0.38, 0.46, 0.48]);
+
+  const screenCanvas = document.createElement("canvas");
+  screenCanvas.width = 640;
+  screenCanvas.height = 360;
+  const screenContext = screenCanvas.getContext("2d");
+  if (screenContext) {
+    const gradient = screenContext.createLinearGradient(0, 0, 0, screenCanvas.height);
+    gradient.addColorStop(0, "#071c2e");
+    gradient.addColorStop(1, "#020810");
+    screenContext.fillStyle = gradient;
+    screenContext.fillRect(0, 0, screenCanvas.width, screenCanvas.height);
+    screenContext.fillStyle = "#2f9ed0";
+    for (let index = 0; index < 32; index += 1) {
+      screenContext.fillRect((index * 83) % 620, 38 + ((index * 47) % 280), 2, 2);
+    }
+    screenContext.strokeStyle = "rgba(47, 158, 208, 0.35)";
+    screenContext.lineWidth = 3;
+    screenContext.strokeRect(22, 22, 596, 316);
+    screenContext.fillStyle = "#d9edf2";
+    screenContext.font = "600 32px ui-monospace, monospace";
+    screenContext.fillText("ZERO HOUR", 38, 68);
+    screenContext.fillStyle = "#2f9ed0";
+    screenContext.font = "500 17px ui-monospace, monospace";
+    screenContext.fillText("NIGHT TIDE  /  READY", 40, 96);
+    screenContext.strokeStyle = "#ea6448";
+    screenContext.lineWidth = 7;
+    screenContext.beginPath();
+    screenContext.moveTo(82, 264);
+    screenContext.lineTo(210, 192);
+    screenContext.lineTo(330, 248);
+    screenContext.lineTo(502, 140);
+    screenContext.stroke();
+    screenContext.fillStyle = "#d9edf2";
+    screenContext.font = "500 15px ui-monospace, monospace";
+    screenContext.fillText("PRESS START", 40, 316);
+  }
+  const screenTexture = new THREE.CanvasTexture(screenCanvas);
+  screenTexture.colorSpace = THREE.SRGBColorSpace;
+  screenTexture.generateMipmaps = false;
+  screenTexture.minFilter = THREE.LinearFilter;
+  screenTexture.magFilter = THREE.LinearFilter;
+  materials.push(screenTexture);
+  mesh(new THREE.PlaneGeometry(3.24, 1.12), new THREE.MeshBasicMaterial({ map: screenTexture }), "screen", [-0.38, 0.46, 0.57]);
+
+  const dpadHorizontal = mesh(new THREE.BoxGeometry(1.05, 0.31, 0.2), dpadMaterial, "dpad-horizontal", [-2.0, 0.23, 0.57]);
+  const dpadVertical = mesh(new THREE.BoxGeometry(0.31, 1.05, 0.2), dpadMaterial, "dpad-vertical", [-2.0, 0.23, 0.58]);
+  pressables.up = dpadVertical;
+  pressables.down = dpadVertical;
+  pressables.left = dpadHorizontal;
+  pressables.right = dpadHorizontal;
+
+  const faceButtons = [
+    ["a", 1.66, 0.42, buttonMaterial],
+    ["b", 2.13, 0.04, buttonAltMaterial],
+    ["x", 1.2, 0.04, buttonAltMaterial],
+    ["y", 1.66, -0.34, buttonMaterial],
+  ] as const;
+  faceButtons.forEach(([name, x, y, material]) => {
+    const button = mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.18, 24), material, `button-${name}`, [x, y, 0.63]);
+    button.rotation.x = Math.PI / 2;
+    pressables[name] = button;
+  });
+  pressables.start = mesh(new THREE.BoxGeometry(0.34, 0.15, 0.12), dpadMaterial, "start", [-0.13, -0.65, 0.59]);
+  pressables.select = mesh(new THREE.BoxGeometry(0.34, 0.15, 0.12), dpadMaterial, "select", [0.37, -0.65, 0.59]);
+
+  group.rotation.order = "YXZ";
+  return {
+    group,
+    screenTexture,
+    pressables,
+    dispose: () => {
+      geometries.forEach((geometry) => geometry.dispose());
+      materials.forEach((material) => material.dispose?.());
+      screenTexture.dispose();
+    },
+  };
+}
+
 function FilmCanvas({
   step,
   revealRef,
@@ -371,6 +475,31 @@ function FilmCanvas({
     texture.magFilter = THREE.LinearFilter;
     texture.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
 
+    const nightTideTarget = new THREE.WebGLRenderTarget(768, 576, {
+      minFilter: THREE.LinearFilter,
+      magFilter: THREE.LinearFilter,
+      depthBuffer: true,
+      stencilBuffer: false,
+    });
+    nightTideTarget.texture.colorSpace = THREE.SRGBColorSpace;
+    nightTideTarget.texture.generateMipmaps = false;
+    const nightTideScene = new THREE.Scene();
+    nightTideScene.background = new THREE.Color(0x020810);
+    const nightTideCamera = new THREE.PerspectiveCamera(34, 768 / 576, 0.1, 100);
+    nightTideCamera.position.set(0, 0.25, 8.4);
+    nightTideCamera.lookAt(0, 0.05, 0);
+    nightTideScene.add(new THREE.AmbientLight(0x9ccce0, 1.35));
+    const tideKeyLight = new THREE.DirectionalLight(0x7fd9ff, 2.6);
+    tideKeyLight.position.set(-3, 5, 6);
+    nightTideScene.add(tideKeyLight);
+    const tideRimLight = new THREE.PointLight(0xea6448, 8, 18, 2);
+    tideRimLight.position.set(3.6, -1.1, 3.5);
+    nightTideScene.add(tideRimLight);
+    const nightTideModel = buildHandheldModel();
+    nightTideModel.group.rotation.set(-0.12, 0.22, -0.06);
+    nightTideModel.group.position.y = -0.02;
+    nightTideScene.add(nightTideModel.group);
+
     let frontT = 0;
     let frontScore = -Infinity;
     for (let index = 0; index <= 500; index += 1) {
@@ -382,6 +511,7 @@ function FilmCanvas({
 
     const uniforms = {
       uMap: { value: texture },
+      uNightTideMap: { value: nightTideTarget.texture },
       uCurveLength: { value: curveLength },
       uFrameWidth: { value: FRAME_WIDTH },
       uTextureCount: { value: projects.length },
@@ -418,6 +548,7 @@ function FilmCanvas({
       `,
       fragmentShader: `
         uniform sampler2D uMap;
+        uniform sampler2D uNightTideMap;
         uniform float uCurveLength;
         uniform float uFrameWidth;
         uniform float uTextureCount;
@@ -452,13 +583,18 @@ function FilmCanvas({
           );
           vec2 atlasUv = vec2((frameIndex + contentUv.x) / uTextureCount, contentUv.y);
           float chromaOffset = 0.0017 / uTextureCount;
-          vec3 image = vec3(
-            texture2D(uMap, atlasUv + vec2(chromaOffset, 0.0)).r,
-            texture2D(uMap, atlasUv).g,
-            texture2D(uMap, atlasUv - vec2(chromaOffset, 0.0)).b
-          );
+          vec3 image;
+          if (abs(frameIndex - 2.0) < 0.5) {
+            image = texture2D(uNightTideMap, vec2(contentUv.x, 1.0 - contentUv.y)).rgb;
+          } else {
+            image = vec3(
+              texture2D(uMap, atlasUv + vec2(chromaOffset, 0.0)).r,
+              texture2D(uMap, atlasUv).g,
+              texture2D(uMap, atlasUv - vec2(chromaOffset, 0.0)).b
+            );
+          }
           float luminance = dot(image, vec3(0.299, 0.587, 0.114));
-          float placeholderMonochrome = filmUv.x < 0.35 ? 0.82 : 0.34;
+          float placeholderMonochrome = abs(frameIndex - 2.0) < 0.5 ? 0.08 : (filmUv.x < 0.35 ? 0.82 : 0.34);
           image = mix(image, vec3(luminance), placeholderMonochrome);
           image = (image - 0.5) * 1.075 + 0.5;
 
@@ -634,6 +770,14 @@ function FilmCanvas({
       uniforms.uFlex.value = flex;
       uniforms.uTime.value += delta * 60;
       uniforms.uPointer.value.copy(pointer);
+      nightTideModel.group.rotation.y = 0.22 + Math.sin(uniforms.uTime.value * 0.005) * 0.28;
+      nightTideModel.group.rotation.z = -0.06 + Math.sin(uniforms.uTime.value * 0.003) * 0.045;
+      nightTideModel.group.position.y = Math.sin(uniforms.uTime.value * 0.006) * 0.16;
+      nightTideCamera.lookAt(0, nightTideModel.group.position.y, 0);
+      renderer.setRenderTarget(nightTideTarget);
+      renderer.clear();
+      renderer.render(nightTideScene, nightTideCamera);
+      renderer.setRenderTarget(null);
       renderer.render(scene, camera);
       if (!readySent) { readySent = true; onReadyRef.current(); }
       frame = window.requestAnimationFrame(render);
@@ -653,6 +797,8 @@ function FilmCanvas({
       geometry.dispose();
       material.dispose();
       texture.dispose();
+      nightTideModel.dispose();
+      nightTideTarget.dispose();
       renderer.dispose();
     };
   }, []);

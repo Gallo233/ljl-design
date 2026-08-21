@@ -76,43 +76,373 @@
   margin: 0 auto;
 }
 
-.gameFrame {
-  overflow: hidden;
-  aspect-ratio: 16 / 9;
-  border: 1px solid rgba(125, 168, 184, 0.34);
-  border-radius: 0.35rem;
-  background: #000;
-  box-shadow: 0 1.8rem 5rem rgba(0, 0, 0, 0.38), 0 0 0 0.35rem rgba(47, 158, 208, 0.05);
+.handheldStage {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(13rem, 17rem);
+  align-items: end;
+  gap: clamp(1.2rem, 4vw, 4rem);
 }
 
-.gameFrame iframe {
+.handheld {
+  position: relative;
+  width: min(100%, 920px);
+  margin: 0 auto;
+  padding: clamp(1rem, 2.8vw, 2rem) clamp(1rem, 3.2vw, 2.7rem) clamp(1.1rem, 3.4vw, 2.4rem);
+  border: 1px solid rgba(152, 204, 222, 0.42);
+  border-radius: clamp(1.5rem, 4vw, 3rem);
+  background:
+    linear-gradient(145deg, rgba(74, 105, 127, 0.92), rgba(17, 29, 43, 0.98) 47%, rgba(7, 14, 22, 0.98)),
+    #182838;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    inset 0 -1.5rem 2.5rem rgba(1, 7, 14, 0.5),
+    0 2.8rem 5rem rgba(0, 0, 0, 0.5),
+    0 0 4rem rgba(47, 158, 208, 0.12);
+  transform: perspective(1300px) rotateX(3deg) rotateY(-3deg);
+  transition: transform 350ms ease, box-shadow 350ms ease;
+}
+
+.handheld:hover {
+  transform: perspective(1300px) rotateX(1deg) rotateY(-1deg) translateY(-0.25rem);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    inset 0 -1.5rem 2.5rem rgba(1, 7, 14, 0.5),
+    0 3.3rem 5.5rem rgba(0, 0, 0, 0.54),
+    0 0 5rem rgba(47, 158, 208, 0.18);
+}
+
+.handheldTopline,
+.menuHeader,
+.menuFooter {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  color: #7da8b8;
+  font-size: 0.62rem;
+  letter-spacing: 0.14em;
+  line-height: 1.4;
+  text-transform: uppercase;
+}
+
+.handheldTopline {
+  padding: 0 0.2rem 0.8rem;
+}
+
+.screenHousing {
+  position: relative;
+  z-index: 1;
+  padding: clamp(0.65rem, 1.5vw, 1.2rem);
+  border: 1px solid rgba(0, 0, 0, 0.74);
+  border-radius: clamp(0.9rem, 2vw, 1.5rem);
+  background: #050b12;
+  box-shadow: inset 0 0 1.2rem rgba(0, 0, 0, 0.9), 0 0.45rem 0 rgba(0, 0, 0, 0.35);
+}
+
+.screenGlow {
+  position: absolute;
+  inset: 12% 15%;
+  background: rgba(47, 158, 208, 0.24);
+  filter: blur(2.2rem);
+  pointer-events: none;
+}
+
+.screen {
+  position: relative;
+  overflow: hidden;
+  aspect-ratio: 16 / 9;
+  border: 1px solid rgba(47, 158, 208, 0.45);
+  border-radius: 0.55rem;
+  background: #020810;
+  box-shadow: inset 0 0 1.5rem rgba(0, 0, 0, 0.85), 0 0 1.2rem rgba(47, 158, 208, 0.16);
+}
+
+.screen::after {
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(0deg, rgba(200, 241, 250, 0.045) 0 1px, transparent 1px 4px);
+  content: "";
+  pointer-events: none;
+}
+
+.screen iframe {
+  position: relative;
+  z-index: 1;
   width: 100%;
   height: 100%;
   border: 0;
 }
 
-.controls {
+.menuScreen {
   display: flex;
-  justify-content: space-between;
-  gap: 2rem;
-  margin-top: 1.1rem;
+  height: 100%;
+  flex-direction: column;
+  padding: clamp(0.8rem, 2vw, 1.4rem);
+  color: #d9edf2;
+  background:
+    radial-gradient(circle at 76% 12%, rgba(47, 158, 208, 0.22), transparent 42%),
+    #03101b;
+  font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
+}
+
+.menuHeader {
+  color: #2f9ed0;
+  font-size: clamp(0.48rem, 1vw, 0.66rem);
+}
+
+.menuTitle {
+  margin: clamp(1rem, 3vw, 2rem) 0 clamp(0.6rem, 1vw, 0.9rem);
+  color: #f4fbfc;
+  font-family: "Arial Narrow", "Helvetica Neue", sans-serif;
+  font-size: clamp(1.35rem, 3.6vw, 2.9rem);
+  letter-spacing: -0.04em;
+}
+
+.gameList {
+  display: grid;
+  gap: 0.45rem;
+  min-height: 0;
+}
+
+.gameSlot {
+  display: grid;
+  grid-template-columns: 2.1rem minmax(0, 1fr) auto;
+  gap: 0.65rem;
+  align-items: center;
+  width: 100%;
+  padding: 0.58rem 0.7rem;
+  border: 1px solid rgba(125, 168, 184, 0.2);
+  border-radius: 0.25rem;
   color: #9cb7be;
-  font-size: 0.78rem;
-  line-height: 1.65;
+  background: rgba(7, 23, 36, 0.66);
+  font: inherit;
+  text-align: left;
+  transition: border-color 160ms ease, background 160ms ease, transform 160ms ease;
 }
 
-.controls p {
-  margin: 0.5rem 0 0;
+.gameSlot:hover,
+.gameSlot:focus-visible,
+.gameSlotActive {
+  border-color: rgba(47, 158, 208, 0.8);
+  background: rgba(47, 158, 208, 0.17);
+  outline: none;
+  transform: translateX(0.25rem);
 }
 
-.controlLabel {
+.gameSlotorange.gameSlotActive {
+  border-color: rgba(234, 100, 72, 0.78);
+  background: rgba(234, 100, 72, 0.12);
+}
+
+.gameSlotmuted {
+  opacity: 0.52;
+}
+
+.slotNumber {
+  color: #2f9ed0;
+  font-size: 0.74rem;
+}
+
+.gameSlot strong,
+.gameSlot small {
+  display: block;
+}
+
+.gameSlot strong {
+  color: #d9edf2;
+  font-size: clamp(0.68rem, 1.2vw, 0.9rem);
+  letter-spacing: 0.06em;
+}
+
+.gameSlot small,
+.gameSlot em {
+  color: #6f929d;
+  font-size: 0.56rem;
+  font-style: normal;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.gameSlot em {
   color: #2f9ed0;
 }
 
-.note {
-  max-width: 24rem;
-  color: #617f89;
-  text-align: right;
+.gameSlotorange em {
+  color: #ea6448;
+}
+
+.menuFooter {
+  margin-top: auto;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(125, 168, 184, 0.16);
+  color: #6f929d;
+  font-size: 0.52rem;
+}
+
+.deviceControls {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  align-items: center;
+  gap: clamp(1rem, 5vw, 5.5rem);
+  padding: clamp(1.3rem, 3vw, 2.25rem) clamp(0.5rem, 4vw, 3rem) 0;
+}
+
+.dpad {
+  position: relative;
+  width: clamp(6rem, 13vw, 8.5rem);
+  aspect-ratio: 1;
+  justify-self: start;
+}
+
+.deviceButton {
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid rgba(203, 237, 244, 0.16);
+  color: #b9d3d9;
+  background: linear-gradient(145deg, #30465a, #10202f);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 0.32rem 0 #071019, 0 0.55rem 0.8rem rgba(0, 0, 0, 0.35);
+  font: 600 0.8rem "IBM Plex Mono", monospace;
+  touch-action: none;
+  user-select: none;
+  transition: transform 90ms ease, box-shadow 90ms ease, filter 90ms ease;
+}
+
+.deviceButton:hover,
+.deviceButton:focus-visible {
+  filter: brightness(1.18);
+  outline: 2px solid rgba(47, 158, 208, 0.65);
+  outline-offset: 3px;
+}
+
+.deviceButtonPressed {
+  transform: translateY(0.24rem);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 0.08rem 0 #071019, 0 0.2rem 0.5rem rgba(0, 0, 0, 0.3);
+  filter: brightness(1.3);
+}
+
+.dpad .deviceButton {
+  position: absolute;
+  width: 38%;
+  height: 38%;
+  border-radius: 0.32rem;
+}
+
+.dpadUp { top: 0; left: 31%; }
+.dpadDown { bottom: 0; left: 31%; }
+.dpadLeft { top: 31%; left: 0; }
+.dpadRight { top: 31%; right: 0; }
+
+.centerControls {
+  display: flex;
+  justify-content: center;
+  gap: 0.6rem;
+  transform: translateY(2.2rem) rotate(-15deg);
+}
+
+.selectButton,
+.startButton {
+  width: clamp(3.5rem, 7vw, 4.8rem);
+  height: 1.35rem;
+  border-radius: 0.8rem;
+  color: #80aab6;
+  font-size: 0.5rem;
+  letter-spacing: 0.09em;
+}
+
+.faceButtons {
+  position: relative;
+  width: clamp(7rem, 15vw, 10rem);
+  aspect-ratio: 1.2;
+  justify-self: end;
+  transform: rotate(-15deg);
+}
+
+.faceButtons .deviceButton {
+  position: absolute;
+  width: clamp(2.35rem, 4.7vw, 3.25rem);
+  height: clamp(2.35rem, 4.7vw, 3.25rem);
+  border-radius: 50%;
+  color: #03101b;
+  background: linear-gradient(145deg, #62c8ed, #1f739b);
+  box-shadow: inset 0 0.2rem 0.4rem rgba(255, 255, 255, 0.25), 0 0.32rem 0 #071019, 0 0.6rem 0.8rem rgba(0, 0, 0, 0.35);
+}
+
+.faceA { right: 0; top: 34%; }
+.faceB { right: 25%; top: 0; }
+.faceX { left: 25%; top: 0; background: linear-gradient(145deg, #ed856c, #a23d2d) !important; }
+.faceY { left: 0; top: 34%; }
+
+.deviceBrand {
+  margin-top: clamp(1.2rem, 2.5vw, 2rem);
+  color: #527583;
+  font-size: 0.62rem;
+  letter-spacing: 0.32em;
+  text-align: center;
+}
+
+.deviceBrand span {
+  padding: 0 0.5rem;
+  color: #2f9ed0;
+}
+
+.handheldRail {
+  display: grid;
+  gap: 1.3rem;
+  min-height: 11rem;
+  padding: 1.25rem 0;
+  border-top: 1px solid rgba(125, 168, 184, 0.22);
+  border-bottom: 1px solid rgba(125, 168, 184, 0.22);
+  color: #9cb7be;
+}
+
+.railLabel {
+  display: block;
+  margin-bottom: 0.55rem;
+  color: #2f9ed0;
+  font-size: 0.62rem;
+  letter-spacing: 0.16em;
+}
+
+.handheldRail strong {
+  color: #f4fbfc;
+  font-family: "Arial Narrow", "Helvetica Neue", sans-serif;
+  font-size: clamp(1.45rem, 3vw, 2.3rem);
+  font-weight: 500;
+  letter-spacing: -0.04em;
+}
+
+.mappingList {
+  display: grid;
+  gap: 0.4rem;
+  color: #6f929d;
+  font-size: 0.68rem;
+  line-height: 1.5;
+}
+
+.mappingList b {
+  display: inline-block;
+  min-width: 4.1rem;
+  color: #d9edf2;
+  font-weight: 500;
+}
+
+.exitButton {
+  width: fit-content;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid rgba(47, 158, 208, 0.42);
+  border-radius: 0.15rem;
+  color: #d9edf2;
+  background: rgba(47, 158, 208, 0.1);
+  font: 600 0.62rem "IBM Plex Mono", monospace;
+  letter-spacing: 0.1em;
+  transition: background 160ms ease, border-color 160ms ease;
+}
+
+.exitButton:hover,
+.exitButton:focus-visible {
+  border-color: rgba(47, 158, 208, 0.9);
+  background: rgba(47, 158, 208, 0.22);
+  outline: none;
 }
 
 .srOnly {
@@ -137,13 +467,26 @@
     text-align: left;
   }
 
-  .controls {
+  .handheldStage {
     display: block;
   }
 
-  .note {
-    max-width: none;
-    margin-top: 1.2rem !important;
-    text-align: left;
+  .handheld {
+    width: 100%;
+    transform: none;
+  }
+
+  .handheld:hover {
+    transform: translateY(-0.15rem);
+  }
+
+  .handheldRail {
+    margin-top: 2rem;
+    min-height: 0;
+  }
+
+  .deviceControls {
+    gap: 1rem;
+    padding-inline: 0.2rem;
   }
 }

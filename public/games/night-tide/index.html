@@ -109,6 +109,25 @@ body {
 			<div id="status-notice"></div>
 		</div>
 
+		<script>
+// The portfolio shell owns the handheld controls. Forward those controls into
+// Godot's focused canvas so the large device can drive the game across origins.
+window.addEventListener('message', (event) => {
+		const data = event.data;
+		if (!data || data.type !== 'joi-key' || (data.action !== 'keydown' && data.action !== 'keyup')) return;
+		const canvas = document.getElementById('canvas');
+		if (!canvas) return;
+		canvas.focus();
+		canvas.dispatchEvent(new KeyboardEvent(data.action, {
+			bubbles: true,
+			cancelable: true,
+			key: data.key || '',
+			code: data.code || '',
+			view: window,
+		}));
+});
+		</script>
+
 		<script src="index.js"></script>
 		<script>
 const GODOT_CONFIG = {"args":[],"canvasResizePolicy":2,"emscriptenPoolSize":8,"ensureCrossOriginIsolationHeaders":false,"executable":"index","experimentalVK":false,"fileSizes":{"index.pck":32740536,"index.wasm":39513091},"focusCanvas":true,"gdextensionLibs":[],"godotPoolSize":4};
@@ -217,4 +236,3 @@ const engine = new Engine(GODOT_CONFIG);
 		</script>
 	</body>
 </html>
-
