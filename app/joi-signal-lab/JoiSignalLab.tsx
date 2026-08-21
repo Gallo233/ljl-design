@@ -39,6 +39,10 @@ const BORDER_X = 0.03;
 const BORDER_Y = 0.07;
 const ATLAS_FRAME_WIDTH = 1024;
 const ATLAS_FRAME_HEIGHT = 768;
+const reelVideoSources = [
+  { projectIndex: 0, src: "/reel/01-joi/showcase.mp4" },
+  { projectIndex: 1, src: "/reel/02-joi-map/showcase.mp4" },
+] as const;
 const particleForms = [
   "FORM 00 / NEBULA",
   "FORM 01 / JOI",
@@ -48,6 +52,32 @@ const particleForms = [
 
 function modulo(value: number, divisor: number) {
   return ((value % divisor) + divisor) % divisor;
+}
+
+type ReelVideoAsset = {
+  projectIndex: number;
+  video: HTMLVideoElement;
+  texture: any;
+};
+
+function createReelVideo(source: (typeof reelVideoSources)[number]): ReelVideoAsset {
+  const video = document.createElement("video");
+  video.src = source.src;
+  video.crossOrigin = "anonymous";
+  video.muted = true;
+  video.loop = true;
+  video.playsInline = true;
+  video.preload = "auto";
+  video.setAttribute("aria-hidden", "true");
+  video.load();
+
+  const texture = new THREE.VideoTexture(video);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.generateMipmaps = false;
+  texture.minFilter = THREE.LinearFilter;
+  texture.magFilter = THREE.LinearFilter;
+
+  return { projectIndex: source.projectIndex, video, texture };
 }
 
 function ProjectTitleContent({ project }: { project: ProjectSignal }) {
@@ -466,7 +496,6 @@ function FilmCanvas({
     const curve = buildCurve();
     const curveLength = curve.getLength();
     const geometry = buildFilmGeometry(curve);
-    // Joi and Joi Map footage is intentionally disconnected until the updated recordings arrive.
     const atlas = buildAtlas();
     const texture = new THREE.CanvasTexture(atlas);
     texture.colorSpace = THREE.SRGBColorSpace;
@@ -474,6 +503,13 @@ function FilmCanvas({
     texture.minFilter = THREE.LinearFilter;
     texture.magFilter = THREE.LinearFilter;
     texture.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+    const reelVideoAssets = reelVideoSources.map(createReelVideo);
+    let activeVideoProject = -1;
+    const playVideo = (asset: ReelVideoAsset) => {
+      void asset.video.play().catch(() => {
+        // Autoplay can be blocked until the visitor interacts; the first frame remains a valid fallback.
+      });
+    };
 
     const nightTideTarget = new THREE.WebGLRenderTarget(768, 576, {
       minFilter: THREE.LinearFilter,
@@ -511,6 +547,8 @@ function FilmCanvas({
 
     const uniforms = {
       uMap: { value: texture },
+      uJoiVideo: { value: reelVideoAssets[0]?.texture ?? texture },
+      uJoiMapVideo: { value: reelVideoAssets[1]?.texture ?? texture },
       uNightTideMap: { value: nightTideTarget.texture },
       uCurveLength: { value: curveLength },
       uFrameWidth: { value: FRAME_WIDTH },
@@ -548,6 +586,8 @@ function FilmCanvas({
       `,
       fragmentShader: `
         uniform sampler2D uMap;
+        uniform sampler2D uJoiVideo;
+        uniform sampler2D uJoiMapVideo;
         uniform sampler2D uNightTideMap;
         uniform float uCurveLength;
         uniform float uFrameWidth;
@@ -584,7 +624,11 @@ function FilmCanvas({
           vec2 atlasUv = vec2((frameIndex + contentUv.x) / uTextureCount, contentUv.y);
           float chromaOffset = 0.0017 / uTextureCount;
           vec3 image;
-          if (abs(frameIndex - 2.0) < 0.5) {
+          if (abs(frameIndex - 0.0) < 0.5) {
+            image = texture2D(uJoiVideo, vec2(contentUv.x, 1.0 - contentUv.y)).rgb;
+          } else if (abs(frameIndex - 1.0) < 0.5) {
+            image = texture2D(uJoiMapVideo, vec2(contentUv.x, 1.0 - contentUv.y)).rgb;
+          } else if (abs(frameIndex - 2.0) < 0.5) {
             image = texture2D(uNightTideMap, vec2(contentUv.x, 1.0 - contentUv.y)).rgb;
           } else {
             image = vec3(
@@ -594,7 +638,9 @@ function FilmCanvas({
             );
           }
           float luminance = dot(image, vec3(0.299, 0.587, 0.114));
-          float placeholderMonochrome = abs(frameIndex - 2.0) < 0.5 ? 0.08 : (filmUv.x < 0.35 ? 0.82 : 0.34);
+          float placeholderMonochrome = (abs(frameIndex - 0.0) < 0.5 || abs(frameIndex - 1.0) < 0.5 || abs(frameIndex - 2.0) < 0.5)
+            ? 0.08
+            : (filmUv.x < 0.35 ? 0.82 : 0.34);
           image = mix(image, vec3(luminance), placeholderMonochrome);
           image = (image - 0.5) * 1.075 + 0.5;
 
@@ -747,6 +793,23 @@ function FilmCanvas({
         targetReelOffset = observedStep * FRAME_WIDTH;
       }
 
+      const activeProject = modulo(stepRef.current, projects.length);
+      if (activeProject !== activeVideoProject) {
+        const previousVideo = reelVideoAssets.find((asset) => asset.projectIndex === activeVideoProject);
+        previousVideo?.video.pause();
+        const nextVideo = reelVideoAssets.find((asset) => asset.projectIndex === activeProject);
+        if (nextVideo) {
+          nextVideo.video.currentTime = 0;
+          if (revealRef.current > 0.4 && !reducedMotion) playVideo(nextVideo);
+        }
+        activeVideoProject = activeProject;
+      }
+      const activeVideo = reelVideoAssets.find((asset) => asset.projectIndex === activeVideoProject);
+      if (activeVideo) {
+        if (revealRef.current > 0.4 && !reducedMotion) playVideo(activeVideo);
+        else activeVideo.video.pause();
+      }
+
       const revealAmount = revealRef.current * revealRef.current * (3 - 2 * revealRef.current);
       const entryTarget = THREE.MathUtils.lerp(curveLength * 0.5, curveLength - 8.1, revealAmount);
       if (reducedMotion) entryOffset = entryTarget;
@@ -796,6 +859,12 @@ function FilmCanvas({
       window.clearTimeout(wheel.resetTimer);
       geometry.dispose();
       material.dispose();
+      reelVideoAssets.forEach(({ video, texture }) => {
+        video.pause();
+        video.removeAttribute("src");
+        video.load();
+        texture.dispose();
+      });
       texture.dispose();
       nightTideModel.dispose();
       nightTideTarget.dispose();
