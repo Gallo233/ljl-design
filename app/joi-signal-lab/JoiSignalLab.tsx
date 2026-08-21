@@ -58,6 +58,7 @@ type ReelVideoAsset = {
   projectIndex: number;
   video: HTMLVideoElement;
   texture: any;
+  ready: boolean;
 };
 
 function createReelVideo(source: (typeof reelVideoSources)[number]): ReelVideoAsset {
@@ -77,7 +78,7 @@ function createReelVideo(source: (typeof reelVideoSources)[number]): ReelVideoAs
   texture.minFilter = THREE.LinearFilter;
   texture.magFilter = THREE.LinearFilter;
 
-  return { projectIndex: source.projectIndex, video, texture };
+  return { projectIndex: source.projectIndex, video, texture, ready: false };
 }
 
 function ProjectTitleContent({ project }: { project: ProjectSignal }) {
@@ -506,6 +507,7 @@ function FilmCanvas({
     const reelVideoAssets = reelVideoSources.map(createReelVideo);
     let activeVideoProject = -1;
     const playVideo = (asset: ReelVideoAsset) => {
+      if (!asset.video.paused) return;
       void asset.video.play().catch(() => {
         // Autoplay can be blocked until the visitor interacts; the first frame remains a valid fallback.
       });
@@ -549,6 +551,8 @@ function FilmCanvas({
       uMap: { value: texture },
       uJoiVideo: { value: reelVideoAssets[0]?.texture ?? texture },
       uJoiMapVideo: { value: reelVideoAssets[1]?.texture ?? texture },
+      uJoiVideoReady: { value: 0 },
+      uJoiMapVideoReady: { value: 0 },
       uNightTideMap: { value: nightTideTarget.texture },
       uCurveLength: { value: curveLength },
       uFrameWidth: { value: FRAME_WIDTH },
@@ -588,6 +592,8 @@ function FilmCanvas({
         uniform sampler2D uMap;
         uniform sampler2D uJoiVideo;
         uniform sampler2D uJoiMapVideo;
+        uniform float uJoiVideoReady;
+        uniform float uJoiMapVideoReady;
         uniform sampler2D uNightTideMap;
         uniform float uCurveLength;
         uniform float uFrameWidth;
@@ -625,9 +631,13 @@ function FilmCanvas({
           float chromaOffset = 0.0017 / uTextureCount;
           vec3 image;
           if (abs(frameIndex - 0.0) < 0.5) {
-            image = texture2D(uJoiVideo, vec2(contentUv.x, 1.0 - contentUv.y)).rgb;
+            vec3 fallback = texture2D(uMap, atlasUv).rgb;
+            vec3 video = texture2D(uJoiVideo, contentUv).rgb;
+            image = mix(fallback, video, uJoiVideoReady);
           } else if (abs(frameIndex - 1.0) < 0.5) {
-            image = texture2D(uJoiMapVideo, vec2(contentUv.x, 1.0 - contentUv.y)).rgb;
+            vec3 fallback = texture2D(uMap, atlasUv).rgb;
+            vec3 video = texture2D(uJoiMapVideo, contentUv).rgb;
+            image = mix(fallback, video, uJoiMapVideoReady);
           } else if (abs(frameIndex - 2.0) < 0.5) {
             image = texture2D(uNightTideMap, vec2(contentUv.x, 1.0 - contentUv.y)).rgb;
           } else {
@@ -792,6 +802,12 @@ function FilmCanvas({
         observedStep = stepRef.current;
         targetReelOffset = observedStep * FRAME_WIDTH;
       }
+
+      reelVideoAssets.forEach((asset) => {
+        if (!asset.ready && asset.video.readyState >= 2) asset.ready = true;
+      });
+      uniforms.uJoiVideoReady.value = reelVideoAssets[0]?.ready ? 1 : 0;
+      uniforms.uJoiMapVideoReady.value = reelVideoAssets[1]?.ready ? 1 : 0;
 
       const activeProject = modulo(stepRef.current, projects.length);
       if (activeProject !== activeVideoProject) {
