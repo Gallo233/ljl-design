@@ -5,6 +5,7 @@ import {
   IntroPhoneVideo,
   PeepholeJoiVideo,
 } from "./Composition";
+import { JoiMapReelVideo, JoiReelVideo } from "./ReelCompositions";
 
 export const RemotionRoot: React.FC = () => {
   return (
@@ -32,6 +33,22 @@ export const RemotionRoot: React.FC = () => {
         fps={30}
         width={1280}
         height={720}
+      />
+      <Composition
+        id="JoiReel"
+        component={JoiReelVideo}
+        durationInFrames={48}
+        fps={12}
+        width={1024}
+        height={768}
+      />
+      <Composition
+        id="JoiMapReel"
+        component={JoiMapReelVideo}
+        durationInFrames={48}
+        fps={12}
+        width={1024}
+        height={768}
       />
     </>
   );

@@ -26,7 +26,7 @@ type JoiSignalLabProps = {
 const projects = [
   { index: "01", title: "Joi Presence", subtitle: "Multimodal AI Companion", href: "/work/joi", palette: ["#07121d", "#f2eee7", "#ea6448"] },
   { index: "02", title: "Joi Map", subtitle: "World-facing AI Guide", href: "/work/joi-map", palette: ["#b8c8cf", "#07121d", "#ea6448"] },
-  { index: "03", title: "Quiet Memory", subtitle: "Local Context System", href: "/work/joi", palette: ["#d8c69f", "#12100c", "#6c8fad"] },
+  { index: "03", title: "Zero Hour: Night Tide", subtitle: "Playable Godot Demo", href: "/play/night-tide", palette: ["#071a2b", "#d9edf2", "#2f9ed0"] },
   { index: "04", title: "Action Ledger", subtitle: "Human-readable Autonomy", href: "/work/joi", palette: ["#0b2236", "#dce9ef", "#7caed0"] },
   { index: "05", title: "Voice Field", subtitle: "Character & Expression", href: "/work/joi", palette: ["#43283f", "#f1dfda", "#ee795c"] },
   { index: "06", title: "Gallo / Joi", subtitle: "One Identity, Many Surfaces", href: "/", palette: ["#e9e3d8", "#111214", "#e55f43"] },
@@ -39,10 +39,6 @@ const BORDER_X = 0.03;
 const BORDER_Y = 0.07;
 const ATLAS_FRAME_WIDTH = 1024;
 const ATLAS_FRAME_HEIGHT = 768;
-const reelMotionSources = [
-  { projectIndex: 0, baseUrl: "/reel/01-joi" },
-  { projectIndex: 1, baseUrl: "/reel/02-joi-map" },
-] as const;
 const particleForms = [
   "FORM 00 / NEBULA",
   "FORM 01 / JOI",
@@ -52,91 +48,6 @@ const particleForms = [
 
 function modulo(value: number, divisor: number) {
   return ((value % divisor) + divisor) % divisor;
-}
-
-type ReelSpriteManifest = {
-  version: number;
-  width: number;
-  height: number;
-  fps: number;
-  frameCount: number;
-  columns: number;
-  rows: number;
-  framesPerSheet: number;
-  posterFrame: number;
-  sheets: string[];
-};
-
-type ReelSpriteAsset = {
-  projectIndex: number;
-  manifest: ReelSpriteManifest;
-  still: HTMLImageElement;
-  sheets: HTMLImageElement[];
-};
-
-function loadImage(src: string) {
-  return new Promise<HTMLImageElement>((resolve, reject) => {
-    const image = new Image();
-    image.decoding = "async";
-    image.onload = () => resolve(image);
-    image.onerror = () => reject(new Error(`Unable to load reel image: ${src}`));
-    image.src = src;
-  });
-}
-
-async function loadReelSprite(
-  source: (typeof reelMotionSources)[number],
-): Promise<ReelSpriteAsset> {
-  const response = await fetch(`${source.baseUrl}/manifest.json`);
-  if (!response.ok) {
-    throw new Error(`Unable to load reel manifest: ${source.baseUrl}`);
-  }
-  const manifest = await response.json() as ReelSpriteManifest;
-  const [still, ...sheets] = await Promise.all([
-    loadImage(`${source.baseUrl}/still.avif`),
-    ...manifest.sheets.map((sheet) => loadImage(`${source.baseUrl}/${sheet}`)),
-  ]);
-  return { projectIndex: source.projectIndex, manifest, still, sheets };
-}
-
-function drawReelStill(
-  context: CanvasRenderingContext2D,
-  asset: ReelSpriteAsset,
-) {
-  context.drawImage(
-    asset.still,
-    asset.projectIndex * ATLAS_FRAME_WIDTH,
-    0,
-    ATLAS_FRAME_WIDTH,
-    ATLAS_FRAME_HEIGHT,
-  );
-}
-
-function drawReelFrame(
-  context: CanvasRenderingContext2D,
-  asset: ReelSpriteAsset,
-  frameIndex: number,
-) {
-  const { manifest } = asset;
-  const normalizedFrame = modulo(frameIndex, manifest.frameCount);
-  const sheetIndex = Math.floor(normalizedFrame / manifest.framesPerSheet);
-  const frameInSheet = normalizedFrame % manifest.framesPerSheet;
-  const column = frameInSheet % manifest.columns;
-  const row = Math.floor(frameInSheet / manifest.columns);
-  const sheet = asset.sheets[sheetIndex];
-  if (!sheet) return;
-
-  context.drawImage(
-    sheet,
-    column * manifest.width,
-    row * manifest.height,
-    manifest.width,
-    manifest.height,
-    asset.projectIndex * ATLAS_FRAME_WIDTH,
-    0,
-    ATLAS_FRAME_WIDTH,
-    ATLAS_FRAME_HEIGHT,
-  );
 }
 
 function ProjectTitleContent({ project }: { project: ProjectSignal }) {
@@ -451,30 +362,14 @@ function FilmCanvas({
     const curve = buildCurve();
     const curveLength = curve.getLength();
     const geometry = buildFilmGeometry(curve);
+    // Joi and Joi Map footage is intentionally disconnected until the updated recordings arrive.
     const atlas = buildAtlas();
-    const atlasContext = atlas.getContext("2d");
     const texture = new THREE.CanvasTexture(atlas);
     texture.colorSpace = THREE.SRGBColorSpace;
     texture.generateMipmaps = false;
     texture.minFilter = THREE.LinearFilter;
     texture.magFilter = THREE.LinearFilter;
     texture.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
-    let reelSpriteAssets: ReelSpriteAsset[] = [];
-    let reelSpriteDisposed = false;
-    let activeSpriteProject = -1;
-    let activeSpriteFrame = -1;
-    let activeSpriteStartedAt = performance.now();
-
-    void Promise.all(reelMotionSources.map(loadReelSprite))
-      .then((assets) => {
-        if (reelSpriteDisposed || !atlasContext) return;
-        reelSpriteAssets = assets;
-        assets.forEach((asset) => drawReelStill(atlasContext, asset));
-        texture.needsUpdate = true;
-      })
-      .catch((error) => {
-        console.warn("Reel motion assets could not be loaded.", error);
-      });
 
     let frontT = 0;
     let frontScore = -Infinity;
@@ -562,11 +457,9 @@ function FilmCanvas({
             texture2D(uMap, atlasUv).g,
             texture2D(uMap, atlasUv - vec2(chromaOffset, 0.0)).b
           );
-          float realFootage = 1.0 - step(1.5, frameIndex);
           float luminance = dot(image, vec3(0.299, 0.587, 0.114));
           float placeholderMonochrome = filmUv.x < 0.35 ? 0.82 : 0.34;
-          float monochrome = mix(placeholderMonochrome, 0.0, realFootage);
-          image = mix(image, vec3(luminance), monochrome);
+          image = mix(image, vec3(luminance), placeholderMonochrome);
           image = (image - 0.5) * 1.075 + 0.5;
 
           bool sideBorder = localX < uBorderX || localX > 1.0 - uBorderX;
@@ -580,19 +473,16 @@ function FilmCanvas({
           vec3 viewDirection = normalize(cameraPosition - vWorldPosition);
           float facing = abs(dot(normalize(vWorldNormal), viewDirection));
           float diffuse = 0.25 + 0.86 * pow(facing, 0.72);
-          diffuse = mix(diffuse, 0.88 + 0.12 * facing, realFootage);
           vec3 lightDirection = normalize(vec3(14.0, 7.0, 0.0) - vWorldPosition);
           float sideLight = pow(max(dot(lightDirection, normalize(vWorldNormal)), 0.0), 28.0) * 0.38;
           color = color * diffuse + vec3(0.42, 0.61, 0.78) * sideLight;
 
           float viewDistance = distance(cameraPosition, vWorldPosition);
           float farFade = smoothstep(12.0, 29.0, viewDistance);
-          float farFadeStrength = mix(0.88, 0.46, realFootage);
-          color = mix(color, vec3(0.008, 0.026, 0.052), farFade * farFadeStrength);
+          color = mix(color, vec3(0.008, 0.026, 0.052), farFade * 0.88);
           float filmGrain = hash(gl_FragCoord.xy + floor(uTime * 0.4)) - 0.5;
           float scratch = smoothstep(0.996, 1.0, hash(vec2(floor(gl_FragCoord.x * 0.24), 17.0)));
-          float grainStrength = mix(0.032, 0.014, realFootage);
-          color += filmGrain * grainStrength + scratch * 0.035;
+          color += filmGrain * 0.032 + scratch * 0.035;
 
           float depthVisibility = 1.0 - smoothstep(18.0, 30.0, viewDistance);
           float endVisibility = 1.0 - smoothstep(0.86, 1.0, filmUv.x);
@@ -682,7 +572,7 @@ function FilmCanvas({
       if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
       canvas.classList.remove(styles.filmCanvasDragging);
       const project = projects[modulo(currentStep, projects.length)];
-      if (openOnTap && wasTap && project && Number(project.index) <= 2) {
+      if (openOnTap && wasTap && project && Number(project.index) <= 3) {
         onProjectOpenRef.current(project.href);
       }
     };
@@ -721,44 +611,6 @@ function FilmCanvas({
         targetReelOffset = observedStep * FRAME_WIDTH;
       }
 
-      const activeProject = modulo(stepRef.current, projects.length);
-      if (activeProject !== activeSpriteProject) {
-        const previousAsset = reelSpriteAssets.find(
-          (asset) => asset.projectIndex === activeSpriteProject,
-        );
-        if (previousAsset && atlasContext) {
-          drawReelStill(atlasContext, previousAsset);
-          texture.needsUpdate = true;
-        }
-        activeSpriteProject = activeProject;
-        activeSpriteFrame = -1;
-        activeSpriteStartedAt = performance.now();
-      }
-
-      const activeSpriteAsset = reelSpriteAssets.find(
-        (asset) => asset.projectIndex === activeSpriteProject,
-      );
-      const shouldAnimateSprite = (
-        Boolean(activeSpriteAsset)
-        && Boolean(atlasContext)
-        && !reducedMotion
-        && revealRef.current > 0.4
-      );
-      if (activeSpriteAsset && atlasContext && shouldAnimateSprite) {
-        const elapsed = (performance.now() - activeSpriteStartedAt) / 1000;
-        const nextSpriteFrame = Math.floor(elapsed * activeSpriteAsset.manifest.fps)
-          % activeSpriteAsset.manifest.frameCount;
-        if (nextSpriteFrame !== activeSpriteFrame) {
-          activeSpriteFrame = nextSpriteFrame;
-          drawReelFrame(atlasContext, activeSpriteAsset, nextSpriteFrame);
-          texture.needsUpdate = true;
-        }
-      } else if (activeSpriteAsset && atlasContext && activeSpriteFrame !== -1) {
-        activeSpriteFrame = -1;
-        drawReelStill(atlasContext, activeSpriteAsset);
-        texture.needsUpdate = true;
-      }
-
       const revealAmount = revealRef.current * revealRef.current * (3 - 2 * revealRef.current);
       const entryTarget = THREE.MathUtils.lerp(curveLength * 0.5, curveLength - 8.1, revealAmount);
       if (reducedMotion) entryOffset = entryTarget;
@@ -789,7 +641,6 @@ function FilmCanvas({
     render();
 
     return () => {
-      reelSpriteDisposed = true;
       window.cancelAnimationFrame(frame);
       resizeObserver.disconnect();
       canvas.removeEventListener("pointerdown", handlePointerDown);
@@ -807,7 +658,7 @@ function FilmCanvas({
   }, []);
 
   const activeProject = projects[modulo(step, projects.length)];
-  const canOpen = Number(activeProject.index) <= 2;
+  const canOpen = Number(activeProject.index) <= 3;
   const openActiveProject = () => {
     if (canOpen) onProjectOpen(activeProject.href);
   };
@@ -990,9 +841,9 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
           </div>
 
           <p className={styles.hint}>
-            {activeIndex < 2 ? "CLICK TO VIEW" : "DRAG THE FILM"}
+            {activeIndex < 3 ? "CLICK TO VIEW" : "DRAG THE FILM"}
             <span>·</span>
-            {activeIndex < 2 ? "DRAG TO BROWSE" : "USE ARROW KEYS"}
+            {activeIndex < 3 ? "DRAG TO BROWSE" : "USE ARROW KEYS"}
           </p>
         </section>
 

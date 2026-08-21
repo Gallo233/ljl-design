@@ -23,7 +23,6 @@ Preserved static entry source:
 - `index.html` - static entry page, phone intro, door approach, pixel-handle layer, and All Joi studio homepage.
 - `styles.css` - iPhone/map intro, cinematic video/pixel-handle styling, responsive grid, and high-interaction visual system.
 - `script.js` - phone-to-peephole state control, knock audio, video-to-handle state control, pixel layer alignment, drag gesture handling, reveal effects, pointer HUD, and original WebGL shader background.
-- `three-title.js` - local Three.js scene for the glossy soft-tube "all joi" homepage wordmark.
 - `assets/iphone-home-joi-map.png` - temporary iPhone home visual with Joi Map app icon.
 - `assets/iphone-home-joi-map@2x.png` - deterministic 2x upscale of the same screenshot for sharper Retina display.
 - `assets/joi-map-main-ui.png` - temporary Joi Map main-interface visual.
@@ -33,9 +32,8 @@ Preserved static entry source:
 - `assets/door-handle-final-frame.png` - extracted final frame used as the video reference.
 - `assets/door-handle-clean-frame.png` - final frame with the static lever softened/covered for the interactive moment.
 - `assets/door-handle-lever-sprite.png` - transparent pixel cutout of the original video handle lever.
-- `assets/three.module.js` - vendored Three.js runtime used by the homepage wordmark, avoiding a CDN dependency.
+- `assets/three.module.js` - vendored Three.js runtime kept for future local 3D experiments, avoiding a CDN dependency.
 - `assets/stickers/` - transparent glossy sticker assets used by the homepage floating visual layer.
-- `assets/project-thumbs/` - generated raster thumbnails for Autopilot, quant-ai, and 司天监夜话 project cards.
 - `assets/joi-app-v3.png` - Joi App visual reference, amber eyes, no side braid.
 - `assets/joi-map-v3.png` - Joi Map visual reference, amber eyes, side braid.
 - `joi-doorway-video/` - older Remotion source project kept for future rendered asset experiments.
@@ -89,9 +87,8 @@ Key behavior:
 - A transparent sprite cut from the original video frame covers the static handle.
 - The visitor presses the handle and drags downward.
 - The original video handle pixels rotate around the source-frame pivot, then transition into the homepage once pulled far enough.
-- The homepage first screen, not the entrance sequence, replaces the old `JOI DOORWAY` title with a large glossy soft-tube "all joi" Three.js wordmark.
-- The wordmark is built from Three.js tube geometry with rounded caps, directional/rim/glint lighting, glossy physical materials, and pointer-driven floating/tilt motion.
-- The homepage keeps the light All Joi tone while borrowing the reference site's mechanisms: fixed HUD, grid/crosshair layer, floating stickers, large foreground typography, real project thumbnails, sticky scroll beats, and project-card hover states.
+- The homepage first screen currently avoids a standalone decorative "all joi" wordmark while the final identity direction is unresolved.
+- The homepage keeps the light All Joi tone while borrowing the reference site's mechanisms: fixed HUD, grid/crosshair layer, floating stickers, foreground typography, real project thumbnails, sticky scroll beats, and project-card hover states.
 
 ## GitHub Project Content
 
@@ -99,10 +96,6 @@ The homepage project cards are based on the current GitHub READMEs from the `Gal
 
 - `Joi` - Windows-first multimodal desktop companion with planner, policy gate, memory, tool registry, screen watching, Codex/browser/game/MCP adapters, and character-fronted shell.
 - `aiguide-ios` - SwiftUI on-site AI guide MVP with MapKit, location, nearby recommendations, narration, photo recognition, itinerary/search, settings, localization, and voice/map-style paths.
-- `joi-doorway` - this interactive entrance and personal-site surface.
-- `joi-autopilot-control-center` - local Codex control center for design-to-develop-to-test-to-review loops with user approval at the commit boundary.
-- `quant-ai` - AI quant assistant covering market data, indicators, LLM commentary, strategy generation, and backtesting.
-- `sitianjian` - Godot/Dialogic bilingual visual novel experiment around ancient-China time messages and story-world building.
 
 ## Design Direction
 
@@ -123,10 +116,6 @@ Routes:
 - `/` - doorway intro plus full All Joi studio home.
 - `/joi` - desktop companion case-study page.
 - `/joi-map` - world-facing guide case-study page.
-- `/doorway` - cinematic entrance case-study page.
-- `/autopilot` - build loop control case-study page.
-- `/quant-ai` - market analysis assistant case-study page.
-- `/sitianjian` - story-world experiment case-study page.
 
 ## Character Rules
 
@@ -142,7 +131,6 @@ Current checks used:
 
 ```bash
 node --check script.js
-node --check three-title.js
 git diff --check
 pnpm exec next build
 ```
@@ -157,10 +145,10 @@ Browser-tested locally:
 - Desktop pixel handle: video ends on the handle frame, the source-frame handle cutout aligns and drag-down opens the homepage.
 - Mobile pixel handle: handle layer aligns with the cropped final video frame and drag-down opens the homepage.
 - `?skipIntro=1`: enters the homepage directly.
-- Homepage first screen: the large "all joi" Three.js wordmark loads locally, uses pale glossy soft-tube geometry, responds to pointer movement, includes floating sticker assets, and the layout has no horizontal overflow on desktop or mobile.
+- Homepage first screen: no standalone "all joi" 3D wordmark is rendered; floating sticker assets and the foreground typography remain visible with no horizontal overflow on desktop or mobile.
 - Homepage work section: project heading and cards remain readable without horizontal clipping.
-- Homepage project cards now link to internal project detail routes.
+- Homepage project cards now link only to the Joi and Joi Map internal project detail routes.
 - Full home now includes the source-style long work grid, dark speed-line interlude, principle fragment section, sticky word section, and terminal CTA footer.
 - Homepage sticky process section: sticks to the viewport on desktop and mobile, with mobile typography adjusted to avoid clipping.
-- Project detail routes build through `app/[slug]/page.tsx`; desktop `/joi` and mobile `/joi-map` passed browser QA with no horizontal overflow and no missing images.
+- Project detail routes build through `app/[slug]/page.tsx`; `/joi` and `/joi-map` are the only generated project routes.
 - Browser console: no page-script errors observed during validation. Next dev Fast Refresh may log warnings after server restarts or CSS edits.

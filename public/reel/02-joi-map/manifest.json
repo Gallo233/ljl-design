@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "width": 1024,
+  "height": 768,
+  "fps": 12,
+  "frameCount": 48,
+  "columns": 4,
+  "rows": 3,
+  "framesPerSheet": 12,
+  "posterFrame": 24,
+  "sheets": [
+    "sheets/sheet-0.avif",
+    "sheets/sheet-1.avif",
+    "sheets/sheet-2.avif",
+    "sheets/sheet-3.avif"
+  ]
+}

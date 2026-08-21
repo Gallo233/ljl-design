@@ -1,13 +1,13 @@
+(() => {
+if (window.__allJoiDoorwayBooted) return;
+window.__allJoiDoorwayBooted = true;
+
 const body = document.body;
 const root = document.documentElement;
 
 const dialogueText = {
-  joi: "Joi is the main desktop companion line: planner, memory, local skills, screen watching, audit, and character shell.",
-  aiguide: "AIGuide turns the Map side of Joi into an on-site narrator with location, vision, itinerary, language, and voice paths.",
-  doorway: "Joi Doorway is the ritual entrance: phone, knock, peephole, generated video, and a pixel handle that opens the site.",
-  autopilot: "Joi Autopilot is the build loop: design, develop, test, review, and keep human approval at the commit boundary.",
-  quant: "quant-ai explores the analytical side: market data, indicators, strategy generation, backtesting, and AI commentary.",
-  sitianjian: "司天监夜话 keeps the story layer alive: bilingual visual novel, time-message mechanic, and a world that can hold character emotion.",
+  joi: "Experience Joi as the desk-side partner: she watches context, plans the next move, and asks before local tools act.",
+  aiguide: "Experience Joi Map as the sunny field guide: she reads where you are, recognizes scenes, and turns routes into narration.",
 };
 
 const state = {
@@ -38,14 +38,23 @@ const footerReplayIntro = document.querySelector("#footerReplayIntro");
 const dialogue = document.querySelector("#joiDialogue");
 const pointerHud = document.querySelector("#pointerHud");
 const timeHud = document.querySelector("#timeHud");
+const speedSection = document.querySelector(".speed-section");
+const speedField = speedSection?.querySelector(".speed-field");
 const cards = Array.from(document.querySelectorAll("[data-joi-card]"));
 const revealItems = Array.from(document.querySelectorAll("[data-reveal]"));
+const narrationItems = Array.from(document.querySelectorAll("[data-joi-narration]"));
 
 let homeTimer = 0;
 let introTimers = [];
 let peepholeWheelTimer = 0;
 let shaderController = null;
 let knockAudioContext = null;
+let speedLines = [];
+let scrollFrame = 0;
+let dragCursor = null;
+let dragTrailLayer = null;
+let dragTrailLast = 0;
+let pointerActivityTimer = 0;
 
 const HANDLE_FRAME = {
   width: 1256,
@@ -56,6 +65,16 @@ const HANDLE_FRAME = {
 
 function clamp(value, min = 0, max = 1) {
   return Math.max(min, Math.min(max, value));
+}
+
+function smoothstep(value, edge0 = 0, edge1 = 1) {
+  const t = clamp((value - edge0) / Math.max(edge1 - edge0, 0.0001));
+  return t * t * (3 - 2 * t);
+}
+
+function easeOutQuart(value) {
+  const t = clamp(value);
+  return 1 - Math.pow(1 - t, 4);
 }
 
 function clearIntroTimers() {
@@ -72,6 +91,8 @@ function queueIntro(callback, delay) {
 function setQteProgress(value) {
   state.qteProgress = clamp(value);
   root.style.setProperty("--qte-progress", state.qteProgress.toFixed(3));
+  root.style.setProperty("--qte-door-y", `${(-30 + state.qteProgress * 2.4).toFixed(2)}vh`);
+  root.style.setProperty("--qte-door-scale", (2.25 + state.qteProgress * 0.05).toFixed(3));
 
   if (!state.completed && state.qteProgress >= 0.52) {
     completeDoorOpen();
@@ -127,6 +148,7 @@ function setState(nextState) {
     window.requestAnimationFrame(() => {
       siteHome.focus({ preventScroll: true });
       revealVisible();
+      requestScrollUpdate();
     });
     return;
   }
@@ -154,7 +176,7 @@ function startIntro() {
 
 function playDoorwayVideo() {
   if (!doorwayVideo) {
-    armQte();
+    queueIntro(armQte, reduceMotion ? 60 : 960);
     return;
   }
 
@@ -475,6 +497,129 @@ cards.forEach((card) => {
   });
 });
 
+function setupSpeedSection() {
+  if (!speedSection || !speedField) return;
+
+  const targetCount = window.innerWidth < 720 ? 72 : 118;
+  while (speedField.children.length < targetCount) {
+    speedField.appendChild(document.createElement("span"));
+  }
+
+  const palette = ["#20dcff", "#68f6ff", "#61a7ff", "#7a67ff", "#ee4fff", "#c0fe04"];
+  speedLines = Array.from(speedField.querySelectorAll("span")).map((line, index) => {
+    line.classList.add("speed-line");
+    const angle = (index * 137.508 + (index % 7) * 4.5) % 360;
+    const base = 16 + ((index * 73) % 190);
+    const travel = 260 + ((index * 41) % 620);
+    const length = 76 + ((index * 89) % 260);
+    const lane = ((index * 47) % 180) - 90;
+    const height = 3 + (index % 5 === 0 ? 3 : index % 3);
+    const color = palette[index % palette.length];
+    const opacity = 0.34 + ((index * 17) % 56) / 100;
+    line.style.setProperty("--speed-line-color", color);
+    line.style.setProperty("--speed-line-height", `${height}px`);
+    return { line, angle, base, travel, length, lane, opacity };
+  });
+}
+
+function updateSpeedSection() {
+  if (!speedSection || !speedLines.length) return;
+
+  const rect = speedSection.getBoundingClientRect();
+  const travel = Math.max(speedSection.offsetHeight - window.innerHeight, 1);
+  const progress = clamp(-rect.top / travel);
+  const burst = easeOutQuart(smoothstep(progress, 0.06, 0.72));
+  const titleOut = smoothstep(progress, 0.42, 0.66);
+  const principlesIn = smoothstep(progress, 0.56, 0.82);
+  const dragBoost = body.classList.contains("is-pointer-dragging") ? 1 : 0;
+
+  speedSection.style.setProperty("--speed-progress", progress.toFixed(4));
+  speedSection.style.setProperty("--speed-burst", burst.toFixed(4));
+  speedSection.style.setProperty("--speed-grid-opacity", (0.28 + burst * 0.42).toFixed(3));
+  speedSection.style.setProperty("--speed-vignette-opacity", (0.88 - burst * 0.34).toFixed(3));
+  speedSection.style.setProperty("--speed-sticky-glow-opacity", (0.38 + burst * 0.44).toFixed(3));
+  speedSection.style.setProperty("--speed-title-opacity", (1 - titleOut * 0.98).toFixed(3));
+  speedSection.style.setProperty("--speed-title-scale", (0.9 + burst * 0.18).toFixed(3));
+  speedSection.style.setProperty("--speed-title-y", `${((progress - 0.32) * -72).toFixed(2)}px`);
+  speedSection.style.setProperty("--speed-principle-opacity", principlesIn.toFixed(3));
+  speedSection.style.setProperty("--speed-principle-y", `${((1 - principlesIn) * 30).toFixed(2)}px`);
+  speedSection.style.setProperty("--speed-ring-opacity", smoothstep(progress, 0.5, 0.86).toFixed(3));
+  speedSection.style.setProperty("--speed-ring-scale", (0.86 + burst * 0.2).toFixed(3));
+  speedSection.style.setProperty("--speed-ring-y", `${((1 - burst) * 70).toFixed(2)}px`);
+  speedSection.style.setProperty("--speed-ring-rotate", `${(progress * 72).toFixed(2)}deg`);
+
+  speedLines.forEach((item, index) => {
+    const phase = progress * 9 + index * 0.47;
+    const scatter = Math.sin(phase) * 24 + Math.cos(phase * 0.7) * 12;
+    const distance = item.base + item.travel * (0.12 + burst * (1.16 + (index % 6) * 0.045));
+    const depth = (index % 9) * 0.035 + burst * 0.9 + dragBoost * 0.18;
+    const angle = item.angle + Math.sin(phase * 0.28) * (3 + burst * 3);
+    const lane = item.lane * (1 - burst * 0.58) + scatter * (0.3 + burst * 0.4);
+    const lineScale = 0.18 + burst * (1.16 + (index % 5) * 0.11) + dragBoost * 0.18;
+    const opacity =
+      item.opacity *
+      clamp(0.12 + burst * 1.12 - Math.max(0, progress - 0.9) * 1.6 + dragBoost * 0.18, 0, 1);
+
+    item.line.style.width = `${(item.length * (0.84 + burst * 0.56)).toFixed(2)}px`;
+    item.line.style.opacity = opacity.toFixed(3);
+    item.line.style.transform = [
+      "translate3d(-50%, -50%, 0)",
+      `rotate(${angle.toFixed(2)}deg)`,
+      `translateX(${distance.toFixed(2)}px)`,
+      `translateY(${lane.toFixed(2)}px)`,
+      `translateZ(${(depth * 120).toFixed(2)}px)`,
+      `scaleX(${lineScale.toFixed(3)})`,
+    ].join(" ");
+  });
+}
+
+function updateScrollEffects() {
+  scrollFrame = 0;
+  const maxScroll = Math.max(document.documentElement.scrollHeight - window.innerHeight, 1);
+  const progress = clamp(window.scrollY / maxScroll);
+  root.style.setProperty("--scroll-progress", progress.toFixed(4));
+  shaderController?.setScroll(progress);
+  updateSpeedSection();
+  revealVisible();
+}
+
+function requestScrollUpdate() {
+  if (scrollFrame) return;
+  scrollFrame = window.requestAnimationFrame(updateScrollEffects);
+}
+
+function setupDragCursor() {
+  if (dragCursor || window.matchMedia("(pointer: coarse)").matches) return;
+  dragCursor = document.createElement("div");
+  dragCursor.className = "drag-cursor";
+  dragCursor.setAttribute("aria-hidden", "true");
+
+  dragTrailLayer = document.createElement("div");
+  dragTrailLayer.className = "drag-trail-layer";
+  dragTrailLayer.setAttribute("aria-hidden", "true");
+
+  document.body.append(dragTrailLayer, dragCursor);
+}
+
+function spawnDragTrail(event, force = false) {
+  if (!dragTrailLayer || state.current !== "home") return;
+  const now = performance.now();
+  if (!force && now - dragTrailLast < 36) return;
+  dragTrailLast = now;
+
+  const bit = document.createElement("span");
+  bit.className = "drag-trail-bit";
+  const size = 8 + Math.round(Math.random() * 18);
+  bit.style.setProperty("--trail-size", `${size}px`);
+  bit.style.setProperty("--trail-x", `${event.clientX - size / 2}px`);
+  bit.style.setProperty("--trail-y", `${event.clientY - size / 2}px`);
+  bit.style.setProperty("--trail-dx", `${(Math.random() - 0.5) * 76}px`);
+  bit.style.setProperty("--trail-dy", `${(Math.random() - 0.5) * 76}px`);
+  bit.style.setProperty("--trail-rotate", `${Math.round(Math.random() * 90)}deg`);
+  dragTrailLayer.appendChild(bit);
+  window.setTimeout(() => bit.remove(), 720);
+}
+
 const observer =
   "IntersectionObserver" in window
     ? new IntersectionObserver(
@@ -504,6 +649,27 @@ if (observer) {
   revealVisible();
 }
 
+const narrationObserver =
+  "IntersectionObserver" in window
+    ? new IntersectionObserver(
+        (entries) => {
+          const visible = entries
+            .filter((entry) => entry.isIntersecting)
+            .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+          if (!visible) return;
+          const message = visible.target.dataset.joiNarration;
+          const assistant = document.querySelector("joi-live2d-assistant");
+          if (message && assistant && typeof assistant.say === "function") {
+            assistant.say(message, 3600);
+            assistant.talk?.(900);
+          }
+        },
+        { threshold: [0.34, 0.58] },
+      )
+    : null;
+
+narrationItems.forEach((item) => narrationObserver?.observe(item));
+
 function updateTimeHud() {
   if (!timeHud) return;
   const formatter = new Intl.DateTimeFormat("zh-CN", {
@@ -522,10 +688,31 @@ window.addEventListener("pointermove", (event) => {
   const x = clamp(event.clientX / Math.max(window.innerWidth, 1));
   const y = clamp(event.clientY / Math.max(window.innerHeight, 1));
 
+  root.style.setProperty("--cursor-x", `${event.clientX}px`);
+  root.style.setProperty("--cursor-y", `${event.clientY}px`);
+
+  if (state.current === "home") {
+    body.classList.add("is-pointer-active");
+    window.clearTimeout(pointerActivityTimer);
+    pointerActivityTimer = window.setTimeout(() => {
+      if (!body.classList.contains("is-pointer-dragging")) {
+        body.classList.remove("is-pointer-active");
+      }
+    }, 1200);
+  }
+
   if (pointerHud) {
     const px = String(Math.round(x * 9999)).padStart(4, "0");
     const py = String(Math.round(y * 9999)).padStart(4, "0");
     pointerHud.textContent = `${px} X / ${py} Y`;
+  }
+
+  if (state.current === "home" && event.buttons === 1) {
+    body.classList.add("is-pointer-dragging");
+  }
+
+  if (body.classList.contains("is-pointer-dragging")) {
+    spawnDragTrail(event);
   }
 
   if (state.pointerFrame) return;
@@ -537,19 +724,34 @@ window.addEventListener("pointermove", (event) => {
   });
 });
 
+window.addEventListener("pointerdown", (event) => {
+  if (state.current !== "home") return;
+  body.classList.add("is-pointer-dragging");
+  spawnDragTrail(event, true);
+  requestScrollUpdate();
+});
+
+window.addEventListener("pointerup", () => {
+  body.classList.remove("is-pointer-dragging");
+  requestScrollUpdate();
+});
+
+window.addEventListener("pointercancel", () => {
+  body.classList.remove("is-pointer-dragging");
+  requestScrollUpdate();
+});
+
 window.addEventListener(
   "scroll",
-  () => {
-    const maxScroll = Math.max(document.documentElement.scrollHeight - window.innerHeight, 1);
-    const progress = clamp(window.scrollY / maxScroll);
-    root.style.setProperty("--scroll-progress", progress.toFixed(4));
-    shaderController?.setScroll(progress);
-    revealVisible();
-  },
+  requestScrollUpdate,
   { passive: true },
 );
 
-window.addEventListener("resize", updateHandleLayerMetrics);
+window.addEventListener("resize", () => {
+  updateHandleLayerMetrics();
+  setupSpeedSection();
+  requestScrollUpdate();
+});
 
 function updateHandleLayerMetrics() {
   if (!handlePixelShell) return;
@@ -752,8 +954,13 @@ function initShader() {
   };
 }
 
+setupDragCursor();
+setupSpeedSection();
+requestScrollUpdate();
+
 if (new URLSearchParams(window.location.search).get("skipIntro") === "1") {
   setState("home");
 } else {
   startIntro();
 }
+})();

@@ -28,7 +28,9 @@
     "lint": "eslint src && tsc",
     "render:intro": "remotion render IntroPhone ../assets/intro-phone.mp4 --codec=h264 --concurrency=1",
     "render:peephole": "remotion render PeepholeJoi ../assets/peephole-joi.mp4 --codec=h264 --concurrency=1",
-    "render:preview": "remotion render DoorwayPreview out/doorway-preview.mp4 --codec=h264 --concurrency=1"
+    "render:preview": "remotion render DoorwayPreview out/doorway-preview.mp4 --codec=h264 --concurrency=1",
+    "render:reel-joi": "remotion render JoiReel out/reel-joi.mp4 --codec=h264 --concurrency=1",
+    "render:reel-joi-map": "remotion render JoiMapReel out/reel-joi-map.mp4 --codec=h264 --concurrency=1"
   },
   "sideEffects": [
     "*.css"

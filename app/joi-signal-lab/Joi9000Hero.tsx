@@ -80,29 +80,6 @@ function createRoundedBox(width: number, height: number, depth: number, radius: 
   return geometry;
 }
 
-function makeLabelTexture() {
-  const surface = document.createElement("canvas");
-  surface.width = 1024;
-  surface.height = 240;
-  const context = surface.getContext("2d");
-  if (!context) return new THREE.CanvasTexture(surface);
-  context.clearRect(0, 0, surface.width, surface.height);
-  context.fillStyle = "#111317";
-  context.fillRect(0, 0, surface.width, surface.height);
-  context.strokeStyle = "rgba(236, 216, 193, .36)";
-  context.lineWidth = 4;
-  context.strokeRect(8, 8, surface.width - 16, surface.height - 16);
-  context.fillStyle = "#ede4d8";
-  context.font = "italic 700 96px Georgia, serif";
-  context.textAlign = "center";
-  context.textBaseline = "middle";
-  context.fillText("JOI9000", surface.width / 2, surface.height / 2 + 4);
-  const texture = new THREE.CanvasTexture(surface);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  texture.anisotropy = 4;
-  return texture;
-}
-
 function createTextCanvas(text: string) {
   const surface = document.createElement("canvas");
   surface.width = 960;
@@ -347,7 +324,7 @@ function createCrtMaterial() {
   return new THREE.ShaderMaterial({
     transparent: true,
     depthWrite: false,
-    uniforms: { uTime: { value: 0 }, uRedPulse: { value: 0 } },
+    uniforms: { uTime: { value: 0 } },
     vertexShader: `
       varying vec2 vUv;
       void main() {
@@ -360,7 +337,6 @@ function createCrtMaterial() {
     `,
     fragmentShader: `
       uniform float uTime;
-      uniform float uRedPulse;
       varying vec2 vUv;
       float rnd(vec2 value) {
         return fract(sin(dot(value, vec2(12.9898, 78.233))) * 43758.5453);
@@ -375,7 +351,6 @@ function createCrtMaterial() {
         float scan = 0.88 + 0.12 * sin(vUv.y * 1050.0 + uTime * 4.0);
         float noise = (rnd(gl_FragCoord.xy + floor(uTime * 20.0)) - 0.5) * 0.045;
         vec3 base = mix(vec3(0.006, 0.012, 0.019), vec3(0.035, 0.073, 0.085), vignette);
-        base += vec3(0.12, 0.005, 0.002) * uRedPulse * (1.0 - length(centered));
         gl_FragColor = vec4((base + noise) * scan, mask);
       }
     `,
@@ -599,7 +574,6 @@ export function Joi9000Hero({ progressRef, onFormChange, onReady }: Joi9000HeroP
 
     let disposed = false;
     let modelLoaded = false;
-    const labelTexture = makeLabelTexture();
     const dracoLoader = new DRACOLoader();
     dracoLoader.setDecoderPath("/draco/");
     const loader = new GLTFLoader();
@@ -647,12 +621,6 @@ export function Joi9000Hero({ progressRef, onFormChange, onReady }: Joi9000HeroP
         console.error("JOI9000 model failed to load", error);
       },
     );
-
-    const blackMaterial = new THREE.MeshStandardMaterial({
-      color: 0x050609,
-      roughness: 0.32,
-      metalness: 0.34,
-    });
 
     const screenRig = new THREE.Group();
     screenRig.position.set(-22, 11, 2);
@@ -726,49 +694,6 @@ export function Joi9000Hero({ progressRef, onFormChange, onReady }: Joi9000HeroP
     particlePoints.rotation.x = -0.07;
     particlePoints.scale.setScalar(3.18);
     screenRig.add(particlePoints);
-
-    const label = new THREE.Mesh(
-      new THREE.PlaneGeometry(8.7, 1.58),
-      new THREE.MeshBasicMaterial({
-        map: labelTexture,
-        toneMapped: false,
-        transparent: true,
-        depthWrite: false,
-        depthTest: false,
-        polygonOffset: true,
-        polygonOffsetFactor: -2,
-      }),
-    );
-    label.position.set(-20.25, 4.78, 0.45);
-    label.rotation.set(-Math.PI / 2, 0, Math.PI);
-    label.renderOrder = 4;
-    modelRoot.add(label);
-
-    const lens = new THREE.Group();
-    lens.position.set(-4.25, -4.72, 1);
-    lens.rotation.x = -0.07;
-    lens.scale.setScalar(1.15);
-    const lensOuter = new THREE.Mesh(new THREE.CylinderGeometry(0.78, 0.78, 0.24, 48), blackMaterial);
-    lensOuter.rotation.x = Math.PI / 2;
-    lens.add(lensOuter);
-    const lensRing = new THREE.Mesh(
-      new THREE.TorusGeometry(0.5, 0.095, 16, 48),
-      new THREE.MeshStandardMaterial({ color: 0x73150f, emissive: 0xd02216, emissiveIntensity: 0.82, roughness: 0.22 }),
-    );
-    lensRing.position.z = 0.15;
-    lens.add(lensRing);
-    const lensCoreMaterial = new THREE.MeshBasicMaterial({
-      color: 0xff3a22,
-      toneMapped: false,
-    });
-    const lensCore = new THREE.Mesh(new THREE.SphereGeometry(0.39, 32, 24), lensCoreMaterial);
-    lensCore.scale.z = 0.56;
-    lensCore.position.z = 0.21;
-    lens.add(lensCore);
-    const redLight = new THREE.PointLight(0xff2417, 2.8, 8, 2);
-    redLight.position.set(0, 0, 1.2);
-    lens.add(redLight);
-    screenRig.add(lens);
 
     const fogMaterial = createFogMaterial();
     const fogBackdrop = new THREE.Mesh(new THREE.PlaneGeometry(18, 10), fogMaterial);
@@ -993,10 +918,6 @@ export function Joi9000Hero({ progressRef, onFormChange, onReady }: Joi9000HeroP
       camera.position.y += pointer.y * 0.3 * parallaxStrength;
       lookAt.lerpVectors(initialLookAt, screenWorldPosition, cameraProgress);
       camera.lookAt(lookAt);
-      const lensPulse = 1 + Math.sin(time * 1.45) * 0.035;
-      lensCore.scale.set(lensPulse, lensPulse, 0.56);
-      redLight.intensity = 2.45 + Math.sin(time * 1.45) * 0.24;
-      screenMaterial.uniforms.uRedPulse.value = Math.max(0, Math.sin(time * 1.45)) * 0.12;
       dust.rotation.z += reducedMotion ? 0 : delta * 0.006;
       renderer.render(scene, camera);
       if (!readySent && modelLoaded) {
@@ -1019,7 +940,6 @@ export function Joi9000Hero({ progressRef, onFormChange, onReady }: Joi9000HeroP
         if (Array.isArray(object.material)) object.material.forEach((material: any) => material.dispose?.());
         else object.material?.dispose?.();
       });
-      labelTexture.dispose();
       dracoLoader.dispose();
       renderer.dispose();
     };

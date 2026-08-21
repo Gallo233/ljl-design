@@ -41,7 +41,6 @@ Next.js shell:
 - `components/projectData.ts`
 - `components/legacyMarkup.ts`
 - `public/script.js`
-- `public/three-title.js`
 - `public/assets/`
 - `package.json`
 - `pnpm-lock.yaml`
@@ -54,7 +53,6 @@ Preserved source/static files:
 - `index.html`
 - `styles.css`
 - `script.js`
-- `three-title.js`
 - `assets/iphone-home-joi-map.png`
 - `assets/iphone-home-joi-map@2x.png`
 - `assets/joi-map-main-ui.png`
@@ -68,9 +66,6 @@ Preserved source/static files:
 - `assets/stickers/joi-cursor-sticker.png`
 - `assets/stickers/joi-star-sticker.png`
 - `assets/stickers/joi-pin-sticker.png`
-- `assets/project-thumbs/joi-autopilot-thumb.png`
-- `assets/project-thumbs/quant-ai-thumb.png`
-- `assets/project-thumbs/sitianjian-thumb.png`
 - `assets/joi-app-v3.png`
 - `assets/joi-map-v3.png`
 - `assets/joi-peephole-closeup.png`
@@ -119,15 +114,14 @@ The current site is an original light All Joi ecosystem studio inspired by the f
 - pointer coordinate metadata
 - GMT+8 time display
 - pale full-screen grid/crosshair field
-- a large pale glossy soft-tube "all joi" Three.js wordmark on the homepage first screen only, not in the entrance sequence
-- the homepage wordmark uses real Three.js tube geometry, rounded caps, physical materials, multiple lights, and pointer-driven floating/tilt motion
+- no standalone decorative "all joi" 3D wordmark on the homepage first screen until the identity direction is redesigned
 - floating glossy sticker bitmap assets, foreground impact typography, real project thumbnails, and sticky scroll beats
 - a source-style long work grid
 - a dark speed-line interlude translated into "Build with a human touch"
 - a principle fragment section with orbit marks
-- internal project detail pages at `/joi`, `/joi-map`, `/doorway`, `/autopilot`, `/quant-ai`, and `/sitianjian`
+- internal project detail pages only at `/joi` and `/joi-map`
 - large editorial typography
-- project cards from current `Gallo233` GitHub README content that update Joi dialogue and shader accent state
+- project cards only for Joi and Joi Map that update Joi dialogue and shader accent state
 
 Do not switch the homepage to the reference site's dark blue palette unless explicitly requested. The current target is a light All Joi interpretation of the reference site's mechanics.
 
@@ -142,8 +136,7 @@ Good areas to improve:
 - Tune the pixel sprite pivot, cleanup mask, and hotspot position for more device sizes.
 - Make the push-door transition feel more physical.
 - Improve homepage scroll choreography and shader response.
-- Refine the homepage "all joi" Three.js soft-tube wordmark lighting, material, and hover feel while keeping it on the first studio page rather than the doorway/iPhone/peephole entrance.
-- Refine each project detail route with richer All Joi-specific images/case-study copy.
+- Refine the Joi and Joi Map project detail routes with richer All Joi-specific images/case-study copy.
 - Replace placeholder links with real GitHub/Demo/Essay URLs.
 - Optimize video loading and poster strategy.
 - Use `design-qa.md` before major visual changes so the light All Joi interpretation does not drift back into a generic portfolio or a dark clone.
@@ -165,7 +158,6 @@ Run from the repository root:
 
 ```bash
 node --check script.js
-node --check three-title.js
 pnpm exec next build
 ```
 

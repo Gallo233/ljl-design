@@ -173,11 +173,7 @@
 
         <div class="hero-title-panel" data-reveal>
           <p class="section-kicker">All Joi Studio</p>
-          <h1 id="studioTitle" class="three-title-label">all joi</h1>
-          <div class="three-title-stage" id="threeTitleStage" aria-label="all joi 3D wordmark">
-            <canvas id="allJoiThreeCanvas" aria-hidden="true"></canvas>
-            <span class="three-title-fallback">all joi</span>
-          </div>
+          <h1 id="studioTitle" class="three-title-label">All Joi</h1>
           <div class="hero-display-copy" aria-hidden="true">
             <span>I build</span>
             <span>companions</span>
@@ -202,113 +198,100 @@
             eventually step from screen into world.
           </p>
           <p>
-            All Joi is not one app. It is a connected practice across desktop agent,
-            map guide, autopilot control, finance tooling, and interactive fiction.
+            All Joi is currently centered on two living surfaces: Joi as the desktop
+            companion, and Joi Map as the version that steps into the world with you.
           </p>
         </div>
       </section>
 
       <section class="work-section" id="work" aria-labelledby="workTitle">
         <div class="work-heading" data-reveal>
-          <span>Selected Work</span>
-          <h2 id="workTitle">GitHub projects currently shaping the Joi ecosystem.</h2>
+          <span>Experience Joi</span>
+          <h2 id="workTitle">Choose the surface you want to meet first.</h2>
+          <p class="work-heading-note">
+            Joi is the desk-side partner for building and thinking. Joi Map is the
+            sunny field guide that moves through real places with you.
+          </p>
         </div>
 
-        <div class="work-grid">
-          <article class="project-card project-card-large is-active" data-joi-card="joi" data-accent="0.22" data-reveal tabindex="0" aria-expanded="true">
-            <a href="/joi" aria-label="Open Joi project page">
-              <div class="project-visual character-visual">
+        <div class="work-grid two-project-grid">
+          <article class="project-card experience-card experience-card-app is-active" data-joi-card="joi" data-accent="0.22" data-reveal tabindex="0" aria-expanded="true">
+            <a class="project-card-link" href="/joi" aria-label="Open Joi project page">
+              <div class="project-visual character-visual experience-visual">
                 <img src="assets/joi-app-v3.png" alt="Joi App character reference" />
-                <span>Private Core</span>
+                <span>Desktop Partner</span>
               </div>
-              <div class="project-meta">
-                <span>Joi</span>
-                <span>2026 / Python + Tauri + Vue</span>
+              <div class="experience-card-body">
+                <div class="project-meta">
+                  <span>Joi</span>
+                  <span>2026 / Python + Tauri + Vue</span>
+                </div>
+                <h3>Work with a local companion.</h3>
+                <p>Screen-aware planning, memory, policy gates, tool actions, and a character-fronted desktop shell designed to feel like a real partner.</p>
+                <div class="experience-flow" aria-label="Joi visitor experience">
+                  <span>Watch context</span>
+                  <span>Plan next step</span>
+                  <span>Act with approval</span>
+                </div>
+                <div class="experience-actions">
+                  <span>Enter Joi case</span>
+                  <span>Desktop companion</span>
+                </div>
               </div>
-              <p>Windows-first multimodal agent companion with planner, policy gate, memory, tool registry, screen watching, Codex adapter, and character-fronted desktop shell.</p>
             </a>
           </article>
 
-          <article class="project-card project-card-tall" data-joi-card="aiguide" data-accent="0.42" data-reveal tabindex="0" aria-expanded="false">
-            <a href="/joi-map" aria-label="Open Joi Map project page">
-              <div class="project-visual map-visual">
+          <article class="project-card experience-card experience-card-map" data-joi-card="aiguide" data-accent="0.42" data-reveal tabindex="0" aria-expanded="false">
+            <a class="project-card-link" href="/joi-map" aria-label="Open Joi Map project page">
+              <div class="project-visual map-visual experience-visual">
                 <img src="assets/joi-map-v3.png" alt="Joi Map character reference" />
-                <span>Private MVP</span>
+                <span>World Guide</span>
               </div>
-              <div class="project-meta">
-                <span>Joi Map</span>
-                <span>2026 / SwiftUI</span>
+              <div class="experience-card-body">
+                <div class="project-meta">
+                  <span>Joi Map</span>
+                  <span>2026 / SwiftUI</span>
+                </div>
+                <h3>Step outside with a guide.</h3>
+                <p>MapKit location, photo recognition, nearby narration, route suggestions, multilingual voice, and a Map-only side-braid Joi identity.</p>
+                <div class="experience-flow" aria-label="Joi Map visitor experience">
+                  <span>Locate place</span>
+                  <span>Recognize scene</span>
+                  <span>Narrate route</span>
+                </div>
+                <div class="experience-actions">
+                  <span>Enter Map case</span>
+                  <span>On-site guide</span>
+                </div>
               </div>
-              <p>现场感知型 AI 讲解员：MapKit 定位、拍照识别、可追问讲解、行程推荐、多语言和语音路径。</p>
-            </a>
-          </article>
-
-          <article class="project-card" data-joi-card="doorway" data-accent="0.58" data-reveal tabindex="0" aria-expanded="false">
-            <a href="/doorway" aria-label="Open Joi Doorway project page">
-              <div class="project-visual doorway-visual">
-                <img src="assets/door-handle-final-frame.png" alt="Joi Doorway final handle frame" />
-                <span>Doorway</span>
-              </div>
-              <div class="project-meta">
-                <span>Joi Doorway</span>
-                <span>2026 / Static + Remotion</span>
-              </div>
-              <p>The cinematic personal-site entrance: iPhone Joi Map, knock, peephole, generated video, and pixel-handle interaction.</p>
-            </a>
-          </article>
-
-          <article class="project-card" data-joi-card="autopilot" data-accent="0.72" data-reveal tabindex="0" aria-expanded="false">
-            <a href="/autopilot" aria-label="Open Joi Autopilot project page">
-              <div class="project-visual loop-visual">
-                <img src="assets/project-thumbs/joi-autopilot-thumb.png" alt="Joi Autopilot control center thumbnail" />
-              </div>
-              <div class="project-meta">
-                <span>Joi Autopilot</span>
-                <span>2026 / Python + Codex</span>
-              </div>
-              <p>Developer-facing control center for local design-to-develop-to-test-to-review loops in isolated worktrees.</p>
-            </a>
-          </article>
-
-          <article class="project-card" data-joi-card="quant" data-accent="0.84" data-reveal tabindex="0" aria-expanded="false">
-            <a href="/quant-ai" aria-label="Open quant-ai project page">
-              <div class="project-visual quant-visual">
-                <img src="assets/project-thumbs/quant-ai-thumb.png" alt="quant-ai dashboard thumbnail" />
-              </div>
-              <div class="project-meta">
-                <span>quant-ai</span>
-                <span>2026 / FastAPI + Vue</span>
-              </div>
-              <p>AI 辅助量化交易工具，覆盖 A 股/港股行情、技术指标、LLM 分析、策略中心和回测系统。</p>
-            </a>
-          </article>
-
-          <article class="project-card" data-joi-card="sitianjian" data-accent="0.94" data-reveal tabindex="0" aria-expanded="false">
-            <a href="/sitianjian" aria-label="Open sitianjian project page">
-              <div class="project-visual story-visual">
-                <img src="assets/project-thumbs/sitianjian-thumb.png" alt="司天监夜话 visual novel thumbnail" />
-              </div>
-              <div class="project-meta">
-                <span>司天监夜话</span>
-                <span>2026 / Godot + Dialogic</span>
-              </div>
-              <p>Steins;Gate-like 双语视觉小说，古代中国异闻、飞符改写、天命与时间回信的故事实验。</p>
             </a>
           </article>
         </div>
       </section>
 
-      <section class="speed-section" aria-label="All Joi direction">
-        <div class="speed-field" aria-hidden="true">
-          <span></span><span></span><span></span><span></span><span></span>
-          <span></span><span></span><span></span><span></span><span></span>
-          <span></span><span></span><span></span><span></span><span></span>
-          <span></span><span></span><span></span><span></span><span></span>
-          <span></span><span></span><span></span><span></span><span></span>
-        </div>
-        <div class="speed-copy" data-reveal>
-          <span>Build with</span>
-          <span>a human touch</span>
+      <section class="speed-section" id="process" aria-label="All Joi direction">
+        <div class="speed-sticky">
+          <div class="speed-field" aria-hidden="true">
+            <span></span><span></span><span></span><span></span><span></span>
+            <span></span><span></span><span></span><span></span><span></span>
+            <span></span><span></span><span></span><span></span><span></span>
+            <span></span><span></span><span></span><span></span><span></span>
+            <span></span><span></span><span></span><span></span><span></span>
+          </div>
+          <div class="speed-copy">
+            <span>Build Joi</span>
+            <span>with a</span>
+            <span>human touch</span>
+          </div>
+          <div class="speed-rings" aria-hidden="true">
+            <span></span><span></span><span></span><span></span><span></span>
+          </div>
+          <div class="speed-principles" aria-hidden="true">
+            <p>Local first.<br />Emotion second.</p>
+            <p>Ship in small loops.<br />Aim for long arcs.</p>
+            <p>Building tomorrow's<br />companions.</p>
+            <p>Independent by<br />design & engineering.</p>
+          </div>
         </div>
       </section>
 
@@ -322,7 +305,7 @@
         <p data-reveal>Independent by design and engineering.</p>
       </section>
 
-      <section class="sticky-words" id="process" aria-label="Build process">
+      <section class="sticky-words" aria-label="Build process">
         <div class="sticky-words-inner">
           <span data-reveal>Build</span>
           <span data-reveal>companions</span>
@@ -332,15 +315,12 @@
 
       <section class="process-section" aria-label="All Joi build process">
         <div class="process-line" data-reveal>
-          <span>01 / Door Entrance</span>
-          <span>02 / Local Agent</span>
-          <span>03 / Field Guide</span>
-          <span>04 / Autopilot Loop</span>
+          <span>01 / Joi App</span>
+          <span>02 / Joi Map</span>
         </div>
         <p data-reveal>
-          The site now reads like a control surface for everything in progress:
-          Joi as desktop companion, Joi Map as world-facing guide, Autopilot as
-          build loop, and story systems as the emotional layer.
+          The site now focuses the ecosystem into two clear project lines:
+          Joi as the desktop companion, and Joi Map as the world-facing guide.
         </p>
       </section>
 
@@ -359,14 +339,6 @@
       </footer>
     </main>
 
-    <script type="importmap">
-      {
-        "imports": {
-          "three": "./assets/three.module.js"
-        }
-      }
-    </script>
-    <script src="script.js?v=20260703c"></script>
-    <script type="module" src="three-title.js?v=20260703c"></script>
+    <script src="script.js?v=20260708b"></script>
   </body>
 </html>
