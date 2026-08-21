@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import styles from "./page.module.css";
 
+const NIGHT_TIDE_BUILD_URL = "https://gallo233.github.io/joi-doorway/night-tide/";
+
 export const metadata: Metadata = {
   title: "Zero Hour: Night Tide / 零刻：夜潮",
   description: "Play the Zero Hour: Night Tide Godot demo in your browser.",
@@ -24,7 +26,7 @@ export default function NightTidePage() {
         <div className={styles.gameFrame}>
           <iframe
             title="Zero Hour: Night Tide playable demo"
-            src="/games/night-tide/index.html"
+            src={NIGHT_TIDE_BUILD_URL}
             allow="autoplay; fullscreen; gamepad"
             allowFullScreen
           />
