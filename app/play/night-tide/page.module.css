@@ -71,6 +71,13 @@
 .back:hover,
 .back:focus-visible { color: var(--indigo); }
 
+/* The build tag lives in the right-hand track whatever order it renders in. */
+.build {
+  grid-column: 3;
+  grid-row: 1;
+  justify-self: end;
+}
+
 .heading { grid-column: 1 / -1; grid-row: 2; }
 
 .kicker {
@@ -102,9 +109,36 @@
 .gameSection { max-width: 1240px; margin: 0 auto; }
 
 .stage {
+  position: relative;
   display: grid;
   gap: clamp(14px, 2vw, 26px);
   justify-items: center;
+}
+
+/* Ejecting is one small floating control rather than a rail row, so it survives the
+   landscape layout where the rail steps out entirely. */
+.ejectChip {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 5;
+  padding: 7px 14px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  letter-spacing: .1em;
+  color: var(--muted);
+  background: rgba(255, 255, 255, .82);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+  transition: color .18s ease, border-color .18s ease;
+}
+
+.ejectChip:hover,
+.ejectChip:focus-visible {
+  color: var(--indigo);
+  border-color: var(--indigo);
 }
 
 /*
@@ -136,6 +170,24 @@
   width: 0;
   height: 0;
   overflow: hidden;
+}
+
+/* WebGL failed: the park stops hiding and becomes the screen's flat frame in normal flow.
+   The screen loses its fixed pixel size here and takes the frame's width instead. */
+.screenFlat {
+  width: min(640px, 100%);
+  margin: 0 auto;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--panel);
+  box-shadow: 0 10px 30px -22px rgba(60, 72, 100, .5);
+}
+
+.screenFlat .screen {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 4 / 3;
 }
 
 .screen {
@@ -358,8 +410,6 @@
   box-shadow: 0 0 0 2px rgba(111, 126, 224, .16);
 }
 
-.fallbackEject { margin-left: auto; }
-
 /* ── portrait phones ─────────────────────────────────────────────────────── */
 
 @media (max-width: 720px) {
@@ -369,7 +419,6 @@
     max-height: 58svh;
   }
   .mapping { grid-template-columns: 1fr; }
-  .fallbackEject { margin-left: 0; }
 }
 
 /*

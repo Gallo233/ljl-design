@@ -1,5 +1,3 @@
-"use client";
-
 import * as THREE from "three";
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
 import { CSS3DObject, CSS3DRenderer } from "three/examples/jsm/renderers/CSS3DRenderer.js";
@@ -54,6 +52,10 @@ export type ConsoleSceneOptions = {
   onInsert: (id: string) => void;
   onHover: (id: string | null) => void;
   onDragState: (dragging: boolean) => void;
+  /** The shell's phase gate: while it returns false (booting), the pointer is refused. */
+  isInteractive?: () => boolean;
+  /** The WebGL context died and is not coming back — the shell should fall back to flat DOM. */
+  onFatal?: () => void;
 };
 
 export type ConsoleScene = {
@@ -84,6 +86,19 @@ const SHELL = "#f3f5f8";
 const SHELL_EDGE = "#e4e8ef";
 const BEZEL_COLOUR = "#c9d3e0";
 const KEY_GREY = "#e6eaf1";
+
+/**
+ * The console's plastic accent palette. Face buttons and cartridge shells draw from these
+ * same four colours so the rack reads as belonging to the machine. This is deliberately a
+ * different palette from the games' in-canvas `PALETTE`, which colours what happens *on*
+ * the screen, not the plastic around it.
+ */
+export const CONSOLE_ACCENTS = {
+  periwinkle: "#9ba4cf",
+  sage: "#a9c9b6",
+  salmon: "#e0968a",
+  wheat: "#e8c68d",
+} as const;
 
 /**
  * A rounded rectangle as a `Shape`.
@@ -127,6 +142,13 @@ function plate(width: number, height: number, depth: number, radius: number, fil
 
 export function createConsoleScene(options: ConsoleSceneOptions): ConsoleScene {
   const { container, screenElement, cartridges } = options;
+  const interactive = options.isInteractive ?? (() => true);
+  const reducedMotion =
+    typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  // CSS3DObject rewrites the screen element's inline style (position, pointer-events, a
+  // per-frame matrix3d). Snapshot it now so dispose can hand the element back unchanged.
+  const screenStyleSnapshot = screenElement.style.cssText;
 
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   renderer.setClearColor(0x000000, 0);
@@ -136,7 +158,16 @@ export function createConsoleScene(options: ConsoleSceneOptions): ConsoleScene {
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.domElement.style.cssText = "position:absolute;inset:0;width:100%;height:100%;touch-action:none;";
+  // The canvas is decoration to assistive tech — the live screen (boot status, game canvas,
+  // Godot iframe) lives in the CSS3D layer, which must stay visible to the accessibility tree.
+  renderer.domElement.setAttribute("aria-hidden", "true");
   container.appendChild(renderer.domElement);
+
+  const onContextLost = (event: Event) => {
+    event.preventDefault();
+    options.onFatal?.();
+  };
+  renderer.domElement.addEventListener("webglcontextlost", onContextLost);
 
   const css = new CSS3DRenderer();
   css.domElement.style.cssText = "position:absolute;inset:0;width:100%;height:100%;pointer-events:none;";
@@ -312,10 +343,10 @@ export function createConsoleScene(options: ConsoleSceneOptions): ConsoleScene {
   // ── face buttons ──────────────────────────────────────────────────────────
   // Colours sampled from the render: sage top, periwinkle left, salmon right, wheat bottom.
   const faceColours: Record<string, string> = {
-    y: "#a9c9b6",
-    x: "#9ba4cf",
-    b: "#e0968a",
-    a: "#e8c68d",
+    y: CONSOLE_ACCENTS.sage,
+    x: CONSOLE_ACCENTS.periwinkle,
+    b: CONSOLE_ACCENTS.salmon,
+    a: CONSOLE_ACCENTS.wheat,
   };
   // Pulled in from the shell edge, and offset the way the render staggers them.
   const faceLayout: Array<[GameButton, number, number]> = [
@@ -365,6 +396,103 @@ export function createConsoleScene(options: ConsoleSceneOptions): ConsoleScene {
     mesh.position.set(x, -SCREEN_H / 2 - 0.36, FACE_Z + 0.08);
     addKey(mesh, id);
   });
+
+  /* ── identity ──────────────────────────────────────────────────────────────
+   * The details that make it *this* machine rather than "a" machine: brand plate,
+   * top-line, speaker grille, status LEDs and stick caps. All drawn, not loaded —
+   * same canvas-texture pipeline as the cartridge labels.
+   */
+  const decalTexture = (width: number, height: number, draw: (c: CanvasRenderingContext2D) => void) => {
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    draw(canvas.getContext("2d")!);
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.anisotropy = 4;
+    return texture;
+  };
+  const decal = (texture: any, width: number, height: number, x: number, y: number) => {
+    const mesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(width, height),
+      new THREE.MeshBasicMaterial({ map: texture, transparent: true }),
+    );
+    mesh.position.set(x, y, FACE_Z + 0.02);
+    consoleGroup.add(mesh);
+    return mesh;
+  };
+
+  decal(
+    decalTexture(680, 84, (c) => {
+      c.fillStyle = "#a7b0c4";
+      c.font = "600 30px ui-monospace, Menlo, monospace";
+      c.textAlign = "center";
+      c.textBaseline = "middle";
+      c.fillText("N I G H T   T I D E   / / /   J O I   L A B", 340, 44);
+    }),
+    3.4, 0.42, 0, -3.04,
+  );
+  decal(
+    decalTexture(480, 64, (c) => {
+      c.fillStyle = "#9aa4b8";
+      c.font = "500 26px ui-monospace, Menlo, monospace";
+      c.textAlign = "center";
+      c.textBaseline = "middle";
+      c.fillText("J O I  /  P O C K E T - N T", 240, 34);
+    }),
+    2.2, 0.3, -deckX, 2.58,
+  );
+  decal(
+    decalTexture(380, 200, (c) => {
+      c.fillStyle = "#c3cbd9";
+      for (let row = 0; row < 3; row += 1) {
+        for (let col = 0; col < 7; col += 1) {
+          c.beginPath();
+          c.arc(46 + col * 48, 52 + row * 48, 9, 0, Math.PI * 2);
+          c.fill();
+        }
+      }
+    }),
+    1.9, 1.0, deckX + 0.35, -2.25,
+  );
+
+  // Two status LEDs on the top-right of the face: power is always lit, the cartridge one
+  // comes up as a card seats. Driven from the loop by reading the cartridge states — the
+  // scene already knows, so the shell does not need an API for it.
+  const ledGeometry = new THREE.CylinderGeometry(0.07, 0.08, 0.08, 20);
+  const powerLedMat = new THREE.MeshStandardMaterial({
+    color: CONSOLE_ACCENTS.sage, emissive: CONSOLE_ACCENTS.sage, emissiveIntensity: 0.9,
+    roughness: 0.4,
+  });
+  const cartLedMat = new THREE.MeshStandardMaterial({
+    color: CONSOLE_ACCENTS.periwinkle, emissive: CONSOLE_ACCENTS.periwinkle, emissiveIntensity: 0.12,
+    roughness: 0.4,
+  });
+  [powerLedMat, cartLedMat].forEach((material, index) => {
+    const led = new THREE.Mesh(ledGeometry, material);
+    led.rotation.x = Math.PI / 2;
+    led.position.set(BODY_W / 2 - 1.05 + index * 0.34, 2.58, FACE_Z + 0.04);
+    consoleGroup.add(led);
+  });
+
+  // Non-functional stick caps below the controls, matching the render's silhouette.
+  const buildStick = (x: number) => {
+    const group = new THREE.Group();
+    const base = new THREE.Mesh(new THREE.CylinderGeometry(0.52, 0.56, 0.14, 40), dishMat);
+    base.rotation.x = Math.PI / 2;
+    const stalk = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.17, 0.3, 24), shellEdgeMat);
+    stalk.rotation.x = Math.PI / 2;
+    stalk.position.z = 0.2;
+    const cap = new THREE.Mesh(new THREE.SphereGeometry(0.34, 32, 20), keyMat);
+    cap.scale.z = 0.55;
+    cap.position.z = 0.38;
+    cap.castShadow = true;
+    group.add(base, stalk, cap);
+    group.position.set(x, -1.72, FACE_Z + 0.02);
+    consoleGroup.add(group);
+  };
+  buildStick(-deckX + 0.85);
+  buildStick(deckX - 0.85);
 
   // ── cartridges ────────────────────────────────────────────────────────────
   /** Switch-style: a thick card with a clipped **top-right** corner, as in the render. */
@@ -533,7 +661,6 @@ export function createConsoleScene(options: ConsoleSceneOptions): ConsoleScene {
   slotGroup.add(slotGlow);
 
   /** Where a released cartridge is caught, and the line it travels down into the machine. */
-  const slotMouthPoint = new THREE.Vector3(0, BODY_H / 2 - 0.05, SLOT_Z);
   const slotHoverPoint = new THREE.Vector3(0, BODY_H / 2 + CART_H * 0.62, SLOT_Z);
   // Seated means *in* the machine: only the grip end stays proud, the rest is swallowed
   // by the shell. The first pass left three quarters of the card sticking out, which read
@@ -614,6 +741,8 @@ export function createConsoleScene(options: ConsoleSceneOptions): ConsoleScene {
 
   const onPointerDown = (event: PointerEvent) => {
     setPointer(event);
+    // The machine is booting: it accepts no input yet, the same as its screen says.
+    if (!interactive()) return;
 
     const buttonHit = hit(pressables.map((item) => item.mesh));
     const cartHit = hit(loose());
@@ -634,6 +763,9 @@ export function createConsoleScene(options: ConsoleSceneOptions): ConsoleScene {
       dragOffset.copy(cartridge.group.position).sub(dragPoint);
       renderer.domElement.setPointerCapture(event.pointerId);
       renderer.domElement.style.cursor = "grabbing";
+      // The CSS3D screen normally eats pointer events over its rectangle. While a card is
+      // in hand the screen is dimmed anyway, so hand its pixels back to the raycaster.
+      screenElement.style.pointerEvents = "none";
       options.onDragState(true);
     }
   };
@@ -649,6 +781,14 @@ export function createConsoleScene(options: ConsoleSceneOptions): ConsoleScene {
       return;
     }
     if (held) return;
+    if (!interactive()) {
+      if (hovered) {
+        hovered = null;
+        options.onHover(null);
+        renderer.domElement.style.cursor = "default";
+      }
+      return;
+    }
 
     const cartHit = hit(loose());
     const id = cartHit ? cartridgeOf(cartHit.object)?.spec.id ?? null : null;
@@ -687,6 +827,7 @@ export function createConsoleScene(options: ConsoleSceneOptions): ConsoleScene {
       }
       dragging = null;
       renderer.domElement.style.cursor = "default";
+      screenElement.style.pointerEvents = "auto";
       options.onDragState(false);
     }
     if (renderer.domElement.hasPointerCapture(event.pointerId)) {
@@ -714,6 +855,11 @@ export function createConsoleScene(options: ConsoleSceneOptions): ConsoleScene {
 
   /** Seated orientation: dead upright, facing the reader. */
   const UPRIGHT = new THREE.Quaternion();
+  // Under reduced motion the insert/eject choreography still happens — it is state, not
+  // decoration — but collapsed to near-cuts.
+  const T_ALIGN = reducedMotion ? 0.1 : 0.26;
+  const T_SINK = reducedMotion ? 0.14 : 0.42;
+  const T_RISE = reducedMotion ? 0.14 : 0.5;
   /** Each card's resting attitude in the rack, precomputed so the loop only slerps. */
   const RACKED_QUATERNIONS: Record<string, any> = {};
   cartridgeList.forEach((item) => {
@@ -723,18 +869,24 @@ export function createConsoleScene(options: ConsoleSceneOptions): ConsoleScene {
 
   const render = () => {
     const delta = Math.min(clock.getDelta(), 0.05);
-    const ease = 1 - Math.exp(-11 * delta);
 
-    parallax.lerp(parallaxTarget, 1 - Math.exp(-5 * delta));
-    consoleGroup.rotation.y = parallax.x * 0.055;
-    consoleGroup.rotation.x = -parallax.y * 0.035;
+    if (!reducedMotion) {
+      parallax.lerp(parallaxTarget, 1 - Math.exp(-5 * delta));
+      consoleGroup.rotation.y = parallax.x * 0.055;
+      consoleGroup.rotation.x = -parallax.y * 0.035;
+    }
 
     pressables.forEach((item) => {
       const down = pressedState.get(item.id) === true || held?.mesh === item.mesh;
-      const target = item.restZ - (down ? 0.1 : 0);
+      const pressTarget = item.restZ - (down ? 0.1 : 0);
       const current = item.mesh.position[item.axis];
-      item.mesh.position[item.axis] = current + (target - current) * (1 - Math.exp(-24 * delta));
+      item.mesh.position[item.axis] = current + (pressTarget - current) * (1 - Math.exp(-24 * delta));
     });
+
+    // The cartridge LED answers the slot: up while a card is in the machine.
+    const cartridgeIn = cartridgeList.some((item) => item.state === "seated" || item.state === "sinking");
+    cartLedMat.emissiveIntensity +=
+      ((cartridgeIn ? 1 : 0.12) - cartLedMat.emissiveIntensity) * (1 - Math.exp(-8 * delta));
 
     // The slot announces itself once a cartridge is close enough to actually drop.
     const carriedDistance = dragging
@@ -767,7 +919,7 @@ export function createConsoleScene(options: ConsoleSceneOptions): ConsoleScene {
 
         case "aligning": {
           // Stage one: travel to dead centre above the mouth, squaring up on the way.
-          item.progress = Math.min(1, item.progress + delta / 0.26);
+          item.progress = Math.min(1, item.progress + delta / T_ALIGN);
           const t = easeOutCubic(item.progress);
           group.position.lerpVectors(item.from, slotHoverPoint, t);
           group.quaternion.slerpQuaternions(item.fromQuaternion, UPRIGHT, t);
@@ -781,7 +933,7 @@ export function createConsoleScene(options: ConsoleSceneOptions): ConsoleScene {
         case "sinking": {
           // Stage two: straight down the slot, decelerating, with a small overshoot at the
           // end so it settles against the seat instead of stopping dead.
-          item.progress = Math.min(1, item.progress + delta / 0.42);
+          item.progress = Math.min(1, item.progress + delta / T_SINK);
           const t = easeOutBack(item.progress);
           group.position.set(
             slotHoverPoint.x,
@@ -805,7 +957,7 @@ export function createConsoleScene(options: ConsoleSceneOptions): ConsoleScene {
         case "rising": {
           // Ejecting: up and out first, then back to the rack — the reverse of going in,
           // so the two motions read as one mechanism.
-          item.progress = Math.min(1, item.progress + delta / 0.5);
+          item.progress = Math.min(1, item.progress + delta / T_RISE);
           const t = easeInOutCubic(item.progress);
           const lift = Math.sin(Math.min(1, item.progress * 1.6) * Math.PI * 0.5);
           group.position.lerpVectors(item.from, item.homePosition, t);
@@ -859,16 +1011,29 @@ export function createConsoleScene(options: ConsoleSceneOptions): ConsoleScene {
     dispose: () => {
       window.cancelAnimationFrame(frame);
       resizeObserver.disconnect();
+      renderer.domElement.removeEventListener("webglcontextlost", onContextLost);
       renderer.domElement.removeEventListener("pointerdown", onPointerDown);
       renderer.domElement.removeEventListener("pointermove", onPointerMove);
       renderer.domElement.removeEventListener("pointerup", onPointerUp);
       renderer.domElement.removeEventListener("pointercancel", onPointerUp);
-      cartridgeList.forEach((item) => item.label.dispose());
-      cartGeometry.dispose();
-      envTarget.texture.dispose();
+      // Everything built here dies here — plates, keys, cartridges, decals and their
+      // canvas textures in one sweep. Shared geometry is disposed more than once, which
+      // three treats as a no-op.
+      scene.traverse((object: any) => {
+        if (!object.isMesh) return;
+        object.geometry?.dispose?.();
+        const materials = Array.isArray(object.material) ? object.material : [object.material];
+        materials.forEach((material: any) => {
+          material?.map?.dispose?.();
+          material?.dispose?.();
+        });
+      });
+      envTarget.dispose();
       renderer.dispose();
       renderer.domElement.remove();
       css.domElement.remove();
+      // Hand the screen element back the way it arrived.
+      screenElement.style.cssText = screenStyleSnapshot;
     },
   };
 }

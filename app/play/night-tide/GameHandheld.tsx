@@ -11,7 +11,7 @@ import {
   type GameButton,
   type GameHandle,
 } from "./games";
-import { createConsoleScene, type CartridgeSpec, type ConsoleScene } from "./console3d";
+import { CONSOLE_ACCENTS, createConsoleScene, type CartridgeSpec, type ConsoleScene } from "./console3d";
 
 type Phase = "boot" | "idle" | "play";
 
@@ -40,6 +40,7 @@ const KEY_TO_BUTTON: Record<string, GameButton> = {
   e: "r1",
   r: "r2",
   escape: "start",
+  backspace: "select",
 };
 
 /**
@@ -69,15 +70,16 @@ const BOOT_LINES = [
   "INSERT TO PLAY",
 ];
 
-/** What the rack holds, in the order it stands in. Colours match the face buttons. */
+/** What the rack holds, in the order it stands in. Shell colours come from the console's
+ * own accent palette so the cards visibly belong to the machine's face buttons. */
 const CARTRIDGE_SPECS: CartridgeSpec[] = shelf.map((entry) => ({
   id: entry.id,
   label: entry.titleZh,
   sublabel: entry.title,
-  accent: entry.id === "night-tide" ? "#9ba4cf"
-    : entry.id === "snake" ? "#a9c9b6"
-    : entry.id === "tetris" ? "#e0968a"
-    : "#e8c68d",
+  accent: entry.id === "night-tide" ? CONSOLE_ACCENTS.periwinkle
+    : entry.id === "snake" ? CONSOLE_ACCENTS.sage
+    : entry.id === "tetris" ? CONSOLE_ACCENTS.salmon
+    : CONSOLE_ACCENTS.wheat,
 }));
 
 export function GameHandheld() {
@@ -92,6 +94,8 @@ export function GameHandheld() {
   const sceneRef = useRef<ConsoleScene | null>(null);
 
   const [phase, setPhase] = useState<Phase>("boot");
+  /** WebGL is unavailable or died: the screen renders flat in flow, the shelf takes over. */
+  const [sceneFailed, setSceneFailed] = useState(false);
   const [bootStep, setBootStep] = useState(0);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [pendingId, setPendingId] = useState<string | null>(null);
@@ -128,10 +132,15 @@ export function GameHandheld() {
     setStatus(`LOADING / ${entry.titleZh}`);
   }, []);
 
-  /** Seated: mount the game. */
+  /** Seated: mount the game. Idempotent — a second seat of the same card is a no-op, so
+   * a shelf click racing the 3D insert cannot clobber the game's own status line. */
   const loadCartridge = useCallback((id: string) => {
     const entry = shelf.find((item) => item.id === id);
     if (!entry) return;
+    if (activeIdRef.current === id && phaseRef.current === "play") {
+      setPendingId(null);
+      return;
+    }
     setPendingId(null);
     setActiveId(id);
     setPhase("play");
@@ -183,26 +192,57 @@ export function GameHandheld() {
     const park = screenParkRef.current;
     if (!host || !screen || !park) return;
 
-    const scene = createConsoleScene({
-      container: host,
-      screenElement: screen,
-      cartridges: CARTRIDGE_SPECS,
-      onButtonDown: (id) => pressRef.current(id),
-      onButtonUp: (id) => releaseRef.current(id),
-      onInsertBegin: (id) => beginRef.current(id),
-      onInsert: (id) => loadRef.current(id),
-      onHover: setHoveredId,
-      onDragState: setCarrying,
-    });
-    sceneRef.current = scene;
+    // Probe before constructing: a browser without WebGL gets the flat screen straight
+    // away instead of a thrown effect and an invisible page.
+    const probe = document.createElement("canvas");
+    if (!probe.getContext("webgl2") && !probe.getContext("webgl")) {
+      setSceneFailed(true);
+      return;
+    }
 
-    return () => {
-      sceneRef.current = null;
-      scene.dispose();
-      // CSS3DRenderer moved the screen into its own layer, which it has just torn down.
+    const handBack = () => {
+      // CSS3DRenderer moved the screen into its own layer, which has just been torn down.
       // Hand the element back to the node React thinks it lives in, or React's unmount
       // will look for it under a parent that no longer exists.
       if (screen.parentElement !== park) park.appendChild(screen);
+    };
+
+    let scene: ConsoleScene;
+    try {
+      scene = createConsoleScene({
+        container: host,
+        screenElement: screen,
+        cartridges: CARTRIDGE_SPECS,
+        onButtonDown: (id) => pressRef.current(id),
+        onButtonUp: (id) => releaseRef.current(id),
+        onInsertBegin: (id) => beginRef.current(id),
+        onInsert: (id) => loadRef.current(id),
+        onHover: setHoveredId,
+        onDragState: setCarrying,
+        isInteractive: () => phaseRef.current !== "boot",
+        onFatal: () => {
+          // The context died mid-session. Fold down to the flat screen without losing
+          // whatever was playing — phase and activeId are React state, not scene state.
+          sceneRef.current = null;
+          scene.dispose();
+          handBack();
+          setCarrying(false);
+          setHoveredId(null);
+          setSceneFailed(true);
+        },
+      });
+    } catch {
+      setSceneFailed(true);
+      return;
+    }
+    sceneRef.current = scene;
+
+    return () => {
+      if (sceneRef.current) {
+        sceneRef.current = null;
+        scene.dispose();
+      }
+      handBack();
     };
   }, []);
 
@@ -277,34 +317,12 @@ export function GameHandheld() {
       }
     };
 
-    /*
-     * And a backstop for the cases the events above cannot cover — a keyup swallowed by
-     * a browser shortcut, a pointer capture lost to a context menu, a mirrored keyup that
-     * never arrives. Nothing in these games is meant to be held for six seconds, so
-     * anything still down after that is a bug, not a player.
-     */
-    const heldSince = new Map<GameButton, number>();
-    const watchdog = window.setInterval(() => {
-      const now = performance.now();
-      heldRef.current.forEach((button) => {
-        if (!heldSince.has(button)) heldSince.set(button, now);
-      });
-      heldSince.forEach((since, button) => {
-        if (!heldRef.current.has(button)) { heldSince.delete(button); return; }
-        if (now - since > 6000) {
-          release(button);
-          heldSince.delete(button);
-        }
-      });
-    }, 1000);
-
     window.addEventListener("keydown", onKeyDown, { passive: false });
     window.addEventListener("keyup", onKeyUp, { passive: false });
     window.addEventListener("blur", onBlur);
     document.addEventListener("visibilitychange", onVisibility);
     window.addEventListener("message", onMessage);
     return () => {
-      window.clearInterval(watchdog);
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
       window.removeEventListener("blur", onBlur);
@@ -344,27 +362,37 @@ export function GameHandheld() {
   const pendingEntry = shelf.find((entry) => entry.id === pendingId) ?? null;
   const controls = activeEntry?.controls ?? [
     { keys: "拖动卡带", action: "放到机器顶部插槽" },
-    { keys: "SELECT", action: "退出卡带" },
+    { keys: "BACKSPACE / SELECT", action: "退出卡带" },
   ];
 
   return (
     <div className={styles.stage}>
-      {/* The three.js canvas and the CSS3D layer are appended here by the scene. */}
-      <div
-        className={`${styles.scene} ${carrying ? styles.sceneCarrying : ""}`}
-        ref={sceneHostRef}
-        aria-hidden="true"
-      />
+      {/* The three.js canvas and the CSS3D layer are appended here by the scene. The live
+          screen lives inside the CSS3D layer, so this subtree must stay AT-visible; only
+          the WebGL canvas marks itself decorative. */}
+      {!sceneFailed && (
+        <div
+          className={[styles.scene, carrying ? styles.sceneCarrying : ""].filter(Boolean).join(" ")}
+          ref={sceneHostRef}
+        />
+      )}
+
+      {phase === "play" && (
+        <button type="button" className={styles.ejectChip} onClick={eject}>
+          ⏏ 退出卡带
+        </button>
+      )}
 
       {/*
         The screen's React home. `createConsoleScene` lifts the inner element into the CSS3D
-        layer on mount and the cleanup puts it back, so React only ever sees it here.
+        layer on mount and the cleanup puts it back, so React only ever sees it here. When
+        WebGL is unavailable the park stops hiding and becomes the screen's flat frame.
       */}
-      <div ref={screenParkRef} className={styles.screenPark}>
+      <div ref={screenParkRef} className={sceneFailed ? styles.screenFlat : styles.screenPark}>
         <div
           ref={screenRef}
           className={styles.screen}
-          style={{ width: SCREEN_WIDTH, height: SCREEN_HEIGHT }}
+          style={sceneFailed ? undefined : { width: SCREEN_WIDTH, height: SCREEN_HEIGHT }}
         >
           {phase === "boot" && (
             <div className={styles.boot} role="status" aria-live="polite">
@@ -451,18 +479,22 @@ export function GameHandheld() {
               type="button"
               className={activeId === entry.id ? styles.fallbackActive : ""}
               onClick={() => {
-                sceneRef.current?.setInserted(entry.id);
-                loadCartridge(entry.id);
+                if (phase === "boot") return;
+                if (activeId === entry.id && phase === "play") return;
+                if (sceneRef.current) {
+                  // The 3D machine takes it from here: aligning → sinking → seated fires
+                  // onInsert, which mounts the game. Loading here as well would mount it
+                  // twice and clobber the game's own status line.
+                  beginLoad(entry.id);
+                  sceneRef.current.setInserted(entry.id);
+                } else {
+                  loadCartridge(entry.id);
+                }
               }}
             >
               {entry.titleZh}
             </button>
           ))}
-          {phase === "play" && (
-            <button type="button" className={styles.fallbackEject} onClick={eject}>
-              退出卡带
-            </button>
-          )}
         </div>
       </div>
     </div>

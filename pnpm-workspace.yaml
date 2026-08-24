@@ -1,7 +1,0 @@
-allowBuilds:
-  sharp: true
-packages:
-  - .
-
-onlyBuiltDependencies:
-  - sharp

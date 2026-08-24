@@ -51,6 +51,11 @@ app/
     joi-signal-lab.module.css
     three.d.ts
   work/[slug]/page.tsx      project detail
+  play/night-tide/          Game Center: a WebGL+CSS3D 3D handheld (console3d.ts builds the
+    GameHandheld.tsx        machine, drag-a-cartridge to play), games/ holds three canvas
+    console3d.ts, games/    games (snake/tetris/pacman) + the Godot iframe entry. The screen
+                            stays live DOM (CSS3DRenderer) because an iframe cannot be a
+                            WebGL texture; on WebGL failure the shell folds to a flat screen.
   classic/page.tsx          previous homepage
   site.ts                   SITE_URL, canonicalPath(), SHARE_CARD   <-- see below
   robots.ts, sitemap.ts     generated /robots.txt and /sitemap.xml
