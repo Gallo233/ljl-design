@@ -1,6 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { ArrivalFade } from "../../components/ArrivalFade";
 import styles from "./lab.module.css";
 import { labItems, type LabItem } from "./labData";
 
@@ -60,11 +62,12 @@ export function LabFolder() {
 
   return (
     <main className={styles.page}>
+      <ArrivalFade />
       <header className={styles.nav}>
-        <a className={styles.wordmark} href={sitePath("/")}>GALLO</a>
+        <Link className={styles.wordmark} href="/">GALLO</Link>
         <nav aria-label="Lab navigation">
-          <a href={sitePath("/selected-work")}>BACK TO REEL</a>
-          <a href={sitePath("/about-me")}>ABOUT</a>
+          <Link href="/selected-work">BACK TO REEL</Link>
+          <Link href="/about-me">ABOUT</Link>
         </nav>
       </header>
 
@@ -112,9 +115,9 @@ export function LabFolder() {
                     ))}
                   </ul>
                   {item.link && (
-                    <a className={styles.dossierLink} href={sitePath(item.link.href)}>
+                    <Link className={styles.dossierLink} href={item.link.href}>
                       {item.link.label}
-                    </a>
+                    </Link>
                   )}
                 </div>
                 {item.thumb && (
@@ -130,7 +133,7 @@ export function LabFolder() {
 
       <footer className={styles.footer}>
         <span>FILED UNDER: HONEST WORK</span>
-        <a href={sitePath("/selected-work")}>← BACK TO REEL</a>
+        <Link href="/selected-work">← BACK TO REEL</Link>
       </footer>
 
       {/* The floating preview card that trails the cursor over the drawer. */}

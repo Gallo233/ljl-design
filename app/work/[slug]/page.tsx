@@ -3,7 +3,9 @@ import "../../../styles.css";
 import "../../../experience.css";
 import "./project-detail.css";
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
+import { ArrivalFade } from "../../../components/ArrivalFade";
 import { getProject, projects } from "../../../components/projectData";
 import { JoiWebEmbed } from "../../../components/JoiWebEmbed";
 import { PageScrollState } from "../../../components/PageScrollState";
@@ -79,11 +81,14 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
   return (
     <main className={`project-page project-page--${project.slug}`}>
       {project.slug === "joi" && <PageScrollState />}
+      <ArrivalFade />
       <header className="project-detail-nav">
-        <a className="wordmark" href={sitePath("/")}>GALLO</a>
+        {/* Internal links are client navigations — a full document load would reboot
+            both of the lab's WebGL scenes and replay the loader on the way back. */}
+        <Link className="wordmark" href="/">GALLO</Link>
         <nav aria-label="Project navigation">
-          <a href={sitePath("/selected-work")}>BACK TO REEL</a>
-          <a href={sitePath("/about-me")}>ABOUT</a>
+          <Link href="/selected-work">BACK TO REEL</Link>
+          <Link href="/about-me">ABOUT</Link>
           {project.repo && <a href={project.repo} target="_blank" rel="noreferrer">GITHUB</a>}
         </nav>
       </header>
@@ -149,7 +154,7 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
           {hasWebExperience ? (
             <JoiWebEmbed />
           ) : project.experience ? (
-            <a className="project-web-experience" href={sitePath(project.experience.href)}>
+            <Link className="project-web-experience" href={project.experience.href}>
               <span>{project.experience.eyebrow}</span>
               <div>
                 <h2>{project.experience.title}</h2>
@@ -157,7 +162,7 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
                 <p lang="zh-CN">{project.experience.bodyZh}</p>
               </div>
               <strong>{project.experience.action} <b aria-hidden="true">↗</b></strong>
-            </a>
+            </Link>
           ) : null}
 
           {project.motion && (
@@ -231,10 +236,10 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
             )}
 
             {hasNext && (
-              <a className="project-next" href={sitePath(nextHref!)}>
+              <Link className="project-next" href={nextHref!}>
                 <span>NEXT PROJECT</span>
                 <strong>{project.nextTitle}</strong>
-              </a>
+              </Link>
             )}
           </div>
         )}

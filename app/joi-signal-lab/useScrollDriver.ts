@@ -53,12 +53,19 @@ type Options = {
   onSectionChange?: (id: SectionId) => void;
   /** Snap is suppressed while this returns true — e.g. while dragging the reel. */
   isLocked?: () => boolean;
+  /**
+   * While true, the page is held still: scroll input is cancelled and the position is
+   * pinned wherever the deep link landed. The reference does the same — the CRT boot
+   * screen holds the page until the intro is done. Not `overflow: hidden`, which zeroes
+   * `scrollY` and breaks deep links landing at `position × innerHeight`.
+   */
+  bootLocked?: () => boolean;
 };
 
-export function useScrollDriver({ onFrame, onSectionChange, isLocked }: Options) {
+export function useScrollDriver({ onFrame, onSectionChange, isLocked, bootLocked }: Options) {
   const sampleRef = useRef<ScrollSample>({ screens: 0, velocity: 0, direction: 0 });
-  const optionsRef = useRef({ onFrame, onSectionChange, isLocked });
-  optionsRef.current = { onFrame, onSectionChange, isLocked };
+  const optionsRef = useRef({ onFrame, onSectionChange, isLocked, bootLocked });
+  optionsRef.current = { onFrame, onSectionChange, isLocked, bootLocked };
 
   /** Imperative scroll-to used by the nav and the arrow keys. */
   const scrollToSection = useRef<(id: SectionId, duration?: number) => void>(() => {});
@@ -74,6 +81,8 @@ export function useScrollDriver({ onFrame, onSectionChange, isLocked }: Options)
     // While an animated snap or nav jump is running the reader is not driving.
     let animation: { from: number; to: number; startedAt: number; duration: number } | null = null;
     let snapLockedUntil = 0;
+    /** Where the page is pinned while the boot lock holds; null when free. */
+    let bootLockY: number | null = null;
 
     const viewport = () => Math.max(1, window.innerHeight);
     const targetScreens = () => window.scrollY / viewport();
@@ -100,8 +109,13 @@ export function useScrollDriver({ onFrame, onSectionChange, isLocked }: Options)
       if (animation && performance.now() - animation.startedAt > 80) animation = null;
     };
 
+    const SCROLL_KEYS = new Set(["ArrowDown", "ArrowUp", "PageDown", "PageUp", "Home", "End", " "]);
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.metaKey || event.ctrlKey || event.altKey) return;
+      if (optionsRef.current.bootLocked?.() && SCROLL_KEYS.has(event.key)) {
+        event.preventDefault();
+        return;
+      }
       const isDown = event.key === "ArrowDown" || event.key === "PageDown";
       const isUp = event.key === "ArrowUp" || event.key === "PageUp";
       if (!isDown && !isUp) return;
@@ -116,6 +130,16 @@ export function useScrollDriver({ onFrame, onSectionChange, isLocked }: Options)
     const tick = (now: number) => {
       const dt = Math.min((now - lastFrameAt) / 1000, 0.05);
       lastFrameAt = now;
+
+      // The boot lock pins the page where the deep link landed. Wheel and touch are
+      // already cancelled at the event layer; this catches what they cannot (scrollbar
+      // drags, programmatic scrolls) by simply putting the position back.
+      if (optionsRef.current.bootLocked?.()) {
+        if (bootLockY === null) bootLockY = window.scrollY;
+        if (window.scrollY !== bootLockY) window.scrollTo(0, bootLockY);
+      } else if (bootLockY !== null) {
+        bootLockY = null;
+      }
 
       if (animation) {
         const elapsed = now - animation.startedAt;
@@ -187,8 +211,14 @@ export function useScrollDriver({ onFrame, onSectionChange, isLocked }: Options)
       if (document.visibilityState === "visible") syncNow();
     };
 
+    const cancelWhileLocked = (event: Event) => {
+      if (optionsRef.current.bootLocked?.()) event.preventDefault();
+    };
+
     window.addEventListener("scroll", onScroll, { passive: true });
     window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("wheel", cancelWhileLocked, { passive: false });
+    window.addEventListener("touchmove", cancelWhileLocked, { passive: false });
     document.addEventListener("visibilitychange", onVisibility);
     syncNow();
     frame = window.requestAnimationFrame(tick);
@@ -197,6 +227,8 @@ export function useScrollDriver({ onFrame, onSectionChange, isLocked }: Options)
       window.cancelAnimationFrame(frame);
       window.removeEventListener("scroll", onScroll);
       window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("wheel", cancelWhileLocked);
+      window.removeEventListener("touchmove", cancelWhileLocked);
       document.removeEventListener("visibilitychange", onVisibility);
     };
   }, []);

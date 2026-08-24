@@ -38,3 +38,21 @@ canvas {
     scroll-behavior: auto;
   }
 }
+
+/*
+ * The landing half of the reel→detail transition (components/ArrivalFade.tsx).
+ * Global because it renders on routes from both CSS worlds.
+ */
+.arrival-veil {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  background: #fff6e8;
+  pointer-events: none;
+  animation: arrival-fade .46s ease forwards;
+}
+
+@keyframes arrival-fade {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}

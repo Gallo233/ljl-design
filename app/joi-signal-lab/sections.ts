@@ -49,6 +49,15 @@ export type Section = {
  * About Me and Contact carry a position but no window, so they never yank a reader who is
  * partway through reading them.
  */
+/**
+ * The 8.6-screen map (gap-report §4 asked for 8–12). Positions carry the pacing:
+ * the hero flight + film entrance stretch across 0→2 automatically because both are
+ * calibrated to `screens / REEL_ANCHOR`; the reel then holds 2→~4.4 of interactive
+ * dwell, hands off across 4.4→5.2, and the closing sections read at leisure.
+ *
+ * Snap windows are the source ratios scaled to the doubled anchor (hand-tuned from
+ * shader.se's `mainPage.snapPoints`, not copied verbatim any more).
+ */
 export const SECTIONS: Section[] = [
   {
     id: "hero",
@@ -58,7 +67,7 @@ export const SECTIONS: Section[] = [
     position: 0,
     snap: {
       forward: { range: [-10000, 0.1], multiplier: 1 },
-      backward: { range: [-10000, 0.8], multiplier: 1 },
+      backward: { range: [-10000, 1.6], multiplier: 1 },
       keyboard: { toNext: 2000 },
     },
   },
@@ -67,15 +76,15 @@ export const SECTIONS: Section[] = [
     path: "/selected-work",
     label: "SELECTED WORK",
     title: "Selected Work",
-    position: 1,
+    position: 2,
     snap: {
-      forward: { range: [-0.9, 0.3], multiplier: 1 },
-      backward: { range: [-0.22, 0.6], multiplier: [3, 0.3] },
+      forward: { range: [-1.8, 0.6], multiplier: 1 },
+      backward: { range: [-0.44, 1.2], multiplier: [3, 0.3] },
       keyboard: { toPrevious: 2000, toNext: 3000 },
     },
   },
-  { id: "about-me", path: "/about-me", label: "ABOUT ME", title: "About Me", position: 3.4, snap: null },
-  { id: "contact", path: "/contact", label: "CONTACT", title: "Contact", position: 5, snap: null },
+  { id: "about-me", path: "/about-me", label: "ABOUT ME", title: "About Me", position: 5.2, snap: null },
+  { id: "contact", path: "/contact", label: "CONTACT", title: "Contact", position: 7.6, snap: null },
 ];
 
 /** Total scroll length in screens: the last section plus a screen to read it in. */
@@ -90,6 +99,12 @@ export const TOTAL_SCREENS = SECTIONS[SECTIONS.length - 1].position + 1;
  * already faded, film not yet arrived, nothing on screen.
  */
 export const REEL_ANCHOR = SECTIONS[1].position;
+
+if (process.env.NODE_ENV !== "production" && REEL_ANCHOR !== SECTIONS[1].position) {
+  // Belt-and-braces for future refactors: this equality has been broken once before,
+  // and the failure mode is a blank screen on the /selected-work deep link.
+  throw new Error("REEL_ANCHOR must equal SECTIONS[1].position — see AGENTS.md, scroll architecture");
+}
 
 export const clamp01 = (value: number) => Math.max(0, Math.min(1, value));
 

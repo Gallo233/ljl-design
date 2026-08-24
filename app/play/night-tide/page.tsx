@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { SHARE_CARD, canonicalPath } from "../../site";
+import { ArrivalFade } from "../../../components/ArrivalFade";
 import { GameHandheld } from "./GameHandheld";
 import styles from "./page.module.css";
 
@@ -38,8 +40,9 @@ export const metadata: Metadata = {
 export default function GameCenterPage() {
   return (
     <main className={styles.page}>
+      <ArrivalFade />
       <header className={styles.header}>
-        <a className={styles.back} href="/selected-work">← BACK TO REEL</a>
+        <Link className={styles.back} href="/selected-work">← BACK TO REEL</Link>
         <span className={styles.build}>4 CARTRIDGES / WEB</span>
         <div className={styles.heading}>
           <p className={styles.kicker}>03 / GAME CENTER</p>

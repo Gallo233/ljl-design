@@ -1478,10 +1478,46 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
   /** Which room object the reader picked — lights the matching interest chip. */
   const [pickedInterest, setPickedInterest] = useState<RoomObjectId | null>(null);
   const [computerReady, setComputerReady] = useState(false);
+  const [fontsReady, setFontsReady] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  /** True while the leave-transition veil covers the stage on the way to a detail page. */
+  const [leaving, setLeaving] = useState(false);
   const [particleForm, setParticleForm] = useState(0);
   const [activeSection, setActiveSection] = useState<SectionId>(initialSection);
   const activeIndex = modulo(step, projects.length);
-  const ready = filmReady && computerReady;
+  // The loader doubles as the reference's boot screen: it holds the page (scroll lock in
+  // the driver) until every system it fronts for is actually warm.
+  const ready = filmReady && computerReady && fontsReady;
+  const readyRef = useRef(ready);
+  readyRef.current = ready;
+  const loadedSystems = (filmReady ? 1 : 0) + (computerReady ? 1 : 0) + (fontsReady ? 1 : 0);
+
+  useEffect(() => {
+    let cancelled = false;
+    document.fonts.ready.then(() => { if (!cancelled) setFontsReady(true); });
+    // Fonts must never hold the machine hostage — a CDN stall boots us anyway.
+    const failsafe = window.setTimeout(() => { if (!cancelled) setFontsReady(true); }, 3200);
+    return () => { cancelled = true; window.clearTimeout(failsafe); };
+  }, []);
+
+  // The reference focuses its scroll container when the intro releases; focusing the
+  // stage means arrow keys work immediately without a click.
+  useEffect(() => {
+    if (ready) experienceRef.current?.focus({ preventScroll: true });
+  }, [ready]);
+
+  // Returning from a detail page: land back on the frame the reader left from.
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem("reel:return");
+      if (!raw) return;
+      sessionStorage.removeItem("reel:return");
+      const saved = JSON.parse(raw) as { step?: number };
+      if (typeof saved.step === "number") setStep(saved.step);
+    } catch {
+      // Malformed state is not worth a crash on the way home.
+    }
+  }, []);
 
   // Scroll-derived values live in refs and go straight to CSS variables. Nothing here re-renders
   // per frame — the reference keeps these in motion values for the same reason.
@@ -1517,13 +1553,16 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
       // The hero camera flight and the film entrance were tuned against a 0..1 range that ends
       // when the reel has arrived. Remap onto that range so their timing survives page growth.
       const entry = clamp01(screens / REEL_ANCHOR);
-      const filmReveal = smoothStep((entry - 0.66) / 0.22);
+      // With the anchor at 2 screens the crossfade occupies screens 1.0→1.7 — roughly
+      // three times yesterday's window — and still completes before the anchor, so the
+      // /selected-work deep link keeps landing on a fully arrived reel.
+      const filmReveal = smoothStep((entry - 0.5) / 0.35);
       const aboutStart = getSection("about-me").position;
-      const reelExit = smoothStep((screens - (aboutStart - 0.6)) / 0.6);
+      const reelExit = smoothStep((screens - (aboutStart - 0.8)) / 0.8);
 
       entryRef.current = entry;
       filmRevealRef.current = filmReveal;
-      filmActiveRef.current = filmReveal > 0.55 && screens < aboutStart - 0.3;
+      filmActiveRef.current = filmReveal > 0.55 && screens < aboutStart - 0.4;
 
       const style = experience.style;
       style.setProperty("--journey", (screens / TOTAL_SCREENS).toFixed(4));
@@ -1544,6 +1583,8 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
     onSectionChange: setActiveSection,
     // Don't snap out from under someone who is dragging the reel.
     isLocked: () => filmActiveRef.current && dragActiveRef.current,
+    // The boot screen holds the page still until every system is warm.
+    bootLocked: () => !readyRef.current,
   });
 
   // Keep the address bar in step with where the reader actually is, without adding history
@@ -1558,6 +1599,7 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
   return (
     <main
       ref={experienceRef}
+      tabIndex={-1}
       className={`${styles.experience} ${className}`}
       style={{
         // Scroll length comes from the section table, so adding a section extends the page.
@@ -1610,8 +1652,19 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
               // Frames whose destination is a section of this page scroll instead of
               // navigating — a route push would remount the lab and replay the boot.
               const section = SECTIONS.find((entry) => entry.path === href);
-              if (section) scrollToSection.current(section.id);
-              else router.push(href);
+              if (section) {
+                scrollToSection.current(section.id);
+                return;
+              }
+              if (leaving) return;
+              // Stepping out of the machine: remember the frame for the way back, veil
+              // the stage in the detail pages' own paper colour, then navigate under it.
+              try {
+                sessionStorage.setItem("reel:return", JSON.stringify({ step }));
+                sessionStorage.setItem("reel:arrive", "1");
+              } catch {}
+              setLeaving(true);
+              window.setTimeout(() => router.push(href), 300);
             }}
             onReady={() => setFilmReady(true)}
             onDragStateChange={(active: boolean) => { dragActiveRef.current = active; }}
@@ -1744,7 +1797,51 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
             <span>JOI9000</span>
             <i />
           </div>
+          <button
+            type="button"
+            className={styles.menu}
+            aria-expanded={menuOpen}
+            aria-label={menuOpen ? "关闭菜单" : "打开菜单"}
+            onClick={() => setMenuOpen((value) => !value)}
+          >
+            <i aria-hidden="true" />
+            <i aria-hidden="true" />
+            <i aria-hidden="true" />
+          </button>
         </header>
+
+        {menuOpen && (
+          <div
+            className={styles.menuSheet}
+            role="dialog"
+            aria-label="Sections"
+            onClick={(event) => {
+              if (event.target === event.currentTarget) setMenuOpen(false);
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") setMenuOpen(false);
+            }}
+          >
+            <nav>
+              {SECTIONS.map((section) => (
+                <a
+                  key={section.id}
+                  href={section.path}
+                  aria-current={activeSection === section.id ? "page" : undefined}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    setMenuOpen(false);
+                    scrollToSection.current(section.id);
+                  }}
+                >
+                  {section.label}
+                </a>
+              ))}
+              <a href="/lab">THE LAB</a>
+              <a href="/play/night-tide">GAME CENTER</a>
+            </nav>
+          </div>
+        )}
 
         <div className={styles.scanlines} aria-hidden="true" />
         <div className={styles.vignette} aria-hidden="true" />
@@ -1753,8 +1850,14 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
         <div className={`${styles.loader} ${ready ? styles.loaderReady : ""}`} role="status" aria-live="polite">
           <span>GALLO / JOI</span>
           <i />
-          <strong>BOOTING JOI9000</strong>
+          <strong>
+            BOOTING JOI9000
+            <em>{loadedSystems}/3 SYSTEMS</em>
+          </strong>
         </div>
+
+        {/* The way out: cream over everything, then the route swap happens under it. */}
+        <div className={`${styles.leaveVeil} ${leaving ? styles.leaveVeilActive : ""}`} aria-hidden="true" />
       </div>
     </main>
   );

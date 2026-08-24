@@ -32,6 +32,10 @@
 
 .experience,
 .experience * { box-sizing: border-box; }
+
+/* Focused programmatically when the boot releases (keyboard works immediately);
+   the ring would read as an error on a full-viewport stage. */
+.experience:focus { outline: none; }
 .experience a { color: inherit; text-decoration: none; }
 .experience button { color: inherit; font: inherit; }
 
@@ -635,8 +639,28 @@
   transition: opacity 760ms cubic-bezier(.16, 1, .3, 1), visibility 760ms;
 }
 .loader i { width: 11px; height: 11px; border-radius: 50%; background: var(--coral); animation: loadingPulse 620ms ease-in-out infinite alternate; }
-.loader strong { justify-self: end; font-weight: 500; }
+.loader strong { display: grid; gap: 4px; justify-self: end; justify-items: end; font-weight: 500; }
+.loader strong em { font-style: normal; font-size: 8px; letter-spacing: .2em; opacity: .55; }
 .loaderReady { opacity: 0; visibility: hidden; pointer-events: none; }
+
+/* The exit veil: the detail pages' paper colour, so the route swap hides under it. */
+.leaveVeil {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  background: #fff6e8;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity .3s ease, visibility 0s linear .3s;
+}
+
+.leaveVeilActive {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transition: opacity .3s ease;
+}
 
 .header {
   position: absolute;
@@ -676,6 +700,8 @@
   background: linear-gradient(90deg, #6994ba, #f2eee8 50%, var(--coral));
   box-shadow: 0 0 8px rgba(236, 101, 73, .4);
   transform-origin: 0 50%;
+  /* Written every frame by the scroll driver: the bar is the journey. */
+  transform: scaleX(var(--journey, 0));
 }
 
 .brand,
@@ -709,7 +735,9 @@
   padding: 10px;
   border: 0;
   background: transparent;
-  cursor: default;
+  cursor: pointer;
+  align-content: center;
+  justify-items: center;
 }
 .menu i {
   display: block;
@@ -717,6 +745,54 @@
   height: 2px;
   background: #f4eee7;
   box-shadow: -1px 0 var(--coral), 1px 0 #6b99c2;
+  transition: transform .25s ease, opacity .25s ease;
+}
+.menu[aria-expanded="true"] i:nth-child(1) { transform: translateY(6px) rotate(45deg); }
+.menu[aria-expanded="true"] i:nth-child(2) { opacity: 0; }
+.menu[aria-expanded="true"] i:nth-child(3) { transform: translateY(-6px) rotate(-45deg); }
+
+@media (min-width: 900px) {
+  /* Desktop reads the section nav; the hamburger is the small-screen door. */
+  .menu { display: none; }
+}
+
+.menuSheet {
+  position: absolute;
+  inset: 0;
+  z-index: 26;
+  display: grid;
+  place-items: center;
+  background: rgba(5, 7, 11, .82);
+  backdrop-filter: blur(10px);
+  pointer-events: auto;
+  animation: menuIn .28s ease both;
+}
+
+@keyframes menuIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.menuSheet nav {
+  display: grid;
+  gap: clamp(18px, 4svh, 30px);
+  text-align: center;
+  font-family: var(--font-signal-mono), monospace;
+  font-size: 13px;
+  letter-spacing: .22em;
+}
+
+.menuSheet a {
+  padding: 6px 10px;
+  opacity: .72;
+  transition: opacity .2s ease, color .2s ease;
+}
+
+.menuSheet a:hover,
+.menuSheet a:focus-visible,
+.menuSheet a[aria-current="page"] {
+  opacity: 1;
+  color: var(--coral);
 }
 
 .projectTitle {
@@ -920,7 +996,6 @@
 }
 
 @media (max-width: 760px) {
-  .experience { height: 280svh; }
   .stage { min-height: 480px; border-width: 2px; border-radius: 16px; }
   .header { height: 82px; padding-inline: 18px; }
   .brand { gap: 10px; font-size: 27px; }
