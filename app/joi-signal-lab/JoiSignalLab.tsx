@@ -40,11 +40,51 @@ const BORDER_X = 0.03;
 const BORDER_Y = 0.07;
 const ATLAS_FRAME_WIDTH = 1024;
 const ATLAS_FRAME_HEIGHT = 768;
-const reelVideoSources = [
-  { projectIndex: 0, src: "/reel/01-joi/showcase.mp4", poster: "/reel/01-joi/still.avif" },
-  { projectIndex: 1, src: "/reel/02-joi-mobile/showcase.mp4", poster: "/reel/02-joi-mobile/still.avif" },
+/**
+ * The reel's two moving frames, and the three ways they can be delivered.
+ *
+ * `src` is the desktop master. `mobileSrc` is the same footage at 960×540 — the Joi Mobile
+ * master is **2560×1440**, and decoding that every frame *and* uploading it as a WebGL
+ * texture is more than a phone GPU will do while a second WebGL context is also running.
+ * That is most of why the mobile reel both stalled and dropped frames.
+ *
+ * `sheets` is the last resort, and it exists because a re-encode does not help against the
+ * other mobile failure mode: several Chinese Android browsers (UC / Quark's T7 kernel,
+ * WeChat's X5) hoist `<video>` out of the page into a native player layer. The element keeps
+ * reporting a healthy `readyState` while the WebGL texture receives nothing — which is
+ * exactly how the frame rendered *black* instead of falling back. Sprite sheets are plain
+ * images, so no video policy can reach them.
+ */
+const reelMotionSources = [
+  {
+    projectIndex: 0,
+    src: "/reel/01-joi/showcase.mp4",
+    mobileSrc: "/reel/01-joi/showcase-mobile.mp4",
+    poster: "/reel/01-joi/still.avif",
+    sheets: { dir: "/reel/01-joi/sheets-mobile", count: 5 },
+  },
+  {
+    projectIndex: 1,
+    src: "/reel/02-joi-mobile/showcase.mp4",
+    mobileSrc: "/reel/02-joi-mobile/showcase-mobile.mp4",
+    poster: "/reel/02-joi-mobile/still.avif",
+    sheets: { dir: "/reel/02-joi-mobile/sheets-mobile", count: 5 },
+  },
 ] as const;
-const reelPosterSources = reelVideoSources.map(({ projectIndex, poster }) => ({ projectIndex, poster }));
+const reelPosterSources = reelMotionSources.map(({ projectIndex, poster }) => ({ projectIndex, poster }));
+
+/** Sheet geometry, fixed by how the sheets were baked (ffmpeg `fps=10,scale=480:270,tile=4x3`). */
+const SHEET_COLUMNS = 4;
+const SHEET_ROWS = 3;
+const SHEET_FRAME_WIDTH = 480;
+const SHEET_FRAME_HEIGHT = 270;
+const SHEET_FPS = 10;
+
+/**
+ * How long a mobile video gets to produce its first frame before the sheets take over.
+ * Long enough to cover a slow first segment, short enough that nobody watches a dead frame.
+ */
+const VIDEO_GIVE_UP_MS = 2600;
 const particleForms = [
   "FORM 00 / NEBULA",
   "FORM 01 / JOI",
@@ -56,23 +96,65 @@ function modulo(value: number, divisor: number) {
   return ((value % divisor) + divisor) % divisor;
 }
 
-type ReelVideoAsset = {
+/**
+ * One moving reel frame, however it happens to be delivered.
+ *
+ * `texture` is read fresh every frame rather than captured once, because the mobile path
+ * can swap the whole backend out from under it mid-playback (see `createReelMotion`).
+ */
+type ReelMotion = {
   projectIndex: number;
-  video: HTMLVideoElement;
   texture: any;
+  /** True only once real pixels exist. Never inferred from `readyState` — see below. */
   ready: boolean;
+  play: () => void;
+  pause: () => void;
+  restart: () => void;
+  /** Sheet playback advances here; the video backend ignores it. */
+  tick: (delta: number) => void;
+  dispose: () => void;
 };
 
-function createReelVideo(source: (typeof reelVideoSources)[number]): ReelVideoAsset {
+/**
+ * Video backend.
+ *
+ * Two things here are not decoration:
+ *
+ * - **The element is in the document.** These used to be created and never attached. Desktop
+ *   browsers decode a detached video into a texture anyway; Chrome on Android is stricter.
+ *   `display: none` and `visibility: hidden` put it back outside the layout tree, so it is
+ *   parked at 1px with a near-zero opacity: laid out, decoding, invisible.
+ * - **`ready` waits for a presented frame**, not `readyState >= 2`, which several mobile
+ *   browsers reach from metadata alone. Blending to a texture that has never received a
+ *   frame is what painted the frame black rather than leaving the drawn art up.
+ */
+function createVideoMotion(
+  source: (typeof reelMotionSources)[number],
+  mobile: boolean,
+  onFirstFrame?: () => void,
+): ReelMotion {
   const video = document.createElement("video");
-  video.src = source.src;
-  video.crossOrigin = "anonymous";
+  video.src = mobile ? source.mobileSrc : source.src;
   video.muted = true;
+  video.defaultMuted = true;
   video.loop = true;
   video.playsInline = true;
-  video.preload = "auto";
+  video.preload = mobile ? "metadata" : "auto";
   video.poster = source.poster;
+  video.tabIndex = -1;
   video.setAttribute("aria-hidden", "true");
+  // Older WebKit reads the attribute; the vendor pairs ask the Chinese Android kernels not
+  // to hoist playback into their native player, which is what silently empties the texture.
+  video.setAttribute("playsinline", "");
+  video.setAttribute("webkit-playsinline", "");
+  video.setAttribute("muted", "");
+  video.setAttribute("x5-video-player-type", "h5");
+  video.setAttribute("x5-video-player-fullscreen", "false");
+  video.setAttribute("x5-playsinline", "");
+  video.setAttribute("t7-video-player-type", "inline");
+  video.style.cssText =
+    "position:fixed;top:0;left:0;width:1px;height:1px;opacity:0.01;pointer-events:none;z-index:-1;";
+  document.body.appendChild(video);
   video.load();
 
   const texture = new THREE.VideoTexture(video);
@@ -81,7 +163,174 @@ function createReelVideo(source: (typeof reelVideoSources)[number]): ReelVideoAs
   texture.minFilter = THREE.LinearFilter;
   texture.magFilter = THREE.LinearFilter;
 
-  return { projectIndex: source.projectIndex, video, texture, ready: false };
+  const motion: ReelMotion = {
+    projectIndex: source.projectIndex,
+    texture,
+    ready: false,
+    play: () => {
+      if (!video.paused) return;
+      void video.play().catch(() => {
+        // Autoplay can be refused. The drawn art stays up, and on mobile the sheet
+        // backend takes over once the give-up window passes.
+      });
+    },
+    pause: () => video.pause(),
+    restart: () => { video.currentTime = 0; },
+    tick: () => {},
+    dispose: () => {},
+  };
+
+  const markReady = () => {
+    if (motion.ready) return;
+    motion.ready = true;
+    onFirstFrame?.();
+  };
+
+  // `requestVideoFrameCallback` fires on a *presented* frame, which is the actual question.
+  // Where it is missing, `timeupdate` past zero is the closest honest substitute.
+  const anyVideo = video as any;
+  let frameHandle = 0;
+  const onProgress = () => {
+    if (video.readyState >= 2 && video.currentTime > 0) markReady();
+  };
+  if (typeof anyVideo.requestVideoFrameCallback === "function") {
+    frameHandle = anyVideo.requestVideoFrameCallback(markReady);
+  } else {
+    video.addEventListener("timeupdate", onProgress);
+    video.addEventListener("loadeddata", onProgress);
+  }
+
+  motion.dispose = () => {
+    if (frameHandle) anyVideo.cancelVideoFrameCallback?.(frameHandle);
+    video.removeEventListener("timeupdate", onProgress);
+    video.removeEventListener("loadeddata", onProgress);
+    video.pause();
+    video.removeAttribute("src");
+    video.load();
+    video.remove();
+    texture.dispose();
+  };
+
+  return motion;
+}
+
+/**
+ * Sprite-sheet backend — the same footage as plain images.
+ *
+ * The GPU only ever sees one 480×270 canvas: each tick blits the current cell out of the
+ * decoded sheet rather than uploading the 1920×810 sheet itself. Sheets load in order and
+ * playback starts as soon as the first one decodes, so this is usable before it is complete.
+ */
+function createSheetMotion(source: (typeof reelMotionSources)[number]): ReelMotion {
+  const canvas = document.createElement("canvas");
+  canvas.width = SHEET_FRAME_WIDTH;
+  canvas.height = SHEET_FRAME_HEIGHT;
+  const context = canvas.getContext("2d");
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.generateMipmaps = false;
+  texture.minFilter = THREE.LinearFilter;
+  texture.magFilter = THREE.LinearFilter;
+
+  const perSheet = SHEET_COLUMNS * SHEET_ROWS;
+  const sheets: Array<HTMLImageElement | null> = new Array(source.sheets.count).fill(null);
+  let loadedSheets = 0;
+  let elapsed = 0;
+  let playing = false;
+
+  const motion: ReelMotion = {
+    projectIndex: source.projectIndex,
+    texture,
+    ready: false,
+    play: () => { playing = true; },
+    pause: () => { playing = false; },
+    restart: () => { elapsed = 0; },
+    tick: (delta: number) => {
+      if (!playing || !context || loadedSheets === 0) return;
+      elapsed += delta;
+      const total = loadedSheets * perSheet;
+      const frame = Math.floor(elapsed * SHEET_FPS) % total;
+      const sheet = sheets[Math.floor(frame / perSheet)];
+      if (!sheet) return;
+      const cell = frame % perSheet;
+      context.drawImage(
+        sheet,
+        (cell % SHEET_COLUMNS) * SHEET_FRAME_WIDTH,
+        Math.floor(cell / SHEET_COLUMNS) * SHEET_FRAME_HEIGHT,
+        SHEET_FRAME_WIDTH,
+        SHEET_FRAME_HEIGHT,
+        0,
+        0,
+        SHEET_FRAME_WIDTH,
+        SHEET_FRAME_HEIGHT,
+      );
+      texture.needsUpdate = true;
+    },
+    dispose: () => {
+      sheets.forEach((image) => { if (image) image.src = ""; });
+      texture.dispose();
+    },
+  };
+
+  for (let index = 0; index < source.sheets.count; index += 1) {
+    const image = new Image();
+    image.decoding = "async";
+    image.addEventListener("load", () => {
+      sheets[index] = image;
+      // Sheets are only playable as a contiguous run from the start, so count the prefix.
+      while (sheets[loadedSheets]) loadedSheets += 1;
+      if (loadedSheets > 0) motion.ready = true;
+    }, { once: true });
+    image.src = `${source.sheets.dir}/sheet-${index + 1}.webp`;
+  }
+
+  return motion;
+}
+
+/**
+ * A reel frame that repairs itself.
+ *
+ * Desktop gets the video master and nothing else. Mobile gets the small re-encode, and if no
+ * frame has been presented `VIDEO_GIVE_UP_MS` after playback was requested — the signature of
+ * a browser that has taken the video somewhere we cannot see — the video is torn down and the
+ * sheets take its place for the rest of the visit.
+ */
+function createReelMotion(source: (typeof reelMotionSources)[number], mobile: boolean): ReelMotion {
+  if (!mobile) return createVideoMotion(source, false);
+
+  let backend = createVideoMotion(source, true, () => { window.clearTimeout(giveUpTimer); });
+  let giveUpTimer = 0;
+  let playRequested = false;
+  let swapped = false;
+
+  const swapToSheets = () => {
+    if (swapped || backend.ready) return;
+    swapped = true;
+    backend.dispose();
+    backend = createSheetMotion(source);
+    if (playRequested) backend.play();
+  };
+
+  return {
+    projectIndex: source.projectIndex,
+    get texture() { return backend.texture; },
+    get ready() { return backend.ready; },
+    play: () => {
+      playRequested = true;
+      backend.play();
+      if (!swapped && !backend.ready && !giveUpTimer) {
+        giveUpTimer = window.setTimeout(swapToSheets, VIDEO_GIVE_UP_MS);
+      }
+    },
+    pause: () => { playRequested = false; backend.pause(); },
+    restart: () => backend.restart(),
+    tick: (delta: number) => backend.tick(delta),
+    dispose: () => {
+      window.clearTimeout(giveUpTimer);
+      backend.dispose();
+    },
+  } as ReelMotion;
 }
 
 function ProjectTitleContent({ project }: { project: ProjectSignal }) {
@@ -552,7 +801,15 @@ function FilmCanvas({
     const canvas = canvasRef.current;
     if (!canvas) return;
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true, powerPreference: "high-performance" });
+    const isMobile = window.matchMedia("(max-width: 760px)").matches;
+    // MSAA over a full-screen canvas costs more on a phone than the softer edges are worth,
+    // especially with the hero's second WebGL context alive on the same GPU.
+    const renderer = new THREE.WebGLRenderer({
+      canvas,
+      alpha: true,
+      antialias: !isMobile,
+      powerPreference: "high-performance",
+    });
     renderer.setClearColor(0x000000, 0);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
 
@@ -590,14 +847,8 @@ function FilmCanvas({
       else image.addEventListener("load", draw, { once: true });
       posterListeners.push({ image, draw });
     });
-    const reelVideoAssets = reelVideoSources.map(createReelVideo);
-    let activeVideoProject = -1;
-    const playVideo = (asset: ReelVideoAsset) => {
-      if (!asset.video.paused) return;
-      void asset.video.play().catch(() => {
-        // Autoplay can be blocked until the visitor interacts; the first frame remains a valid fallback.
-      });
-    };
+    const reelMotions = reelMotionSources.map((source) => createReelMotion(source, isMobile));
+    let activeMotionProject = -1;
 
     const nightTideTarget = new THREE.WebGLRenderTarget(768, 576, {
       minFilter: THREE.LinearFilter,
@@ -675,8 +926,8 @@ function FilmCanvas({
 
     const uniforms = {
       uMap: { value: texture },
-      uJoiVideo: { value: reelVideoAssets[0]?.texture ?? texture },
-      uJoiMapVideo: { value: reelVideoAssets[1]?.texture ?? texture },
+      uJoiVideo: { value: reelMotions[0]?.texture ?? texture },
+      uJoiMapVideo: { value: reelMotions[1]?.texture ?? texture },
       uJoiVideoReady: { value: 0 },
       uJoiMapVideoReady: { value: 0 },
       uNightTideMap: { value: nightTideTarget.texture },
@@ -925,32 +1176,50 @@ function FilmCanvas({
 
     const render = () => {
       const delta = Math.min(clock.getDelta(), 0.05);
+
+      // Off-screen work is still work. The reel sits at reveal 0 for the whole hero section,
+      // and a hidden tab suspends nothing by itself. The first pass always runs: `onReady`
+      // fires from inside it and the boot loader waits on that.
+      if (readySent && (document.hidden || revealRef.current <= 0.001)) {
+        reelMotions.forEach((motion) => motion.pause());
+        frame = window.requestAnimationFrame(render);
+        return;
+      }
+
       if (!drag.active && observedStep !== stepRef.current) {
         observedStep = stepRef.current;
         targetReelOffset = observedStep * FRAME_WIDTH;
       }
 
-      reelVideoAssets.forEach((asset) => {
-        if (!asset.ready && asset.video.readyState >= 2) asset.ready = true;
-      });
-      uniforms.uJoiVideoReady.value = reelVideoAssets[0]?.ready ? 1 : 0;
-      uniforms.uJoiMapVideoReady.value = reelVideoAssets[1]?.ready ? 1 : 0;
+      // The texture is re-read every frame because the mobile backend can swap from video
+      // to sprite sheets mid-playback; a reference captured at setup would go stale.
+      const joiMotion = reelMotions[0];
+      const mobileMotion = reelMotions[1];
+      if (joiMotion) {
+        uniforms.uJoiVideo.value = joiMotion.texture;
+        uniforms.uJoiVideoReady.value = joiMotion.ready ? 1 : 0;
+      }
+      if (mobileMotion) {
+        uniforms.uJoiMapVideo.value = mobileMotion.texture;
+        uniforms.uJoiMapVideoReady.value = mobileMotion.ready ? 1 : 0;
+      }
 
       const activeProject = modulo(stepRef.current, projects.length);
-      if (activeProject !== activeVideoProject) {
-        const previousVideo = reelVideoAssets.find((asset) => asset.projectIndex === activeVideoProject);
-        previousVideo?.video.pause();
-        const nextVideo = reelVideoAssets.find((asset) => asset.projectIndex === activeProject);
-        if (nextVideo) {
-          nextVideo.video.currentTime = 0;
-          if (revealRef.current > 0.4 && !reducedMotion) playVideo(nextVideo);
+      const wantsMotion = revealRef.current > 0.4 && !reducedMotion;
+      if (activeProject !== activeMotionProject) {
+        reelMotions.find((motion) => motion.projectIndex === activeMotionProject)?.pause();
+        const next = reelMotions.find((motion) => motion.projectIndex === activeProject);
+        if (next) {
+          next.restart();
+          if (wantsMotion) next.play();
         }
-        activeVideoProject = activeProject;
+        activeMotionProject = activeProject;
       }
-      const activeVideo = reelVideoAssets.find((asset) => asset.projectIndex === activeVideoProject);
-      if (activeVideo) {
-        if (revealRef.current > 0.4 && !reducedMotion) playVideo(activeVideo);
-        else activeVideo.video.pause();
+      const activeMotion = reelMotions.find((motion) => motion.projectIndex === activeMotionProject);
+      if (activeMotion) {
+        if (wantsMotion) activeMotion.play();
+        else activeMotion.pause();
+        activeMotion.tick(delta);
       }
 
       const revealAmount = revealRef.current * revealRef.current * (3 - 2 * revealRef.current);
@@ -976,14 +1245,24 @@ function FilmCanvas({
       uniforms.uFlex.value = flex;
       uniforms.uTime.value += delta * 60;
       uniforms.uPointer.value.copy(pointer);
-      nightTideModel.group.rotation.y = 0.22 + Math.sin(uniforms.uTime.value * 0.005) * 0.28;
-      nightTideModel.group.rotation.z = -0.06 + Math.sin(uniforms.uTime.value * 0.003) * 0.045;
-      nightTideModel.group.position.y = Math.sin(uniforms.uTime.value * 0.006) * 0.16;
-      nightTideCamera.lookAt(0, nightTideModel.group.position.y, 0);
-      renderer.setRenderTarget(nightTideTarget);
-      renderer.clear();
-      renderer.render(nightTideScene, nightTideCamera);
-      renderer.setRenderTarget(null);
+      // The Night Tide handheld is a whole second scene drawn into a 768×576 target. It only
+      // feeds frame 03, so rendering it while the reader is three frames away was paying for
+      // an offscreen pass sixty times a second to light a texture nobody was sampling.
+      const nightTideDistance = Math.min(
+        modulo(activeProject - 2, projects.length),
+        modulo(2 - activeProject, projects.length),
+      );
+      if (nightTideDistance <= 1) {
+        nightTideModel.group.rotation.y = 0.22 + Math.sin(uniforms.uTime.value * 0.005) * 0.28;
+        nightTideModel.group.rotation.z = -0.06 + Math.sin(uniforms.uTime.value * 0.003) * 0.045;
+        nightTideModel.group.position.y = Math.sin(uniforms.uTime.value * 0.006) * 0.16;
+        nightTideCamera.lookAt(0, nightTideModel.group.position.y, 0);
+        renderer.setRenderTarget(nightTideTarget);
+        renderer.clear();
+        renderer.render(nightTideScene, nightTideCamera);
+        renderer.setRenderTarget(null);
+      }
+
       renderer.render(scene, camera);
       if (!readySent) { readySent = true; onReadyRef.current(); }
       frame = window.requestAnimationFrame(render);
@@ -1002,12 +1281,7 @@ function FilmCanvas({
       window.clearTimeout(wheel.resetTimer);
       geometry.dispose();
       material.dispose();
-      reelVideoAssets.forEach(({ video, texture }) => {
-        video.pause();
-        video.removeAttribute("src");
-        video.load();
-        texture.dispose();
-      });
+      reelMotions.forEach((motion) => motion.dispose());
       posterListeners.forEach(({ image, draw }) => image.removeEventListener("load", draw));
       texture.dispose();
       studioTexture.dispose();

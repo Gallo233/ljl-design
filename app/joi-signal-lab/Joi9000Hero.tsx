@@ -871,6 +871,19 @@ export function Joi9000Hero({ progressRef, onFormChange, onReady }: Joi9000HeroP
     resize();
     onFormChangeRef.current(0);
 
+    /**
+     * The CRT layer's opacity is `max(0, 1 - filmReveal * 1.35)` (see JoiSignalLab), which
+     * reaches zero a little past `progress` 0.83. Past that this scene — a GLB, thousands of
+     * particles, shadow-casting lights — was still being drawn sixty times a second behind a
+     * fully transparent layer, on the same GPU the reel was competing for. That is most of
+     * the frame-rate drop while scrolling the reel on a phone.
+     *
+     * The loop keeps ticking so nothing has to be rebuilt on the way back up; only the draw
+     * call is skipped. As with the reel, the first pass always runs because `onReady` — which
+     * dismisses the boot loader — fires from inside it.
+     */
+    const HERO_HIDDEN_AT = 0.86;
+
     const render = () => {
       const delta = Math.min(clock.getDelta(), 0.05);
       const time = particleMaterial.uniforms.uTime.value + delta;
@@ -919,7 +932,9 @@ export function Joi9000Hero({ progressRef, onFormChange, onReady }: Joi9000HeroP
       lookAt.lerpVectors(initialLookAt, screenWorldPosition, cameraProgress);
       camera.lookAt(lookAt);
       dust.rotation.z += reducedMotion ? 0 : delta * 0.006;
-      renderer.render(scene, camera);
+      if (!readySent || (!document.hidden && progressRef.current < HERO_HIDDEN_AT)) {
+        renderer.render(scene, camera);
+      }
       if (!readySent && modelLoaded) {
         readySent = true;
         onReadyRef.current();
