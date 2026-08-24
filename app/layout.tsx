@@ -10,7 +10,7 @@ export const metadata: Metadata = {
     template: "%s — Gallo",
   },
   description:
-    "Gallo designs how AI enters human life through Joi, Joi Map, and product experiments at the boundary of technology and people.",
+    "Gallo designs how AI enters human life through Joi, Joi Mobile, and product experiments at the boundary of technology and people.",
   metadataBase: new URL("https://gallo.design"),
   openGraph: {
     title: "Gallo — AI Product & Product Design",

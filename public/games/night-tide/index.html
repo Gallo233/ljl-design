@@ -111,7 +111,7 @@ body {
 
 		<script>
 // The portfolio shell owns the handheld controls. Forward those controls into
-// Godot's focused canvas so the large device can drive the game across origins.
+// Godot's focused canvas so the physical buttons and keyboard drive the game.
 window.addEventListener('message', (event) => {
 		const data = event.data;
 		if (!data || data.type !== 'joi-key' || (data.action !== 'keydown' && data.action !== 'keyup')) return;
@@ -126,11 +126,31 @@ window.addEventListener('message', (event) => {
 			view: window,
 		}));
 });
+
+// Once Godot focuses the canvas, real keyboard input stays inside this iframe.
+// Mirror it to the portfolio shell so its physical controls depress in sync.
+window.addEventListener('keydown', (event) => {
+		window.parent.postMessage({
+			type: 'joi-game-key',
+			action: 'keydown',
+			key: event.key,
+			code: event.code,
+		}, '*');
+}, true);
+
+window.addEventListener('keyup', (event) => {
+		window.parent.postMessage({
+			type: 'joi-game-key',
+			action: 'keyup',
+			key: event.key,
+			code: event.code,
+		}, '*');
+}, true);
 		</script>
 
 		<script src="index.js"></script>
 		<script>
-const GODOT_CONFIG = {"args":[],"canvasResizePolicy":2,"emscriptenPoolSize":8,"ensureCrossOriginIsolationHeaders":false,"executable":"index","experimentalVK":false,"fileSizes":{"index.pck":32740536,"index.wasm":39513091},"focusCanvas":true,"gdextensionLibs":[],"godotPoolSize":4};
+const GODOT_CONFIG = {"args":[],"canvasResizePolicy":2,"emscriptenPoolSize":8,"ensureCrossOriginIsolationHeaders":false,"executable":"index","experimentalVK":false,"fileSizes":{"index.pck":33186428,"index.wasm":39513091},"focusCanvas":true,"gdextensionLibs":[],"godotPoolSize":4};
 const GODOT_THREADS_ENABLED = false;
 const engine = new Engine(GODOT_CONFIG);
 

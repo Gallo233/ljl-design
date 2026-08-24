@@ -3,6 +3,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
 import * as THREE from "three";
+import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
 import { Joi9000Hero } from "./Joi9000Hero";
 import {
   REEL_ANCHOR,
@@ -25,8 +26,8 @@ type JoiSignalLabProps = {
 
 const projects = [
   { index: "01", title: "Joi Presence", subtitle: "Multimodal AI Companion", href: "/work/joi", palette: ["#07121d", "#f2eee7", "#ea6448"] },
-  { index: "02", title: "Joi Map", subtitle: "World-facing AI Guide", href: "/work/joi-map", palette: ["#b8c8cf", "#07121d", "#ea6448"] },
-  { index: "03", title: "Zero Hour: Night Tide", subtitle: "Playable Godot Demo", href: "/play/night-tide", palette: ["#071a2b", "#d9edf2", "#2f9ed0"] },
+  { index: "02", title: "Joi Mobile", subtitle: "Native Character Companion", href: "/work/joi-mobile", palette: ["#d8d6ef", "#17152c", "#6558f5"] },
+  { index: "03", title: "Game Center", subtitle: "Night Tide · Playable Godot Demo", href: "/play/night-tide", palette: ["#071a2b", "#d9edf2", "#2f9ed0"] },
   { index: "04", title: "Action Ledger", subtitle: "Human-readable Autonomy", href: "/work/joi", palette: ["#0b2236", "#dce9ef", "#7caed0"] },
   { index: "05", title: "Voice Field", subtitle: "Character & Expression", href: "/work/joi", palette: ["#43283f", "#f1dfda", "#ee795c"] },
   { index: "06", title: "Gallo / Joi", subtitle: "One Identity, Many Surfaces", href: "/", palette: ["#e9e3d8", "#111214", "#e55f43"] },
@@ -40,9 +41,10 @@ const BORDER_Y = 0.07;
 const ATLAS_FRAME_WIDTH = 1024;
 const ATLAS_FRAME_HEIGHT = 768;
 const reelVideoSources = [
-  { projectIndex: 0, src: "/reel/01-joi/showcase.mp4" },
-  { projectIndex: 1, src: "/reel/02-joi-map/showcase.mp4" },
+  { projectIndex: 0, src: "/reel/01-joi/showcase.mp4", poster: "/reel/01-joi/still.avif" },
+  { projectIndex: 1, src: "/reel/02-joi-mobile/showcase.mp4", poster: "/reel/02-joi-mobile/still.avif" },
 ] as const;
+const reelPosterSources = reelVideoSources.map(({ projectIndex, poster }) => ({ projectIndex, poster }));
 const particleForms = [
   "FORM 00 / NEBULA",
   "FORM 01 / JOI",
@@ -69,6 +71,7 @@ function createReelVideo(source: (typeof reelVideoSources)[number]): ReelVideoAs
   video.loop = true;
   video.playsInline = true;
   video.preload = "auto";
+  video.poster = source.poster;
   video.setAttribute("aria-hidden", "true");
   video.load();
 
@@ -331,7 +334,24 @@ function drawProjectArt(context: CanvasRenderingContext2D, projectIndex: number,
   context.fillText(project.subtitle.toUpperCase(), x + width - 28, y + height - 25);
 }
 
-function buildAtlas() {
+function drawCoverImage(
+  context: CanvasRenderingContext2D,
+  image: HTMLImageElement,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+) {
+  if (!image.naturalWidth || !image.naturalHeight) return;
+  const scale = Math.max(width / image.naturalWidth, height / image.naturalHeight);
+  const sourceWidth = width / scale;
+  const sourceHeight = height / scale;
+  const sourceX = (image.naturalWidth - sourceWidth) / 2;
+  const sourceY = (image.naturalHeight - sourceHeight) / 2;
+  context.drawImage(image, sourceX, sourceY, sourceWidth, sourceHeight, x, y, width, height);
+}
+
+function buildAtlas(posters: Array<HTMLImageElement | null>) {
   const canvas = document.createElement("canvas");
   canvas.width = ATLAS_FRAME_WIDTH * projects.length;
   canvas.height = ATLAS_FRAME_HEIGHT;
@@ -346,6 +366,10 @@ function buildAtlas() {
       ATLAS_FRAME_WIDTH,
       ATLAS_FRAME_HEIGHT,
     );
+    const poster = posters.find((image, posterIndex) => reelPosterSources[posterIndex]?.projectIndex === index && image?.complete);
+    if (poster) {
+      drawCoverImage(context, poster, index * ATLAS_FRAME_WIDTH, 0, ATLAS_FRAME_WIDTH, ATLAS_FRAME_HEIGHT);
+    }
   });
   return canvas;
 }
@@ -366,90 +390,130 @@ function buildHandheldModel() {
     return item;
   };
 
-  const bodyMaterial = new THREE.MeshStandardMaterial({ color: 0x1b2a3b, roughness: 0.52, metalness: 0.28 });
-  const faceMaterial = new THREE.MeshStandardMaterial({ color: 0x263b50, roughness: 0.44, metalness: 0.2 });
-  const bezelMaterial = new THREE.MeshStandardMaterial({ color: 0x050c14, roughness: 0.82, metalness: 0.08 });
-  const dpadMaterial = new THREE.MeshStandardMaterial({ color: 0x0e1825, roughness: 0.64, metalness: 0.24 });
-  const buttonMaterial = new THREE.MeshStandardMaterial({ color: 0x2f9ed0, emissive: 0x0b354e, emissiveIntensity: 0.62, roughness: 0.35, metalness: 0.26 });
-  const buttonAltMaterial = new THREE.MeshStandardMaterial({ color: 0xea6448, emissive: 0x4a160e, emissiveIntensity: 0.38, roughness: 0.38, metalness: 0.24 });
+  const rounded = (width: number, height: number, depth: number, radius: number) => (
+    new RoundedBoxGeometry(width, height, depth, 5, radius)
+  );
+  const bodyMaterial = new THREE.MeshPhysicalMaterial({
+    color: 0x171c24,
+    roughness: 0.34,
+    metalness: 0.66,
+    clearcoat: 0.38,
+    clearcoatRoughness: 0.34,
+  });
+  const edgeMaterial = new THREE.MeshPhysicalMaterial({
+    color: 0x424b58,
+    roughness: 0.28,
+    metalness: 0.82,
+    clearcoat: 0.42,
+  });
+  const faceMaterial = new THREE.MeshStandardMaterial({ color: 0x0e131a, roughness: 0.54, metalness: 0.44 });
+  const blueControllerMaterial = new THREE.MeshPhysicalMaterial({
+    color: 0x00bfe8,
+    roughness: 0.3,
+    metalness: 0.2,
+    clearcoat: 0.68,
+    clearcoatRoughness: 0.2,
+  });
+  const redControllerMaterial = new THREE.MeshPhysicalMaterial({
+    color: 0xff4058,
+    roughness: 0.3,
+    metalness: 0.18,
+    clearcoat: 0.7,
+    clearcoatRoughness: 0.18,
+  });
+  const blueFaceMaterial = new THREE.MeshStandardMaterial({ color: 0x049fc1, roughness: 0.48, metalness: 0.18 });
+  const redFaceMaterial = new THREE.MeshStandardMaterial({ color: 0xd92e45, roughness: 0.48, metalness: 0.18 });
+  const bezelMaterial = new THREE.MeshStandardMaterial({ color: 0x030609, roughness: 0.4, metalness: 0.45 });
+  const controlMaterial = new THREE.MeshPhysicalMaterial({ color: 0x11151b, roughness: 0.5, metalness: 0.52, clearcoat: 0.18 });
+  const controlTopMaterial = new THREE.MeshStandardMaterial({ color: 0x252d37, roughness: 0.6, metalness: 0.34 });
+  const darkInsetMaterial = new THREE.MeshStandardMaterial({ color: 0x05070a, roughness: 0.9, metalness: 0.08 });
+  const cyanMaterial = new THREE.MeshStandardMaterial({ color: 0x7ce9ff, emissive: 0x1f99ba, emissiveIntensity: 1.8, roughness: 0.24 });
+  const amberMaterial = new THREE.MeshStandardMaterial({ color: 0xffa15f, emissive: 0x8c2b0e, emissiveIntensity: 1.45, roughness: 0.3 });
 
-  mesh(new THREE.BoxGeometry(5.9, 2.8, 0.56), bodyMaterial, "body", [0, 0, 0]);
-  mesh(new THREE.BoxGeometry(5.56, 2.46, 0.15), faceMaterial, "face-plate", [0, 0.02, 0.36]);
-  mesh(new THREE.BoxGeometry(3.72, 1.54, 0.14), bezelMaterial, "screen-bezel", [-0.38, 0.46, 0.48]);
+  mesh(rounded(4.86, 3.18, 0.66, 0.2), bodyMaterial, "console-core", [0, 0, 0]);
+  mesh(rounded(4.62, 2.96, 0.16, 0.16), faceMaterial, "console-face", [0, 0, 0.41]);
+  mesh(rounded(1.22, 3.22, 0.68, 0.3), blueControllerMaterial, "left-controller", [-3.04, 0, 0.01]);
+  mesh(rounded(1.22, 3.22, 0.68, 0.3), redControllerMaterial, "right-controller", [3.04, 0, 0.01]);
+  mesh(rounded(1.06, 3.02, 0.15, 0.25), blueFaceMaterial, "left-controller-face", [-3.04, 0, 0.42]);
+  mesh(rounded(1.06, 3.02, 0.15, 0.25), redFaceMaterial, "right-controller-face", [3.04, 0, 0.42]);
+  mesh(rounded(0.12, 2.86, 0.72, 0.05), edgeMaterial, "left-rail", [-2.42, 0, 0.01]);
+  mesh(rounded(0.12, 2.86, 0.72, 0.05), edgeMaterial, "right-rail", [2.42, 0, 0.01]);
+  mesh(rounded(4.36, 2.58, 0.18, 0.18), bezelMaterial, "screen-bezel", [0, 0.08, 0.53]);
+  mesh(rounded(4.12, 2.34, 0.08, 0.12), darkInsetMaterial, "screen-inset", [0, 0.08, 0.62]);
 
-  const screenCanvas = document.createElement("canvas");
-  screenCanvas.width = 640;
-  screenCanvas.height = 360;
-  const screenContext = screenCanvas.getContext("2d");
-  if (screenContext) {
-    const gradient = screenContext.createLinearGradient(0, 0, 0, screenCanvas.height);
-    gradient.addColorStop(0, "#071c2e");
-    gradient.addColorStop(1, "#020810");
-    screenContext.fillStyle = gradient;
-    screenContext.fillRect(0, 0, screenCanvas.width, screenCanvas.height);
-    screenContext.fillStyle = "#2f9ed0";
-    for (let index = 0; index < 32; index += 1) {
-      screenContext.fillRect((index * 83) % 620, 38 + ((index * 47) % 280), 2, 2);
-    }
-    screenContext.strokeStyle = "rgba(47, 158, 208, 0.35)";
-    screenContext.lineWidth = 3;
-    screenContext.strokeRect(22, 22, 596, 316);
-    screenContext.fillStyle = "#d9edf2";
-    screenContext.font = "600 32px ui-monospace, monospace";
-    screenContext.fillText("ZERO HOUR", 38, 68);
-    screenContext.fillStyle = "#2f9ed0";
-    screenContext.font = "500 17px ui-monospace, monospace";
-    screenContext.fillText("NIGHT TIDE  /  READY", 40, 96);
-    screenContext.strokeStyle = "#ea6448";
-    screenContext.lineWidth = 7;
-    screenContext.beginPath();
-    screenContext.moveTo(82, 264);
-    screenContext.lineTo(210, 192);
-    screenContext.lineTo(330, 248);
-    screenContext.lineTo(502, 140);
-    screenContext.stroke();
-    screenContext.fillStyle = "#d9edf2";
-    screenContext.font = "500 15px ui-monospace, monospace";
-    screenContext.fillText("PRESS START", 40, 316);
-  }
-  const screenTexture = new THREE.CanvasTexture(screenCanvas);
-  screenTexture.colorSpace = THREE.SRGBColorSpace;
-  screenTexture.generateMipmaps = false;
-  screenTexture.minFilter = THREE.LinearFilter;
-  screenTexture.magFilter = THREE.LinearFilter;
-  materials.push(screenTexture);
-  mesh(new THREE.PlaneGeometry(3.24, 1.12), new THREE.MeshBasicMaterial({ map: screenTexture }), "screen", [-0.38, 0.46, 0.57]);
+  const screenMaterial = new THREE.MeshBasicMaterial({ color: 0x000102 });
+  mesh(new THREE.PlaneGeometry(4.02, 2.26), screenMaterial, "screen", [0, 0.08, 0.67]);
+  const glassMaterial = new THREE.MeshPhysicalMaterial({
+    color: 0x0b141a,
+    transparent: true,
+    opacity: 0.035,
+    roughness: 0.08,
+    metalness: 0,
+    transmission: 0,
+    clearcoat: 1,
+    clearcoatRoughness: 0.08,
+  });
+  mesh(new THREE.PlaneGeometry(4.04, 2.28), glassMaterial, "screen-glass", [0, 0.08, 0.685]);
 
-  const dpadHorizontal = mesh(new THREE.BoxGeometry(1.05, 0.31, 0.2), dpadMaterial, "dpad-horizontal", [-2.0, 0.23, 0.57]);
-  const dpadVertical = mesh(new THREE.BoxGeometry(0.31, 1.05, 0.2), dpadMaterial, "dpad-vertical", [-2.0, 0.23, 0.58]);
+  const leftShoulder = mesh(rounded(0.98, 0.26, 0.72, 0.12), controlMaterial, "left-shoulder", [-3.04, 1.63, -0.02]);
+  const rightShoulder = mesh(rounded(0.98, 0.26, 0.72, 0.12), controlMaterial, "right-shoulder", [3.04, 1.63, -0.02]);
+  leftShoulder.rotation.z = -0.018;
+  rightShoulder.rotation.z = 0.018;
+
+  const leftStickBase = mesh(new THREE.CylinderGeometry(0.35, 0.38, 0.17, 36), darkInsetMaterial, "left-stick-base", [-3.04, 0.72, 0.63]);
+  leftStickBase.rotation.x = Math.PI / 2;
+  const leftStick = mesh(new THREE.CylinderGeometry(0.26, 0.29, 0.2, 36), controlTopMaterial, "left-stick", [-3.04, 0.72, 0.76]);
+  leftStick.rotation.x = Math.PI / 2;
+  const rightStickBase = mesh(new THREE.CylinderGeometry(0.35, 0.38, 0.17, 36), darkInsetMaterial, "right-stick-base", [3.04, -0.72, 0.63]);
+  rightStickBase.rotation.x = Math.PI / 2;
+  const rightStick = mesh(new THREE.CylinderGeometry(0.26, 0.29, 0.2, 36), controlTopMaterial, "right-stick", [3.04, -0.72, 0.76]);
+  rightStick.rotation.x = Math.PI / 2;
+
+  const dpadHorizontal = mesh(rounded(0.86, 0.29, 0.2, 0.09), controlMaterial, "dpad-horizontal", [-3.04, -0.58, 0.68]);
+  const dpadVertical = mesh(rounded(0.29, 0.86, 0.2, 0.09), controlMaterial, "dpad-vertical", [-3.04, -0.58, 0.69]);
   pressables.up = dpadVertical;
   pressables.down = dpadVertical;
   pressables.left = dpadHorizontal;
   pressables.right = dpadHorizontal;
 
   const faceButtons = [
-    ["a", 1.66, 0.42, buttonMaterial],
-    ["b", 2.13, 0.04, buttonAltMaterial],
-    ["x", 1.2, 0.04, buttonAltMaterial],
-    ["y", 1.66, -0.34, buttonMaterial],
+    ["y", 3.04, 1.0],
+    ["x", 2.72, 0.68],
+    ["b", 3.36, 0.68],
+    ["a", 3.04, 0.36],
   ] as const;
-  faceButtons.forEach(([name, x, y, material]) => {
-    const button = mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.18, 24), material, `button-${name}`, [x, y, 0.63]);
+  faceButtons.forEach(([name, x, y]) => {
+    const button = mesh(new THREE.CylinderGeometry(0.17, 0.19, 0.16, 32), controlTopMaterial, `button-${name}`, [x, y, 0.72]);
     button.rotation.x = Math.PI / 2;
     pressables[name] = button;
   });
-  pressables.start = mesh(new THREE.BoxGeometry(0.34, 0.15, 0.12), dpadMaterial, "start", [-0.13, -0.65, 0.59]);
-  pressables.select = mesh(new THREE.BoxGeometry(0.34, 0.15, 0.12), dpadMaterial, "select", [0.37, -0.65, 0.59]);
+  pressables.select = mesh(rounded(0.52, 0.17, 0.13, 0.08), controlMaterial, "select", [-0.34, -1.18, 0.66]);
+  pressables.start = mesh(rounded(0.52, 0.17, 0.13, 0.08), controlMaterial, "start", [0.34, -1.18, 0.66]);
+
+  const ventPositions = [-0.24, -0.08, 0.08, 0.24];
+  for (const offset of ventPositions) {
+    const leftVent = mesh(rounded(0.08, 0.34, 0.08, 0.035), darkInsetMaterial, "left-vent", [-1.6 + offset, -1.3, 0.65]);
+    leftVent.rotation.z = -0.32;
+    const rightVent = mesh(rounded(0.08, 0.34, 0.08, 0.035), darkInsetMaterial, "right-vent", [1.6 + offset, -1.3, 0.65]);
+    rightVent.rotation.z = -0.32;
+  }
+  mesh(rounded(0.2, 0.06, 0.06, 0.03), cyanMaterial, "cyan-status", [-3.04, -1.3, 0.69]);
+  mesh(rounded(0.2, 0.06, 0.06, 0.03), amberMaterial, "amber-status", [3.04, -1.3, 0.69]);
+
+  for (const x of [-3.34, 3.34]) {
+    for (const y of [-1.24, 1.24]) {
+      const fastener = mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.04, 16), darkInsetMaterial, "fastener", [x, y, 0.55]);
+      fastener.rotation.x = Math.PI / 2;
+    }
+  }
 
   group.rotation.order = "YXZ";
   return {
     group,
-    screenTexture,
     pressables,
     dispose: () => {
       geometries.forEach((geometry) => geometry.dispose());
-      materials.forEach((material) => material.dispose?.());
-      screenTexture.dispose();
+      new Set(materials).forEach((material: any) => material.dispose?.());
     },
   };
 }
@@ -472,6 +536,7 @@ function FilmCanvas({
   onDragStateChange: (active: boolean) => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const posterRefs = useRef<Array<HTMLImageElement | null>>([]);
   const stepRef = useRef(step);
   const onStepChangeRef = useRef(onStepChange);
   const onProjectOpenRef = useRef(onProjectOpen);
@@ -497,13 +562,34 @@ function FilmCanvas({
     const curve = buildCurve();
     const curveLength = curve.getLength();
     const geometry = buildFilmGeometry(curve);
-    const atlas = buildAtlas();
+    const atlas = buildAtlas(posterRefs.current);
     const texture = new THREE.CanvasTexture(atlas);
     texture.colorSpace = THREE.SRGBColorSpace;
     texture.generateMipmaps = false;
     texture.minFilter = THREE.LinearFilter;
     texture.magFilter = THREE.LinearFilter;
     texture.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+    const posterListeners: Array<{ image: HTMLImageElement; draw: () => void }> = [];
+    reelPosterSources.forEach((source, index) => {
+      const image = posterRefs.current[index];
+      if (!image) return;
+      const draw = () => {
+        const context = atlas.getContext("2d");
+        if (!context) return;
+        drawCoverImage(
+          context,
+          image,
+          source.projectIndex * ATLAS_FRAME_WIDTH,
+          0,
+          ATLAS_FRAME_WIDTH,
+          ATLAS_FRAME_HEIGHT,
+        );
+        texture.needsUpdate = true;
+      };
+      if (image.complete && image.naturalWidth) draw();
+      else image.addEventListener("load", draw, { once: true });
+      posterListeners.push({ image, draw });
+    });
     const reelVideoAssets = reelVideoSources.map(createReelVideo);
     let activeVideoProject = -1;
     const playVideo = (asset: ReelVideoAsset) => {
@@ -522,20 +608,60 @@ function FilmCanvas({
     nightTideTarget.texture.colorSpace = THREE.SRGBColorSpace;
     nightTideTarget.texture.generateMipmaps = false;
     const nightTideScene = new THREE.Scene();
-    nightTideScene.background = new THREE.Color(0x020810);
+    const studioCanvas = document.createElement("canvas");
+    studioCanvas.width = 1024;
+    studioCanvas.height = 768;
+    const studioContext = studioCanvas.getContext("2d");
+    if (studioContext) {
+      const field = studioContext.createLinearGradient(0, 0, 0, studioCanvas.height);
+      field.addColorStop(0, "#fbfcfd");
+      field.addColorStop(0.62, "#f2f4f5");
+      field.addColorStop(1, "#d8dde1");
+      studioContext.fillStyle = field;
+      studioContext.fillRect(0, 0, studioCanvas.width, studioCanvas.height);
+
+      const halo = studioContext.createRadialGradient(540, 278, 30, 540, 310, 630);
+      halo.addColorStop(0, "rgba(255, 255, 255, 0.98)");
+      halo.addColorStop(0.52, "rgba(255, 255, 255, 0.58)");
+      halo.addColorStop(1, "rgba(233, 237, 240, 0)");
+      studioContext.fillStyle = halo;
+      studioContext.fillRect(0, 0, studioCanvas.width, studioCanvas.height);
+
+      studioContext.save();
+      studioContext.translate(520, 612);
+      studioContext.scale(1, 0.2);
+      const shadow = studioContext.createRadialGradient(0, 0, 10, 0, 0, 420);
+      shadow.addColorStop(0, "rgba(70, 84, 94, 0.24)");
+      shadow.addColorStop(0.58, "rgba(91, 106, 116, 0.1)");
+      shadow.addColorStop(1, "rgba(91, 106, 116, 0)");
+      studioContext.fillStyle = shadow;
+      studioContext.beginPath();
+      studioContext.arc(0, 0, 430, 0, Math.PI * 2);
+      studioContext.fill();
+      studioContext.restore();
+    }
+    const studioTexture = new THREE.CanvasTexture(studioCanvas);
+    studioTexture.colorSpace = THREE.SRGBColorSpace;
+    studioTexture.minFilter = THREE.LinearFilter;
+    studioTexture.magFilter = THREE.LinearFilter;
+    studioTexture.generateMipmaps = false;
+    nightTideScene.background = studioTexture;
     const nightTideCamera = new THREE.PerspectiveCamera(34, 768 / 576, 0.1, 100);
-    nightTideCamera.position.set(0, 0.25, 8.4);
+    nightTideCamera.position.set(0, 0.16, 9.25);
     nightTideCamera.lookAt(0, 0.05, 0);
-    nightTideScene.add(new THREE.AmbientLight(0x9ccce0, 1.35));
-    const tideKeyLight = new THREE.DirectionalLight(0x7fd9ff, 2.6);
+    nightTideScene.add(new THREE.AmbientLight(0xb8deea, 2.25));
+    const tideKeyLight = new THREE.DirectionalLight(0xb7e9ff, 5.4);
     tideKeyLight.position.set(-3, 5, 6);
     nightTideScene.add(tideKeyLight);
-    const tideRimLight = new THREE.PointLight(0xea6448, 8, 18, 2);
+    const tideRimLight = new THREE.PointLight(0xea704e, 14, 18, 2);
     tideRimLight.position.set(3.6, -1.1, 3.5);
     nightTideScene.add(tideRimLight);
+    const tideFillLight = new THREE.PointLight(0x5ecbea, 9, 16, 2);
+    tideFillLight.position.set(-4.2, -0.8, 4.5);
+    nightTideScene.add(tideFillLight);
     const nightTideModel = buildHandheldModel();
-    nightTideModel.group.rotation.set(-0.12, 0.22, -0.06);
-    nightTideModel.group.position.y = -0.02;
+    nightTideModel.group.rotation.set(-0.075, 0.13, -0.025);
+    nightTideModel.group.position.y = -0.04;
     nightTideScene.add(nightTideModel.group);
 
     let frontT = 0;
@@ -636,10 +762,11 @@ function FilmCanvas({
             image = mix(fallback, video, uJoiVideoReady);
           } else if (abs(frameIndex - 1.0) < 0.5) {
             vec3 fallback = texture2D(uMap, atlasUv).rgb;
-            vec3 video = texture2D(uJoiMapVideo, contentUv).rgb;
+            vec2 mobileVideoUv = vec2(0.125 + contentUv.x * 0.75, contentUv.y);
+            vec3 video = texture2D(uJoiMapVideo, mobileVideoUv).rgb;
             image = mix(fallback, video, uJoiMapVideoReady);
           } else if (abs(frameIndex - 2.0) < 0.5) {
-            image = texture2D(uNightTideMap, vec2(contentUv.x, 1.0 - contentUv.y)).rgb;
+            image = texture2D(uNightTideMap, contentUv).rgb;
           } else {
             image = vec3(
               texture2D(uMap, atlasUv + vec2(chromaOffset, 0.0)).r,
@@ -881,7 +1008,9 @@ function FilmCanvas({
         video.load();
         texture.dispose();
       });
+      posterListeners.forEach(({ image, draw }) => image.removeEventListener("load", draw));
       texture.dispose();
+      studioTexture.dispose();
       nightTideModel.dispose();
       nightTideTarget.dispose();
       renderer.dispose();
@@ -895,22 +1024,36 @@ function FilmCanvas({
   };
 
   return (
-    <canvas
-      ref={canvasRef}
-      className={`${styles.filmCanvas} ${canOpen ? styles.filmCanvasOpenable : ""}`}
-      role={canOpen ? "link" : undefined}
-      tabIndex={canOpen ? 0 : -1}
-      aria-label={
-        canOpen
-          ? `Open ${activeProject.title} case study. Drag horizontally to browse projects.`
-          : "Drag horizontally to browse Joi projects"
-      }
-      onKeyDown={(event) => {
-        if (event.key !== "Enter" && event.key !== " ") return;
-        event.preventDefault();
-        openActiveProject();
-      }}
-    />
+    <>
+      <div className={styles.reelPreload} aria-hidden="true">
+        {reelPosterSources.map((source, index) => (
+          <img
+            key={source.poster}
+            ref={(node) => { posterRefs.current[index] = node; }}
+            src={source.poster}
+            alt=""
+            decoding="async"
+            fetchPriority="high"
+          />
+        ))}
+      </div>
+      <canvas
+        ref={canvasRef}
+        className={`${styles.filmCanvas} ${canOpen ? styles.filmCanvasOpenable : ""}`}
+        role={canOpen ? "link" : undefined}
+        tabIndex={canOpen ? 0 : -1}
+        aria-label={
+          canOpen
+            ? `Open ${activeProject.title} case study. Drag horizontally to browse projects.`
+            : "Drag horizontally to browse Joi projects"
+        }
+        onKeyDown={(event) => {
+          if (event.key !== "Enter" && event.key !== " ") return;
+          event.preventDefault();
+          openActiveProject();
+        }}
+      />
+    </>
   );
 }
 
@@ -1065,6 +1208,7 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
                   className={index === activeIndex ? styles.dotActive : ""}
                   onClick={() => setStep((value) => value + (index - modulo(value, projects.length)))}
                   aria-label={`Show ${project.title}`}
+                  aria-pressed={index === activeIndex}
                 />
               ))}
             </div>

@@ -158,10 +158,15 @@ img {
 }
 
 .floating-nav nav a:hover::after,
+.floating-nav nav a:focus-visible::after,
 .project-actions a:hover::after,
+.project-actions a:focus-visible::after,
 .resume-actions a:hover::after,
+.resume-actions a:focus-visible::after,
 .site-footer a:hover::after,
-.project-detail-nav a:hover::after {
+.site-footer a:focus-visible::after,
+.project-detail-nav a:hover::after,
+.project-detail-nav a:focus-visible::after {
   transform: scaleX(1);
   transform-origin: left;
 }
@@ -723,6 +728,11 @@ img {
   font-family: var(--mono);
   font-size: 11px;
   letter-spacing: 0.1em;
+}
+
+.project-detail-nav a:focus-visible {
+  outline: 2px solid var(--coral);
+  outline-offset: 7px;
 }
 
 .project-detail-hero {

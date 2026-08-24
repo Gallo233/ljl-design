@@ -3,7 +3,21 @@
 import { useEffect, useRef, useState } from "react";
 import styles from "./page.module.css";
 
-type ButtonId = "up" | "down" | "left" | "right" | "a" | "b" | "x" | "y" | "start" | "select";
+type ButtonId =
+  | "up"
+  | "down"
+  | "left"
+  | "right"
+  | "a"
+  | "b"
+  | "x"
+  | "y"
+  | "l1"
+  | "l2"
+  | "r1"
+  | "r2"
+  | "start"
+  | "select";
 type ScreenMode = "menu" | "game";
 
 type Binding = {
@@ -13,46 +27,30 @@ type Binding = {
   label: string;
 };
 
-const GAME_BUILD_URL = "https://gallo233.github.io/joi-doorway/night-tide/?v=handheld-bridge-1";
+const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+const GAME_BUILD_URL = `${basePath}/games/night-tide/index.html?v=embedded-font-2`;
 
+// Mirrors scripts/app/app_state.gd in the Night Tide source project.
+// Arrow keys are shell-level aliases and are forwarded as the game's WASD keys.
 const bindings: Record<string, Binding> = {
-  w: { button: "up", gameKey: " ", code: "Space", label: "JUMP" },
-  ArrowUp: { button: "up", gameKey: " ", code: "Space", label: "JUMP" },
-  s: { button: "down", gameKey: "ArrowDown", code: "ArrowDown", label: "DOWN" },
-  ArrowDown: { button: "down", gameKey: "ArrowDown", code: "ArrowDown", label: "DOWN" },
+  w: { button: "up", gameKey: "w", code: "KeyW", label: "MOVE UP" },
+  ArrowUp: { button: "up", gameKey: "w", code: "KeyW", label: "MOVE UP" },
+  s: { button: "down", gameKey: "s", code: "KeyS", label: "MOVE DOWN" },
+  ArrowDown: { button: "down", gameKey: "s", code: "KeyS", label: "MOVE DOWN" },
   a: { button: "left", gameKey: "a", code: "KeyA", label: "MOVE LEFT" },
   ArrowLeft: { button: "left", gameKey: "a", code: "KeyA", label: "MOVE LEFT" },
   d: { button: "right", gameKey: "d", code: "KeyD", label: "MOVE RIGHT" },
   ArrowRight: { button: "right", gameKey: "d", code: "KeyD", label: "MOVE RIGHT" },
   " ": { button: "a", gameKey: " ", code: "Space", label: "JUMP" },
-  j: { button: "b", gameKey: "j", code: "KeyJ", label: "ATTACK" },
-  k: { button: "x", gameKey: "k", code: "KeyK", label: "ATTACK 2" },
-  l: { button: "y", gameKey: "l", code: "KeyL", label: "PARRY" },
-  Shift: { button: "y", gameKey: "Shift", code: "ShiftLeft", label: "DODGE" },
-  e: { button: "b", gameKey: "e", code: "KeyE", label: "PHASE DASH" },
-  r: { button: "select", gameKey: "r", code: "KeyR", label: "GRAVITY" },
-  Enter: { button: "start", gameKey: "Enter", code: "Enter", label: "START" },
-  Escape: { button: "select", gameKey: "Escape", code: "Escape", label: "BACK" },
+  Shift: { button: "b", gameKey: "Shift", code: "ShiftLeft", label: "DODGE" },
+  j: { button: "x", gameKey: "j", code: "KeyJ", label: "LIGHT ATTACK" },
+  k: { button: "y", gameKey: "k", code: "KeyK", label: "HEAVY ATTACK" },
+  l: { button: "l1", gameKey: "l", code: "KeyL", label: "PARRY" },
+  q: { button: "l2", gameKey: "q", code: "KeyQ", label: "TETHER" },
+  e: { button: "r1", gameKey: "e", code: "KeyE", label: "PHASE SLASH" },
+  r: { button: "r2", gameKey: "r", code: "KeyR", label: "GRAVITY COLLAPSE" },
+  Escape: { button: "start", gameKey: "Escape", code: "Escape", label: "PAUSE" },
 };
-
-const buttonLabels: Record<ButtonId, string> = {
-  up: "Up",
-  down: "Down",
-  left: "Left",
-  right: "Right",
-  a: "A",
-  b: "B",
-  x: "X",
-  y: "Y",
-  start: "Start",
-  select: "Select",
-};
-
-const gameSlots = [
-  { title: "ZERO HOUR", subtitle: "NIGHT TIDE", status: "PLAYABLE", accent: "cyan" },
-  { title: "SILT RUNNER", subtitle: "COMING SOON", status: "SLOT 02", accent: "orange" },
-  { title: "UNTITLED SIGNAL", subtitle: "RESERVED", status: "SLOT 03", accent: "muted" },
-] as const;
 
 function postGameKey(iframe: HTMLIFrameElement | null, action: "keydown" | "keyup", binding: Binding) {
   iframe?.contentWindow?.postMessage(
@@ -63,10 +61,10 @@ function postGameKey(iframe: HTMLIFrameElement | null, action: "keydown" | "keyu
 
 export function GameHandheld() {
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const activeKeysRef = useRef<Map<string, Binding>>(new Map());
   const [mode, setMode] = useState<ScreenMode>("menu");
-  const [selectedGame, setSelectedGame] = useState(0);
   const [pressed, setPressed] = useState<Set<ButtonId>>(() => new Set());
-  const [lastAction, setLastAction] = useState("SELECT A GAME");
+  const [lastAction, setLastAction] = useState("READY / PRESS A");
 
   const press = (button: ButtonId, binding?: Binding) => {
     setPressed((value) => new Set(value).add(button));
@@ -86,62 +84,80 @@ export function GameHandheld() {
   };
 
   const startSelectedGame = () => {
-    if (selectedGame !== 0) {
-      setLastAction("SLOT NOT READY");
-      return;
-    }
     setMode("game");
-    setLastAction("NIGHT TIDE ONLINE");
+    setLastAction("LOADING CURRENT BUILD");
   };
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
       if (mode === "menu") {
-        if (key === "ArrowUp" || key === "w") {
+        if (key === "Enter") {
+          if (event.repeat) return;
           event.preventDefault();
-          const binding = bindings[key];
-          if (binding) press(binding.button, binding);
-          setSelectedGame((value) => (value + gameSlots.length - 1) % gameSlots.length);
-          setLastAction("SELECT PREVIOUS");
-          return;
-        }
-        if (key === "ArrowDown" || key === "s") {
-          event.preventDefault();
-          const binding = bindings[key];
-          if (binding) press(binding.button, binding);
-          setSelectedGame((value) => (value + 1) % gameSlots.length);
-          setLastAction("SELECT NEXT");
-          return;
-        }
-        if (key === "Enter" || key === " " || key === "j") {
-          event.preventDefault();
-          const binding = bindings[key];
-          if (binding) press(binding.button, binding);
+          press("start");
+          window.setTimeout(() => release("start"), 130);
           startSelectedGame();
           return;
         }
+        if (key === " " || key === "j") startSelectedGame();
       }
 
       const binding = bindings[key];
       if (!binding || event.repeat) return;
       event.preventDefault();
+      activeKeysRef.current.set(key, binding);
       press(binding.button, binding);
     };
 
     const handleKeyUp = (event: KeyboardEvent) => {
       const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
+      const binding = activeKeysRef.current.get(key) ?? bindings[key];
+      if (binding) {
+        release(binding.button, binding);
+        activeKeysRef.current.delete(key);
+      }
+    };
+
+    const handleBlur = () => {
+      activeKeysRef.current.forEach((binding) => postGameKey(iframeRef.current, "keyup", binding));
+      activeKeysRef.current.clear();
+      setPressed(new Set());
+    };
+
+    // Godot focuses its own canvas after loading, so physical keyboard events then
+    // live inside the iframe. The embedded build mirrors them back for shell feedback.
+    const handleGameKey = (event: MessageEvent) => {
+      const data = event.data;
+      if (event.source !== iframeRef.current?.contentWindow || !data || data.type !== "joi-game-key") return;
+      const rawKey = typeof data.key === "string" ? data.key : "";
+      const key = rawKey.length === 1 ? rawKey.toLowerCase() : rawKey;
       const binding = bindings[key];
-      if (binding) release(binding.button, binding);
+      if (!binding) return;
+
+      if (data.action === "keydown") {
+        setPressed((value) => new Set(value).add(binding.button));
+        setLastAction(binding.label);
+      } else if (data.action === "keyup") {
+        setPressed((value) => {
+          const next = new Set(value);
+          next.delete(binding.button);
+          return next;
+        });
+      }
     };
 
     window.addEventListener("keydown", handleKeyDown, { passive: false });
     window.addEventListener("keyup", handleKeyUp, { passive: false });
+    window.addEventListener("blur", handleBlur);
+    window.addEventListener("message", handleGameKey);
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("keyup", handleKeyUp);
+      window.removeEventListener("blur", handleBlur);
+      window.removeEventListener("message", handleGameKey);
     };
-  }, [mode, selectedGame]);
+  }, [mode]);
 
   const buttonBinding = (button: ButtonId): Binding | undefined => {
     const first = Object.values(bindings).find((binding) => binding.button === button);
@@ -158,12 +174,6 @@ export function GameHandheld() {
         aria-label={`${label} button`}
         onPointerDown={(event) => {
           event.currentTarget.setPointerCapture(event.pointerId);
-          if (mode === "menu" && (button === "up" || button === "down")) {
-            setSelectedGame((value) => button === "up"
-              ? (value + gameSlots.length - 1) % gameSlots.length
-              : (value + 1) % gameSlots.length);
-            setLastAction(button === "up" ? "SELECT PREVIOUS" : "SELECT NEXT");
-          }
           if (mode === "menu" && (button === "start" || button === "a")) startSelectedGame();
           press(button, binding);
         }}
@@ -179,78 +189,75 @@ export function GameHandheld() {
   return (
     <div className={styles.handheldStage}>
       <div className={styles.handheld}>
-        <div className={styles.handheldTopline}>
-          <span>JOI / POCKET-03</span>
-          <span>{mode === "menu" ? "GAME SELECT" : "NIGHT TIDE"}</span>
+        <div className={styles.shoulderRail} aria-label="Shoulder buttons">
+          {renderButton("l2", styles.shoulderL2, "L2")}
+          {renderButton("l1", styles.shoulderL1, "L1")}
+          {renderButton("r1", styles.shoulderR1, "R1")}
+          {renderButton("r2", styles.shoulderR2, "R2")}
         </div>
-        <div className={styles.screenHousing}>
-          <div className={styles.screenGlow} />
-          <div className={styles.screen}>
-            {mode === "menu" ? (
-              <div className={styles.menuScreen} role="listbox" aria-label="Game selection">
-                <div className={styles.menuHeader}>
-                  <span>ZERO HOUR // POCKET OS</span>
-                  <span>03:07</span>
+        <div className={styles.handheldTopline}>
+          <span>JOI / POCKET-NT</span>
+          <span>{mode === "menu" ? "GAME CENTER" : "NIGHT TIDE / LIVE"}</span>
+        </div>
+        <div className={styles.consoleFace}>
+          <div className={`${styles.controlDeck} ${styles.controlDeckLeft}`}>
+            <div className={styles.analogStick} aria-hidden="true"><span /></div>
+            <div className={styles.dpad} aria-label="Directional pad">
+              {renderButton("up", styles.dpadUp, "↑")}
+              {renderButton("left", styles.dpadLeft, "←")}
+              <span className={styles.dpadCenter} aria-hidden="true" />
+              {renderButton("right", styles.dpadRight, "→")}
+              {renderButton("down", styles.dpadDown, "↓")}
+            </div>
+            <span className={`${styles.statusLight} ${styles.statusLightCyan}`} aria-hidden="true" />
+          </div>
+
+          <div className={styles.screenHousing}>
+            <div className={styles.screenGlow} />
+            <div className={styles.screen}>
+              {mode === "menu" ? (
+                <div className={styles.menuScreen}>
+                  <img src={`${basePath}/media/night-tide/main-menu.avif`} alt="Zero Hour: Night Tide main menu with readable Chinese interface" />
+                  <div className={styles.launchPlate}>
+                    <span>CURRENT BUILD / 0.1 DEMO</span>
+                    <button type="button" onClick={startSelectedGame}>PLAY NIGHT TIDE <b>→</b></button>
+                    <small>ENTER / A TO START</small>
+                  </div>
                 </div>
-                <div className={styles.menuTitle}>SELECT GAME</div>
-                <div className={styles.gameList}>
-                  {gameSlots.map((game, index) => (
-                    <button
-                      type="button"
-                      role="option"
-                      aria-selected={selectedGame === index}
-                      key={game.title}
-                      className={`${styles.gameSlot} ${styles[`gameSlot${game.accent}`]} ${selectedGame === index ? styles.gameSlotActive : ""}`}
-                      onClick={() => {
-                        setSelectedGame(index);
-                        if (index === 0) startSelectedGame();
-                      }}
-                    >
-                      <span className={styles.slotNumber}>{String(index + 1).padStart(2, "0")}</span>
-                      <span>
-                        <strong>{game.title}</strong>
-                        <small>{game.subtitle}</small>
-                      </span>
-                      <em>{game.status}</em>
-                    </button>
-                  ))}
-                </div>
-                <div className={styles.menuFooter}>
-                  <span>W / S  SELECT</span>
-                  <span>ENTER  START</span>
-                </div>
-              </div>
-            ) : (
-              <iframe
-                ref={iframeRef}
-                title="Zero Hour: Night Tide playable demo"
-                src={GAME_BUILD_URL}
-                allow="autoplay; fullscreen; gamepad"
-                allowFullScreen
-              />
-            )}
+              ) : (
+                <iframe
+                  ref={iframeRef}
+                  title="Zero Hour: Night Tide playable demo"
+                  src={GAME_BUILD_URL}
+                  allow="autoplay; fullscreen; gamepad"
+                  allowFullScreen
+                  onLoad={() => setLastAction("NIGHT TIDE ONLINE")}
+                />
+              )}
+            </div>
+          </div>
+
+          <div className={`${styles.controlDeck} ${styles.controlDeckRight}`}>
+            <div className={styles.faceButtons} aria-label="Action buttons">
+              {renderButton("y", styles.faceY, "Y")}
+              {renderButton("x", styles.faceX, "X")}
+              {renderButton("b", styles.faceB, "B")}
+              {renderButton("a", styles.faceA, "A")}
+            </div>
+            <div className={styles.analogStick} aria-hidden="true"><span /></div>
+            <span className={`${styles.statusLight} ${styles.statusLightAmber}`} aria-hidden="true" />
           </div>
         </div>
 
-        <div className={styles.deviceControls}>
-          <div className={styles.dpad} aria-label="Directional pad">
-            {renderButton("up", styles.dpadUp, "↑")}
-            {renderButton("left", styles.dpadLeft, "←")}
-            {renderButton("right", styles.dpadRight, "→")}
-            {renderButton("down", styles.dpadDown, "↓")}
-          </div>
+        <div className={styles.deviceFooter}>
+          <div className={styles.speaker} aria-hidden="true">{Array.from({ length: 5 }, (_, index) => <i key={index} />)}</div>
           <div className={styles.centerControls}>
             {renderButton("select", styles.selectButton, "SELECT")}
             {renderButton("start", styles.startButton, "START")}
           </div>
-          <div className={styles.faceButtons} aria-label="Action buttons">
-            {renderButton("y", styles.faceY, "Y")}
-            {renderButton("x", styles.faceX, "X")}
-            {renderButton("b", styles.faceB, "B")}
-            {renderButton("a", styles.faceA, "A")}
-          </div>
+          <div className={styles.deviceBrand}>NIGHT TIDE <span>///</span> JOI LAB</div>
+          <div className={styles.speaker} aria-hidden="true">{Array.from({ length: 5 }, (_, index) => <i key={index} />)}</div>
         </div>
-        <div className={styles.deviceBrand}>NIGHT TIDE <span>///</span> JOI LAB</div>
       </div>
       <div className={styles.handheldRail}>
         <div>
@@ -258,10 +265,16 @@ export function GameHandheld() {
           <strong>{lastAction}</strong>
         </div>
         <div className={styles.mappingList} aria-label="Keyboard mapping">
-          <span><b>W / ↑</b> jump</span>
-          <span><b>A / D</b> move</span>
-          <span><b>J / K / L</b> action</span>
-          <span><b>SHIFT</b> dodge</span>
+          <span><b>WASD</b> d-pad / move</span>
+          <span><b>SPACE / A</b> jump</span>
+          <span><b>SHIFT / B</b> dodge</span>
+          <span><b>J / X</b> light attack</span>
+          <span><b>K / Y</b> heavy attack</span>
+          <span><b>L / L1</b> parry</span>
+          <span><b>Q / L2</b> tether</span>
+          <span><b>E / R1</b> phase slash</span>
+          <span><b>R / R2</b> gravity</span>
+          <span><b>ESC / START</b> pause</span>
         </div>
         {mode === "game" && (
           <button type="button" className={styles.exitButton} onClick={() => setMode("menu")}>

@@ -145,6 +145,21 @@
 }
 .filmCanvasDragging { cursor: grabbing; }
 
+.reelPreload {
+  position: fixed;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.reelPreload img {
+  width: 1px;
+  height: 1px;
+}
+
 .scanlines {
   z-index: 9;
   pointer-events: none;
@@ -368,9 +383,17 @@
 }
 
 .closingLink:hover,
-.closingActions a:hover {
+.closingLink:focus-visible,
+.closingActions a:hover,
+.closingActions a:focus-visible {
   color: var(--coral);
   border-color: var(--coral);
+}
+
+.closingLink:focus-visible,
+.closingActions a:focus-visible {
+  outline: 1px solid rgba(242, 238, 232, .82);
+  outline-offset: 6px;
 }
 
 .closingActions {
@@ -392,13 +415,20 @@
 }
 
 .sectionNav a {
-  opacity: .5;
+  opacity: .64;
   padding-bottom: 3px;
   border-bottom: 1px solid transparent;
   transition: opacity .2s ease, border-color .2s ease;
 }
 
-.sectionNav a:hover { opacity: .9; }
+.sectionNav a:hover,
+.sectionNav a:focus-visible { opacity: 1; }
+
+.sectionNav a:focus-visible,
+.brand:focus-visible {
+  outline: 1px solid rgba(242, 238, 232, .82);
+  outline-offset: 7px;
+}
 
 .sectionNavActive {
   opacity: 1 !important;
@@ -618,26 +648,48 @@
   transition: color 180ms ease, transform 180ms ease, border-color 180ms ease;
 }
 .controls > button:hover,
-.controls > button:focus-visible { color: var(--coral); border-color: rgba(242, 238, 232, .62); transform: translateY(-2px); outline: none; }
+.controls > button:focus-visible { color: var(--coral); border-color: rgba(242, 238, 232, .62); transform: translateY(-2px); }
+.controls > button:focus-visible {
+  outline: 1px solid rgba(242, 238, 232, .88);
+  outline-offset: 5px;
+}
 .controls > button span { transform: translateY(-2px); }
 
 .dots {
   display: flex;
   justify-self: center;
   align-items: center;
-  gap: clamp(9px, 1.2vw, 16px);
+  gap: 0;
 }
 .dots button {
-  width: 7px;
-  height: 7px;
+  position: relative;
+  display: grid;
+  width: 36px;
+  height: 36px;
   padding: 0;
   border: 0;
   border-radius: 50%;
-  background: rgba(242, 238, 232, .64);
+  place-items: center;
+  background: transparent;
   cursor: pointer;
+}
+.dots button::before {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: rgba(242, 238, 232, .68);
+  content: "";
   transition: transform 250ms ease, background 250ms ease, box-shadow 250ms ease;
 }
-.dots .dotActive {
+.dots button:hover::before {
+  background: #f2eee8;
+  transform: scale(1.25);
+}
+.dots button:focus-visible {
+  outline: 1px solid rgba(242, 238, 232, .72);
+  outline-offset: -5px;
+}
+.dots .dotActive::before {
   background: transparent;
   box-shadow: 0 0 0 1.5px #f2eee8, -1px 0 var(--coral), 1px 0 #6592bd;
   transform: scale(1.5);
@@ -650,9 +702,9 @@
   left: 50%;
   margin: 0;
   font-family: var(--font-signal-mono), monospace;
-  font-size: 8px;
+  font-size: 9px;
   letter-spacing: .13em;
-  opacity: .42;
+  opacity: .6;
   pointer-events: none;
   transform: translate(-50%, -30px);
 }
@@ -724,9 +776,9 @@
   .projectTitle p { margin-top: 9px; font-size: clamp(16px, 5vw, 22px); }
   .controls { right: 18px; bottom: 22px; left: 18px; }
   .controls > button { width: 48px; height: 48px; font-size: 23px; }
-  .dots { gap: 10px; }
-  .dots button { width: 5px; height: 5px; }
-  .hint { bottom: 20px; font-size: 7px; transform: translate(-50%, -30px); }
+  .dots button { width: 40px; height: 40px; }
+  .dots button::before { width: 5px; height: 5px; }
+  .hint { bottom: 20px; font-size: 8px; transform: translate(-50%, -30px); }
   .blueField::before { background-size: 46px 46px; }
   .loader { grid-template-columns: 1fr auto; padding: 22px; }
   .loader i { justify-self: end; }
