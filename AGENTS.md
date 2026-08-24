@@ -52,10 +52,16 @@ app/
     three.d.ts
   work/[slug]/page.tsx      project detail
   classic/page.tsx          previous homepage
+  site.ts                   SITE_URL, canonicalPath(), SHARE_CARD   <-- see below
+  robots.ts, sitemap.ts     generated /robots.txt and /sitemap.xml
+  icon.svg                  favicon — the header wordmark at 32px
+  opengraph-image.png       share card (+ .alt.txt); source in scripts/
 components/
-  projectData.ts            case-study content model, bilingual
+  projectData.ts            case-study content model, bilingual — DATA CLEARED
   NativeProjectDemos.tsx    code-drawn device mockups — PLACEHOLDERS, not finished
   Live2DGate.tsx, Live2DRouteMount.tsx, ParticlePrologue.tsx, ...
+scripts/
+  opengraph-image.tsx       satori source for the committed share card, not a route
 docs/
   design-audits/            content design + asset spec   <-- read before designing
   shader-research/          shader.se reverse engineering  <-- read before re-deriving
@@ -63,22 +69,49 @@ docs/
 
 ---
 
+## Site metadata
+
+`app/site.ts` holds the site's own address. It exists because `metadataBase` used to say
+`gallo.design` while the site served from `ljl.design`, which silently pointed every relative
+canonical and every share image at a domain that is not this one.
+
+Two rules that are easy to get wrong here, both learned by getting them wrong:
+
+- **Metadata set on a layout propagates to every route beneath it.** A `canonical` or an
+  `og:url` in `app/layout.tsx` reaches `/classic` and `/play/night-tide` too, and tells them
+  they are the homepage. Canonicals are therefore declared per page, `app/page.tsx` included.
+- **A page's `openGraph` replaces the layout's rather than merging into it** — and takes the
+  file-convention `opengraph-image.png` with it. Any route that declares `openGraph` must also
+  name `SHARE_CARD`, and repeat `siteName` / `type`.
+
+`trailingSlash: true` means canonicals end in `/` — that is what `canonicalPath()` is for — and
+it is also why the share card is a committed `.png` rather than a generated `opengraph-image.tsx`
+route. See the header comment in `scripts/opengraph-image.tsx`.
+
+---
+
 ## Scroll architecture
 
-`app/joi-signal-lab/sections.ts` owns all of it. Four sections with `start`/`end` positions along
-a 0..1 scroll, total 7 viewport heights.
+`app/joi-signal-lab/sections.ts` owns all of it. Four sections, each with a `position` measured
+**in viewport heights** — not a 0..1 fraction. `TOTAL_SCREENS` is the last position plus one
+screen to read it in, and `JoiSignalLab` sets the page height from it inline.
 
 ```
-hero           0     – 0.28
-selected-work  0.28  – 0.62
-about-me       0.62  – 0.84
-contact        0.84  – 1
+hero           position 0     ← snaps
+selected-work  position 1     ← snaps, asymmetric window
+about-me       position 3.4   ← nav target only, snap: null
+contact        position 5     ← nav target only, snap: null
+
+TOTAL_SCREENS = 5 + 1 = 6
 ```
+
+Only the first two snap. About Me and Contact carry a position but no snap window, so they never
+yank a reader who is partway through reading them.
 
 ### The one constraint that will bite you
 
 ```ts
-export const REEL_ANCHOR = SECTIONS[1].start;
+export const REEL_ANCHOR = SECTIONS[1].position;
 ```
 
 The hero's camera flight and the film's entrance were both tuned against a 0..1 range that ends
@@ -131,6 +164,35 @@ video frames as prebaked AVIF sprite sheets rather than `<video>`. See the asset
 ---
 
 ## Content plan
+
+### The prose has been cleared — this is deliberate
+
+Four surfaces were emptied on purpose so the rewrite starts from a blank page instead of
+editing around a skeleton. **They are not bugs, and they are not half-finished work someone
+abandoned. Do not "restore" them from git.**
+
+| Surface | State |
+|---|---|
+| `/work/joi` | Shell + the live Joi session. Everything else — summary, metadata, case frame, motion video, loop, sections, figures — gone. |
+| `/work/joi-mobile` | Shell only. |
+| `/about-me` | Empty panel. |
+| `/contact` | Empty panel. |
+
+What survived, and why:
+
+- **The schema.** `components/projectData.ts` keeps every type; only the data is gone, and every
+  content field is now optional. `app/work/[slug]/page.tsx` skips any block whose data is absent,
+  so entries can come back one field at a time.
+- **The slots.** The two closing `<section>`s in `JoiSignalLab.tsx` are still there but empty.
+  They are scroll positions (`sections.ts`), nav targets, and the elements `--about-progress` /
+  `--contact-progress` animate. Deleting them means re-deriving the scroll layout later.
+- **The Joi session.** `components/JoiWebEmbed.tsx` on `/work/joi` is the one thing on these
+  pages that is not prose, so it stayed.
+
+⚠️ **Before deploying:** `/about-me` and `/contact` are now blank screens, and `main` deploys on
+push. Either rebuild the copy first or accept that state knowingly.
+
+### The reel
 
 Read `docs/design-audits/reel-content-design.md` and `reel-asset-spec.md`. Short version:
 
@@ -191,7 +253,8 @@ server config.
 works. Large media directories stay untracked on purpose: `live2d-working/` (130 MB),
 `assets/3d/` (64 MB), `deliverables/` (25 MB), `assets/source/` (16 MB). Do not add them.
 
-`tsconfig.tsbuildinfo` regenerates on every `tsc` run and is not ignored — do not commit it.
+`tsconfig.tsbuildinfo` regenerates on every `tsc` run. It is in `.gitignore` now, so it no longer
+turns every typecheck into a diff you have to remember not to commit.
 
 ---
 

@@ -1222,37 +1222,27 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
           </p>
         </section>
 
-        {/* Skeleton. Copy and layout land once the assets are in — see docs/design-audits. */}
+        {/*
+          Both closing panels are intentionally empty. The placeholder copy was cleared so the
+          rebuild starts from a blank surface rather than editing around a skeleton.
+
+          The two <section> elements stay because they are the *slots*, not the content: their
+          scroll positions live in `sections.ts` (about-me at 3.4 screens, contact at 5), the
+          header nav scrolls to them, and `--about-progress` / `--contact-progress` are written
+          every frame for them to animate against. Deleting them would mean re-deriving the
+          scroll layout when the copy comes back.
+
+          Until then these are blank screens — see the note in AGENTS.md before deploying.
+        */}
         <section
           className={`${styles.closingPanel} ${activeSection === "about-me" ? styles.closingPanelActive : ""}`}
           aria-label="About me"
-        >
-          <p className={styles.closingKicker}>03 / GALLO</p>
-          <h2>
-            Curious about<br />what technology<br />changes in us.
-          </h2>
-          <p className={styles.closingBody}>
-            AI becomes interesting when it stops being only a feature.
-          </p>
-          <a className={styles.closingLink} href="/about-me">
-            THE ROOM, THE WORK, THE PERSON <span aria-hidden="true">→</span>
-          </a>
-        </section>
+        />
 
         <section
           className={`${styles.closingPanel} ${styles.contactPanel} ${activeSection === "contact" ? styles.closingPanelActive : ""}`}
           aria-label="Contact"
-        >
-          <p className={styles.closingKicker}>04 / CONTACT</p>
-          <h2>
-            Let&apos;s make technology<br />people can live with.
-          </h2>
-          <div className={styles.closingActions}>
-            <a href="mailto:liujialuo233@gmail.com">EMAIL <span aria-hidden="true">↗</span></a>
-            <a href="https://github.com/Gallo233" target="_blank" rel="noreferrer">GITHUB <span aria-hidden="true">↗</span></a>
-            <a href="/resume/gallo-liu-resume-cn.pdf" target="_blank">RESUME <span aria-hidden="true">↗</span></a>
-          </div>
-        </section>
+        />
 
         <header className={styles.header}>
           <a className={styles.brand} href="/" aria-label="Back to Gallo home">

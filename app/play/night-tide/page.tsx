@@ -1,10 +1,28 @@
 import type { Metadata } from "next";
+import { SHARE_CARD, canonicalPath } from "../../site";
 import { GameHandheld } from "./GameHandheld";
 import styles from "./page.module.css";
 
 export const metadata: Metadata = {
   title: "Zero Hour: Night Tide / 零刻：夜潮",
   description: "Play the Zero Hour: Night Tide Godot demo in your browser.",
+  alternates: { canonical: canonicalPath("/play/night-tide") },
+  // Declaring these replaces the layout's, which would otherwise share this page
+  // under the site's own title — hence the card is named again here.
+  openGraph: {
+    type: "article",
+    siteName: "Gallo",
+    title: "Zero Hour: Night Tide / 零刻：夜潮",
+    description: "Play the Zero Hour: Night Tide Godot demo in your browser.",
+    url: canonicalPath("/play/night-tide"),
+    images: [SHARE_CARD],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Zero Hour: Night Tide / 零刻：夜潮",
+    description: "Play the Zero Hour: Night Tide Godot demo in your browser.",
+    images: [SHARE_CARD.url],
+  },
 };
 
 export default function NightTidePage() {

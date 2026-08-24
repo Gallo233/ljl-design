@@ -110,9 +110,13 @@ export function JoiWebEmbed() {
         <p className="project-detail-kicker">LIVE / WEB SESSION</p>
         <div>
           <h2 id="joi-live-session-title">Talk to her right here.</h2>
+          {/*
+            The pointers to "keep scrolling" and to the demo video came out with the case-study
+            content. The lift-out-to-the-corner behaviour still exists in joi-embed.js and will
+            describe itself again once there is a page below this section to scroll through.
+          */}
           <p lang="zh-CN">
-            这是真正的 Joi，跑在为你单独启动的一份运行时里。向下滚动继续读，她会缩成右下角的桌宠跟着你——
-            可以拖动，选中后滚轮缩放。
+            这是真正的 Joi，跑在为你单独启动的一份运行时里。可以拖动，选中后滚轮缩放。
           </p>
         </div>
       </header>
@@ -124,8 +128,8 @@ export function JoiWebEmbed() {
             {phase === "unavailable" && <p>{reason}</p>}
             {phase === "unavailable" && (
               <p lang="en">
-                The browser session runs on its own Core process; when that host is offline the
-                case study below still describes what it does.
+                The browser session runs on its own Core process. When that host is offline
+                there is nothing here to talk to; the rest of the page is unaffected.
               </p>
             )}
           </div>
@@ -144,7 +148,7 @@ export function JoiWebEmbed() {
       <footer className="joi-experience-note">
         <p>
           浏览器里的 Joi 只做对话、角色与记忆。看屏幕、操作电脑、写代码、玩 Minecraft
-          这些需要她住在你自己的机器上——那部分在上面的演示视频里。
+          这些需要她住在你自己的机器上。
         </p>
       </footer>
     </section>

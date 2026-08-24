@@ -8,6 +8,10 @@ node_modules/
 dist/
 out/
 
+# Regenerated on every `tsc` run, and committing it means every typecheck shows
+# up as a diff.
+tsconfig.tsbuildinfo
+
 joi-doorway-video/node_modules/
 joi-doorway-video/out/
 joi-doorway-video/dist/
