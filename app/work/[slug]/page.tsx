@@ -6,6 +6,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { ArrivalFade } from "../../../components/ArrivalFade";
+import { RevealRoot } from "../../../components/RevealRoot";
+import { SiteHUD } from "../../../components/SiteHUD";
 import { getProject, projects } from "../../../components/projectData";
 import { JoiWebEmbed } from "../../../components/JoiWebEmbed";
 import { PageScrollState } from "../../../components/PageScrollState";
@@ -76,12 +78,24 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
   const hasFigures = Boolean(project.figures?.length);
   const nextHref = project.nextHref ?? (project.nextSlug ? `/work/${project.nextSlug}` : null);
   const hasNext = Boolean(nextHref && project.nextTitle);
+
+  // The metadata card counts what is actually on the page — haoqi's article-card habit.
+  const characterCount = [
+    project.summary,
+    project.summaryZh,
+    ...(project.sections?.flatMap((section) => [...section.body, ...section.bodyZh]) ?? []),
+    ...(project.loop?.map((step) => step.body) ?? []),
+  ]
+    .filter(Boolean)
+    .join("").length;
   const hasBody = hasLoop || hasSections || hasFigures || hasNext;
 
   return (
     <main className={`project-page project-page--${project.slug}`}>
       {project.slug === "joi" && <PageScrollState />}
       <ArrivalFade />
+      <RevealRoot />
+      <SiteHUD />
       <header className="project-detail-nav">
         {/* Internal links are client navigations — a full document load would reboot
             both of the lab's WebGL scenes and replay the loader on the way back. */}
@@ -123,7 +137,7 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
           )}
 
           {hasCaseFrame && (
-            <section className="project-case-frame" aria-label="Case study overview">
+            <section className="project-case-frame" aria-label="Case study overview" data-reveal>
               {project.question && (
                 <div>
                   <span>01 / PROBLEM</span>
@@ -166,7 +180,7 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
           ) : null}
 
           {project.motion && (
-            <figure className="project-detail-motion">
+            <figure className="project-detail-motion" data-reveal>
               <video
                 autoPlay
                 controls
@@ -190,7 +204,7 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
         {hasBody && (
           <div className="project-detail-body">
             {hasLoop && (
-              <section className="project-detail-loop" aria-labelledby={`${project.slug}-loop-title`}>
+              <section className="project-detail-loop" aria-labelledby={`${project.slug}-loop-title`} data-reveal>
                 <header>
                   <p className="project-detail-kicker">THE PRODUCT LOOP</p>
                   <div>
@@ -212,7 +226,7 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
             )}
 
             {project.sections?.map((section) => (
-              <section className="project-detail-section" key={section.heading}>
+              <section className="project-detail-section" key={section.heading} data-reveal>
                 <div>
                   <p className="project-detail-kicker">{section.heading}</p>
                   <h2>{section.headingZh}</h2>
@@ -225,7 +239,7 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
             ))}
 
             {hasFigures && (
-              <section className="project-detail-gallery" aria-label={`${project.title} project figures`}>
+              <section className="project-detail-gallery" aria-label={`${project.title} project figures`} data-reveal>
                 {project.figures!.map((figure, index) => (
                   <figure className={`project-detail-figure project-detail-figure--${index + 1}`} key={figure.src}>
                     <img src={sitePath(figure.src)} alt={figure.alt} loading="lazy" />
@@ -234,6 +248,18 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
                 ))}
               </section>
             )}
+
+            <aside className="project-meta-card" data-reveal>
+              <span className="project-meta-card-label">FILE</span>
+              <dl>
+                <div><dt>LAST UPDATED</dt><dd>{project.updated ?? "—"}</dd></div>
+                <div><dt>CHARACTERS</dt><dd>{characterCount.toLocaleString("en-US")}</dd></div>
+                <div><dt>INDEX</dt><dd>{project.index} / {String(projects.length).padStart(2, "0")}</dd></div>
+                {project.repo && (
+                  <div><dt>SOURCE</dt><dd><a href={project.repo} target="_blank" rel="noreferrer">GITHUB ↗</a></dd></div>
+                )}
+              </dl>
+            </aside>
 
             {hasNext && (
               <Link className="project-next" href={nextHref!}>

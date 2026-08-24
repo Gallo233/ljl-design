@@ -9,6 +9,7 @@ import { createRoomScene } from "./room3d";
 import { AboutRoom } from "./AboutRoom";
 import { LanyardBadge } from "./badge/LanyardBadge";
 import { ROOM_OBJECTS, type RoomObjectId } from "./roomObjects";
+import { SiteHUD } from "../../components/SiteHUD";
 import {
   REEL_ANCHOR,
   SECTIONS,
@@ -1846,6 +1847,8 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
         <div className={styles.scanlines} aria-hidden="true" />
         <div className={styles.vignette} aria-hidden="true" />
         <div className={styles.grain} aria-hidden="true" />
+
+        <SiteHUD />
 
         <div className={`${styles.loader} ${ready ? styles.loaderReady : ""}`} role="status" aria-live="polite">
           <span>GALLO / JOI</span>

@@ -56,3 +56,28 @@ canvas {
   from { opacity: 1; }
   to { opacity: 0; }
 }
+
+/*
+ * Scroll-entry reveals (components/RevealRoot.tsx).
+ *
+ * Nothing here hides anything on its own: `reveal-armed` is added by the script, one
+ * element at a time, only to blocks it has taken responsibility for revealing. Without
+ * JavaScript — or if the script bails — the class is never applied and every block is
+ * simply visible. Stagger siblings with data-reveal="2" / "3".
+ */
+[data-reveal] {
+  transition: opacity .7s cubic-bezier(.22, .8, .3, 1), transform .7s cubic-bezier(.22, .8, .3, 1);
+}
+
+[data-reveal].reveal-armed {
+  opacity: 0;
+  transform: translateY(22px);
+}
+
+[data-reveal="2"] { transition-delay: .08s; }
+[data-reveal="3"] { transition-delay: .16s; }
+
+@media (prefers-reduced-motion: reduce) {
+  [data-reveal] { transition: none; }
+  [data-reveal].reveal-armed { opacity: 1; transform: none; }
+}

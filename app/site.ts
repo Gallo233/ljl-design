@@ -27,6 +27,9 @@ export function canonicalPath(path: string) {
  * with it. Any route that sets its own `openGraph` has to name the card, so it is
  * spelled out once here instead of per route.
  */
+/** Shown in the fixed HUD; bump the revision when the shell meaningfully changes. */
+export const BUILD_TAG = "JOI9000 / R2";
+
 export const SHARE_CARD = {
   url: "/opengraph-image.png",
   width: 1200,

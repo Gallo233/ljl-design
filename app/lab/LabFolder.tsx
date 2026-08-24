@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { ArrivalFade } from "../../components/ArrivalFade";
+import { RevealRoot } from "../../components/RevealRoot";
+import { SiteHUD } from "../../components/SiteHUD";
 import styles from "./lab.module.css";
 import { labItems, type LabItem } from "./labData";
 
@@ -63,6 +65,8 @@ export function LabFolder() {
   return (
     <main className={styles.page}>
       <ArrivalFade />
+      <RevealRoot />
+      <SiteHUD />
       <header className={styles.nav}>
         <Link className={styles.wordmark} href="/">GALLO</Link>
         <nav aria-label="Lab navigation">
@@ -71,7 +75,7 @@ export function LabFolder() {
         </nav>
       </header>
 
-      <section className={styles.hero}>
+      <section className={styles.hero} data-reveal>
         <p className={styles.kicker}>04 / RESEARCH &amp; EXPERIMENTS</p>
         <h1>
           实验室 <span>THE LAB</span>
@@ -83,10 +87,14 @@ export function LabFolder() {
       </section>
 
       <section className={styles.drawer} aria-label="Lab files">
-        {labItems.map((item) => {
+        {labItems.map((item, index) => {
           const open = openId === item.id;
           return (
-            <article key={item.id} className={`${styles.folder} ${open ? styles.folderOpen : ""}`}>
+            <article
+              key={item.id}
+              className={`${styles.folder} ${open ? styles.folderOpen : ""}`}
+              data-reveal={index === 0 ? "" : String(Math.min(index + 1, 3))}
+            >
               <button
                 type="button"
                 className={styles.folderRow}
