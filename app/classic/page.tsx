@@ -99,7 +99,7 @@ export default function Page() {
               </div>
               <footer className="project-footer">
                 <p>A local companion that observes context, asks before acting, and keeps every action legible.</p>
-                <div><a className="magnetic" href="https://github.com/Gallo233/Joi" target="_blank" rel="noreferrer">GITHUB ↗</a><a className="magnetic" href="/joi">CASE STUDY →</a></div>
+                <div><a className="magnetic" href="https://github.com/Gallo233/Joi" target="_blank" rel="noreferrer">GITHUB ↗</a><a className="magnetic" href="/work/joi">CASE STUDY →</a></div>
               </footer>
             </div>
           </article>
@@ -114,7 +114,7 @@ export default function Page() {
               </div>
               <footer className="project-footer">
                 <p>A world-facing guide connecting place, vision, narration and memory into one continuous presence.</p>
-                <div><a className="magnetic" href="https://github.com/Gallo233/joi-map-ios" target="_blank" rel="noreferrer">GITHUB ↗</a><a className="magnetic" href="/joi-map">CASE STUDY →</a></div>
+                <div><a className="magnetic" href="https://github.com/Gallo233/joi-map-ios" target="_blank" rel="noreferrer">GITHUB ↗</a><a className="magnetic" href="/work/joi-mobile">CASE STUDY →</a></div>
               </footer>
             </div>
           </article>

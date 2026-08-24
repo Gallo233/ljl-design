@@ -409,6 +409,91 @@
 
 .contactPanel h2 { max-width: 20ch; }
 
+/* Staggered entrance: the panel fades as one, then its children land one beat apart. */
+.closingPanel > * {
+  opacity: 0;
+  transform: translateY(16px);
+  transition: opacity .55s ease, transform .55s ease;
+}
+
+.closingPanelActive > * { opacity: 1; transform: none; }
+.closingPanelActive > *:nth-child(2) { transition-delay: .07s; }
+.closingPanelActive > *:nth-child(3) { transition-delay: .14s; }
+.closingPanelActive > *:nth-child(4) { transition-delay: .21s; }
+.closingPanelActive > *:nth-child(5) { transition-delay: .28s; }
+.closingPanelActive > *:nth-child(6) { transition-delay: .35s; }
+
+.aboutPanel { max-width: min(92vw, 960px); }
+
+.aboutTimeline {
+  display: grid;
+  gap: 10px;
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.aboutTimeline li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 12px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(242, 238, 232, .18);
+  font-size: 13px;
+}
+
+.aboutTimeline span {
+  font-family: var(--font-signal-mono), monospace;
+  font-size: 9px;
+  letter-spacing: .16em;
+  color: var(--coral);
+}
+
+.aboutTimeline strong { font-weight: 500; letter-spacing: .02em; }
+
+.aboutTimeline em {
+  font-style: normal;
+  font-family: var(--font-signal-mono), monospace;
+  font-size: 9px;
+  letter-spacing: .12em;
+  opacity: .45;
+}
+
+.interestChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.interestChips li {
+  padding: 6px 12px;
+  font-family: var(--font-signal-mono), monospace;
+  font-size: 10px;
+  letter-spacing: .12em;
+  border: 1px solid rgba(242, 238, 232, .22);
+  border-radius: 999px;
+  opacity: .78;
+  transition: border-color .2s ease, color .2s ease, opacity .2s ease;
+}
+
+.interestChips li:hover {
+  border-color: var(--coral);
+  color: var(--coral);
+  opacity: 1;
+}
+
+.closingMeta {
+  margin: 0;
+  font-family: var(--font-signal-mono), monospace;
+  font-size: 9px;
+  letter-spacing: .18em;
+  opacity: .4;
+}
+
 /* Section nav in the header. Scrolls rather than navigates — it is one page. */
 .sectionNav {
   display: none;

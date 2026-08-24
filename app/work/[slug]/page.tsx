@@ -72,7 +72,8 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
   const hasLoop = Boolean(project.loop?.length);
   const hasSections = Boolean(project.sections?.length);
   const hasFigures = Boolean(project.figures?.length);
-  const hasNext = Boolean(project.nextSlug && project.nextTitle);
+  const nextHref = project.nextHref ?? (project.nextSlug ? `/work/${project.nextSlug}` : null);
+  const hasNext = Boolean(nextHref && project.nextTitle);
   const hasBody = hasLoop || hasSections || hasFigures || hasNext;
 
   return (
@@ -230,7 +231,7 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
             )}
 
             {hasNext && (
-              <a className="project-next" href={sitePath(`/work/${project.nextSlug}`)}>
+              <a className="project-next" href={sitePath(nextHref!)}>
                 <span>NEXT PROJECT</span>
                 <strong>{project.nextTitle}</strong>
               </a>

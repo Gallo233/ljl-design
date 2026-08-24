@@ -24,13 +24,19 @@ type JoiSignalLabProps = {
   initialSection?: SectionId;
 };
 
+/**
+ * The six frames of the reel. Every frame is a real destination now: 01–03 are work,
+ * 04 is the lab, and 05/06 land on sections of this same page — the open handler
+ * turns those two into scrolls rather than route pushes, because pushing /about-me
+ * would remount the whole lab and reboot both scenes.
+ */
 const projects = [
   { index: "01", title: "Joi Presence", subtitle: "Multimodal AI Companion", href: "/work/joi", palette: ["#07121d", "#f2eee7", "#ea6448"] },
   { index: "02", title: "Joi Mobile", subtitle: "Native Character Companion", href: "/work/joi-mobile", palette: ["#d8d6ef", "#17152c", "#6558f5"] },
-  { index: "03", title: "Game Center", subtitle: "Night Tide · Playable Godot Demo", href: "/play/night-tide", palette: ["#071a2b", "#d9edf2", "#2f9ed0"] },
-  { index: "04", title: "Action Ledger", subtitle: "Human-readable Autonomy", href: "/work/joi", palette: ["#0b2236", "#dce9ef", "#7caed0"] },
-  { index: "05", title: "Voice Field", subtitle: "Character & Expression", href: "/work/joi", palette: ["#43283f", "#f1dfda", "#ee795c"] },
-  { index: "06", title: "Gallo / Joi", subtitle: "One Identity, Many Surfaces", href: "/", palette: ["#e9e3d8", "#111214", "#e55f43"] },
+  { index: "03", title: "Game Center", subtitle: "One Handheld · Four Cartridges", href: "/play/night-tide", palette: ["#071a2b", "#d9edf2", "#2f9ed0"] },
+  { index: "04", title: "The Lab", subtitle: "Research & Experiments", href: "/lab", palette: ["#0b2236", "#dce9ef", "#7caed0"] },
+  { index: "05", title: "My Room", subtitle: "About · 我的房间", href: "/about-me", palette: ["#2b2033", "#f1dfda", "#ee795c"] },
+  { index: "06", title: "Contact", subtitle: "Call Sheet · 联系", href: "/contact", palette: ["#e9e3d8", "#111214", "#e55f43"] },
 ] as const;
 
 type ProjectSignal = (typeof projects)[number];
@@ -532,45 +538,148 @@ function drawProjectArt(context: CanvasRenderingContext2D, projectIndex: number,
       }
     }
   } else if (projectIndex === 3) {
-    context.fillStyle = `${ink}12`;
-    context.fillRect(x + 48, y + 82, width - 96, height - 142);
-    context.font = "500 20px ui-monospace, monospace";
+    // 04 · THE LAB — a manila folder with the real experiment index on its face.
+    const fx = x + width * 0.14;
+    const fy = y + height * 0.2;
+    const fw = width * 0.72;
+    const fh = height * 0.62;
+    context.fillStyle = `${ink}14`;
+    context.fillRect(fx + 14, fy + 18, fw, fh);
+    context.fillStyle = `${ink}e8`;
+    context.beginPath();
+    context.moveTo(fx, fy + 26);
+    context.lineTo(fx, fy);
+    context.lineTo(fx + fw * 0.34, fy);
+    context.lineTo(fx + fw * 0.4, fy + 26);
+    context.lineTo(fx + fw, fy + 26);
+    context.lineTo(fx + fw, fy + fh);
+    context.lineTo(fx, fy + fh);
+    context.closePath();
+    context.fill();
+    context.fillStyle = background;
+    context.font = "600 15px ui-monospace, monospace";
     context.textAlign = "left";
     context.textBaseline = "top";
-    for (let line = 0; line < 9; line += 1) {
-      context.fillStyle = line === 4 ? accent : `${ink}${line % 3 === 0 ? "c8" : "72"}`;
-      context.fillText(`${String(line + 1).padStart(2, "0")}  ${line === 4 ? "APPROVAL RECEIVED  →  ACT" : "OBSERVE / PROPOSE / VERIFY"}`, x + 76, y + 108 + line * 35);
+    context.fillText("LAB / 实验室", fx + 18, fy + 5);
+    const entries = [
+      "A-01  CRT / SHADER RESEARCH",
+      "A-02  LIVE2D BINDING · 3D CHECK",
+      "A-03  PARTICLE PROLOGUE / QTE",
+      "A-04  LEITOWER POSTMORTEM",
+    ];
+    context.font = "500 21px ui-monospace, monospace";
+    entries.forEach((entry, line) => {
+      context.fillStyle = line === 0 ? accent : `${background}c8`;
+      context.fillText(entry, fx + 34, fy + 74 + line * 46);
+      context.strokeStyle = `${background}2e`;
+      context.beginPath();
+      context.moveTo(fx + 30, fy + 104 + line * 46);
+      context.lineTo(fx + fw - 34, fy + 104 + line * 46);
+      context.stroke();
+    });
+    // Barcode strip: the folder is a filed object, not a poster.
+    let barX = fx + fw - 176;
+    while (barX < fx + fw - 40) {
+      const bar = 2 + ((barX * 7) % 5);
+      context.fillStyle = `${background}d8`;
+      context.fillRect(barX, fy + fh - 40, bar, 24);
+      barX += bar + 3;
     }
   } else if (projectIndex === 4) {
-    const cx = x + width / 2;
-    const cy = y + height / 2 + 18;
-    context.strokeStyle = accent;
-    context.lineWidth = 3;
-    for (let wave = 0; wave < 9; wave += 1) {
-      context.beginPath();
-      for (let point = 0; point <= 120; point += 1) {
-        const px = x + 50 + ((width - 100) / 120) * point;
-        const py = cy + Math.sin(point * 0.16 + wave * 0.8) * (18 + wave * 3) * Math.exp(-Math.abs(point - 60) / 95);
-        if (point === 0) context.moveTo(px, py);
-        else context.lineTo(px, py);
-      }
-      context.globalAlpha = 0.18 + wave * 0.07;
-      context.stroke();
-    }
-    context.globalAlpha = 1;
-    context.fillStyle = ink;
-    context.font = "400 112px Georgia, serif";
-    context.textAlign = "center";
-    context.textBaseline = "middle";
-    context.fillText("say it softly", cx, cy - 4);
-  } else {
-    context.fillStyle = ink;
-    context.font = "700 180px Arial, sans-serif";
-    context.textAlign = "center";
-    context.textBaseline = "middle";
-    context.fillText("JOI", x + width / 2, y + height / 2);
+    // 05 · MY ROOM — line-sketch of the desk until the live 3D room replaces this frame.
+    const deskY = y + height * 0.68;
+    context.strokeStyle = `${ink}b8`;
+    context.lineWidth = 2.5;
+    // desk
+    context.strokeRect(x + width * 0.16, deskY, width * 0.68, height * 0.05);
+    context.beginPath();
+    context.moveTo(x + width * 0.2, deskY + height * 0.05);
+    context.lineTo(x + width * 0.2, deskY + height * 0.2);
+    context.moveTo(x + width * 0.78, deskY + height * 0.05);
+    context.lineTo(x + width * 0.78, deskY + height * 0.2);
+    context.stroke();
+    // monitor
+    context.strokeRect(x + width * 0.3, deskY - height * 0.3, width * 0.26, height * 0.24);
+    context.beginPath();
+    context.moveTo(x + width * 0.43, deskY - height * 0.06);
+    context.lineTo(x + width * 0.43, deskY);
+    context.stroke();
+    // lamp
+    context.beginPath();
+    context.moveTo(x + width * 0.68, deskY);
+    context.lineTo(x + width * 0.72, deskY - height * 0.18);
+    context.arc(x + width * 0.7, deskY - height * 0.21, width * 0.035, Math.PI * 0.9, Math.PI * 1.9);
+    context.stroke();
+    context.fillStyle = `${accent}30`;
+    context.beginPath();
+    context.moveTo(x + width * 0.685, deskY - height * 0.185);
+    context.lineTo(x + width * 0.6, deskY);
+    context.lineTo(x + width * 0.77, deskY);
+    context.closePath();
+    context.fill();
+    // cat silhouette on the desk
+    context.fillStyle = `${ink}c8`;
+    context.beginPath();
+    context.ellipse(x + width * 0.63, deskY - 12, 26, 14, 0, 0, Math.PI * 2);
+    context.fill();
+    context.beginPath();
+    context.arc(x + width * 0.655, deskY - 24, 10, 0, Math.PI * 2);
+    context.fill();
+    context.beginPath();
+    context.moveTo(x + width * 0.649, deskY - 32);
+    context.lineTo(x + width * 0.653, deskY - 40);
+    context.lineTo(x + width * 0.658, deskY - 32);
+    context.moveTo(x + width * 0.66, deskY - 32);
+    context.lineTo(x + width * 0.665, deskY - 40);
+    context.lineTo(x + width * 0.67, deskY - 31);
+    context.fill();
     context.fillStyle = accent;
-    context.fillRect(x + width * 0.18, y + height * 0.72, width * 0.64, 8);
+    context.font = "400 64px Georgia, serif";
+    context.textAlign = "center";
+    context.textBaseline = "middle";
+    context.fillText("我的房间", x + width / 2, y + height * 0.24);
+  } else {
+    // 06 · CONTACT — a clapperboard: the reel needs an ending, and the ending is a call sheet.
+    const bx = x + width * 0.16;
+    const by = y + height * 0.2;
+    const bw = width * 0.68;
+    const bh = height * 0.56;
+    // clap bar
+    const stripeH = 34;
+    context.save();
+    context.beginPath();
+    context.rect(bx, by, bw, stripeH);
+    context.clip();
+    for (let stripe = -1; stripe < 14; stripe += 1) {
+      context.fillStyle = stripe % 2 === 0 ? ink : background;
+      context.beginPath();
+      context.moveTo(bx + stripe * 52, by + stripeH);
+      context.lineTo(bx + stripe * 52 + 26, by);
+      context.lineTo(bx + stripe * 52 + 78, by);
+      context.lineTo(bx + stripe * 52 + 52, by + stripeH);
+      context.closePath();
+      context.fill();
+    }
+    context.restore();
+    // slate
+    context.fillStyle = ink;
+    context.fillRect(bx, by + stripeH + 6, bw, bh - stripeH - 6);
+    context.fillStyle = background;
+    context.font = "500 19px ui-monospace, monospace";
+    context.textAlign = "left";
+    context.textBaseline = "top";
+    const slate = [
+      "SCENE: CONTACT          TAKE: 06",
+      "DIR: GALLO LIU          GUANGZHOU",
+      "",
+      "18520455682@163.com",
+      "GITHUB.COM/GALLO233",
+      "RESUME / PDF",
+    ];
+    slate.forEach((line, index) => {
+      context.fillStyle = index === 3 ? accent : `${background}${index < 2 ? "d8" : "b8"}`;
+      context.fillText(line, bx + 30, by + stripeH + 34 + index * 38);
+    });
   }
 
   context.globalAlpha = 1;
@@ -1026,9 +1135,11 @@ function FilmCanvas({
             );
           }
           float luminance = dot(image, vec3(0.299, 0.587, 0.114));
-          float placeholderMonochrome = (abs(frameIndex - 0.0) < 0.5 || abs(frameIndex - 1.0) < 0.5 || abs(frameIndex - 2.0) < 0.5)
-            ? 0.08
-            : (filmUv.x < 0.35 ? 0.82 : 0.34);
+          // Only frame 05 (index 4) stays washed out — it is still a sketch until the live
+          // 3D room render lands there. Every other frame carries real content now.
+          float placeholderMonochrome = abs(frameIndex - 4.0) < 0.5
+            ? (filmUv.x < 0.35 ? 0.82 : 0.34)
+            : 0.08;
           image = mix(image, vec3(luminance), placeholderMonochrome);
           image = (image - 0.5) * 1.075 + 0.5;
 
@@ -1142,7 +1253,7 @@ function FilmCanvas({
       if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
       canvas.classList.remove(styles.filmCanvasDragging);
       const project = projects[modulo(currentStep, projects.length)];
-      if (openOnTap && wasTap && project && Number(project.index) <= 3) {
+      if (openOnTap && wasTap && project) {
         onProjectOpenRef.current(project.href);
       }
     };
@@ -1466,7 +1577,13 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
             step={step}
             revealRef={filmRevealRef}
             onStepChange={setStep}
-            onProjectOpen={(href) => router.push(href)}
+            onProjectOpen={(href) => {
+              // Frames whose destination is a section of this page scroll instead of
+              // navigating — a route push would remount the lab and replay the boot.
+              const section = SECTIONS.find((entry) => entry.path === href);
+              if (section) scrollToSection.current(section.id);
+              else router.push(href);
+            }}
             onReady={() => setFilmReady(true)}
             onDragStateChange={(active: boolean) => { dragActiveRef.current = active; }}
           />
@@ -1490,33 +1607,75 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
           </div>
 
           <p className={styles.hint}>
-            {activeIndex < 3 ? "CLICK TO VIEW" : "DRAG THE FILM"}
+            CLICK TO OPEN
             <span>·</span>
-            {activeIndex < 3 ? "DRAG TO BROWSE" : "USE ARROW KEYS"}
+            DRAG TO BROWSE
           </p>
         </section>
 
         {/*
-          Both closing panels are intentionally empty. The placeholder copy was cleared so the
-          rebuild starts from a blank surface rather than editing around a skeleton.
-
-          The two <section> elements stay because they are the *slots*, not the content: their
-          scroll positions live in `sections.ts` (about-me at 3.4 screens, contact at 5), the
-          header nav scrolls to them, and `--about-progress` / `--contact-progress` are written
-          every frame for them to animate against. Deleting them would mean re-deriving the
-          scroll layout when the copy comes back.
-
-          Until then these are blank screens — see the note in AGENTS.md before deploying.
+          The closing panels. Their scroll positions live in `sections.ts`; the header nav
+          scrolls to them, and `--about-progress` / `--contact-progress` are written every
+          frame. The 3D room and the lanyard badge mount beside the About copy — those land
+          with the room build and read the same activeSection state.
         */}
         <section
-          className={`${styles.closingPanel} ${activeSection === "about-me" ? styles.closingPanelActive : ""}`}
+          className={`${styles.closingPanel} ${styles.aboutPanel} ${activeSection === "about-me" ? styles.closingPanelActive : ""}`}
           aria-label="About me"
-        />
+        >
+          <p className={styles.closingKicker}>03 / GALLO — ABOUT ME</p>
+          <h2>
+            Curious about<br />what technology<br />changes in us.
+          </h2>
+          <div className={styles.closingBody}>
+            <p>
+              I am Gallo, an AI product builder and product designer in Guangzhou. I care about
+              the distance between what a system says, what it intends, and what a person
+              actually feels.
+            </p>
+            <p lang="zh-CN">有思想深度，有好奇心，愿意拥抱新事物。</p>
+          </div>
+          {/* COPY-REVIEW: 实习经历为占位槽，等作者提供后逐条替换。 */}
+          <ol className={styles.aboutTimeline} aria-label="Experience">
+            <li>
+              <span>NOW</span>
+              <strong>AI 产品 · 产品设计</strong>
+              <em>经历时间线待补充 / TIMELINE TO BE FILLED</em>
+            </li>
+          </ol>
+          <ul className={styles.interestChips} aria-label="Interests">
+            <li data-interest="crt-monitor">图形与渲染</li>
+            <li data-interest="tablet-pen">产品设计</li>
+            <li data-interest="handheld">游戏</li>
+            <li data-interest="headphones">音乐</li>
+            <li data-interest="camera">摄影</li>
+            <li data-interest="cat-figure">猫</li>
+            <li data-interest="bookstack">阅读</li>
+            <li data-interest="window">广州</li>
+          </ul>
+          <div className={styles.closingActions}>
+            <a href="/resume/gallo-liu-resume-cn.pdf" download>RESUME / PDF</a>
+            <a href="https://github.com/Gallo233" target="_blank" rel="noreferrer">GITHUB</a>
+            <a href="mailto:18520455682@163.com">EMAIL</a>
+          </div>
+        </section>
 
         <section
           className={`${styles.closingPanel} ${styles.contactPanel} ${activeSection === "contact" ? styles.closingPanelActive : ""}`}
           aria-label="Contact"
-        />
+        >
+          <p className={styles.closingKicker}>04 / CONTACT — CALL SHEET</p>
+          <h2>Let&rsquo;s make technology people can live with.</h2>
+          <div className={styles.closingBody}>
+            <p lang="zh-CN">在找 AI 产品 / 产品设计的机会，也接有意思的项目。来聊。</p>
+          </div>
+          <div className={styles.closingActions}>
+            <a href="mailto:18520455682@163.com">18520455682@163.COM</a>
+            <a href="https://github.com/Gallo233" target="_blank" rel="noreferrer">GITHUB / GALLO233</a>
+            <a href="/resume/gallo-liu-resume-cn.pdf" download>RESUME / PDF</a>
+          </div>
+          <p className={styles.closingMeta}>GUANGZHOU · GMT+8 · 2026</p>
+        </section>
 
         <header className={styles.header}>
           <a className={styles.brand} href="/" aria-label="Back to Gallo home">

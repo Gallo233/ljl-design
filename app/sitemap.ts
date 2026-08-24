@@ -22,5 +22,6 @@ export default function sitemap(): MetadataRoute.Sitemap {
     ...SECTIONS.map((section) => entry(section.path, section.id === "hero" ? 1 : 0.8)),
     ...projects.map((project) => entry(`/work/${project.slug}`, 0.7)),
     entry("/play/night-tide", 0.5),
+    entry("/lab", 0.5),
   ];
 }
