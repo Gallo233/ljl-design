@@ -5,6 +5,10 @@ import { useRouter } from "next/navigation";
 import * as THREE from "three";
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
 import { Joi9000Hero } from "./Joi9000Hero";
+import { createRoomScene } from "./room3d";
+import { AboutRoom } from "./AboutRoom";
+import { LanyardBadge } from "./badge/LanyardBadge";
+import { ROOM_OBJECTS, type RoomObjectId } from "./roomObjects";
 import {
   REEL_ANCHOR,
   SECTIONS,
@@ -1024,6 +1028,18 @@ function FilmCanvas({
     nightTideModel.group.position.y = -0.04;
     nightTideScene.add(nightTideModel.group);
 
+    // Frame 05's live scene: the room, rendered the same way the handheld is — into a
+    // 768×576 target, only while the reader is near enough to be sampling it.
+    const roomTarget = new THREE.WebGLRenderTarget(768, 576, {
+      minFilter: THREE.LinearFilter,
+      magFilter: THREE.LinearFilter,
+      depthBuffer: true,
+      stencilBuffer: false,
+    });
+    roomTarget.texture.colorSpace = THREE.SRGBColorSpace;
+    roomTarget.texture.generateMipmaps = false;
+    const roomScene = createRoomScene();
+
     let frontT = 0;
     let frontScore = -Infinity;
     for (let index = 0; index <= 500; index += 1) {
@@ -1040,6 +1056,7 @@ function FilmCanvas({
       uJoiVideoReady: { value: 0 },
       uJoiMapVideoReady: { value: 0 },
       uNightTideMap: { value: nightTideTarget.texture },
+      uRoomMap: { value: roomTarget.texture },
       uCurveLength: { value: curveLength },
       uFrameWidth: { value: FRAME_WIDTH },
       uTextureCount: { value: projects.length },
@@ -1081,6 +1098,7 @@ function FilmCanvas({
         uniform float uJoiVideoReady;
         uniform float uJoiMapVideoReady;
         uniform sampler2D uNightTideMap;
+        uniform sampler2D uRoomMap;
         uniform float uCurveLength;
         uniform float uFrameWidth;
         uniform float uTextureCount;
@@ -1127,6 +1145,8 @@ function FilmCanvas({
             image = mix(fallback, video, uJoiMapVideoReady);
           } else if (abs(frameIndex - 2.0) < 0.5) {
             image = texture2D(uNightTideMap, contentUv).rgb;
+          } else if (abs(frameIndex - 4.0) < 0.5) {
+            image = texture2D(uRoomMap, contentUv).rgb;
           } else {
             image = vec3(
               texture2D(uMap, atlasUv + vec2(chromaOffset, 0.0)).r,
@@ -1135,12 +1155,9 @@ function FilmCanvas({
             );
           }
           float luminance = dot(image, vec3(0.299, 0.587, 0.114));
-          // Only frame 05 (index 4) stays washed out — it is still a sketch until the live
-          // 3D room render lands there. Every other frame carries real content now.
-          float placeholderMonochrome = abs(frameIndex - 4.0) < 0.5
-            ? (filmUv.x < 0.35 ? 0.82 : 0.34)
-            : 0.08;
-          image = mix(image, vec3(luminance), placeholderMonochrome);
+          // A uniform whisper of desaturation — the film stock's own voice. No frame is a
+          // placeholder any more, so no frame gets washed harder than the rest.
+          image = mix(image, vec3(luminance), 0.08);
           image = (image - 0.5) * 1.075 + 0.5;
 
           bool sideBorder = localX < uBorderX || localX > 1.0 - uBorderX;
@@ -1374,6 +1391,19 @@ function FilmCanvas({
         renderer.setRenderTarget(null);
       }
 
+      // Same economy for the room: frame 05 only samples its target while adjacent.
+      const roomDistance = Math.min(
+        modulo(activeProject - 4, projects.length),
+        modulo(4 - activeProject, projects.length),
+      );
+      if (roomDistance <= 1) {
+        roomScene.update(performance.now());
+        renderer.setRenderTarget(roomTarget);
+        renderer.clear();
+        renderer.render(roomScene.scene, roomScene.frameCamera);
+        renderer.setRenderTarget(null);
+      }
+
       renderer.render(scene, camera);
       if (!readySent) { readySent = true; onReadyRef.current(); }
       frame = window.requestAnimationFrame(render);
@@ -1398,14 +1428,15 @@ function FilmCanvas({
       studioTexture.dispose();
       nightTideModel.dispose();
       nightTideTarget.dispose();
+      roomScene.dispose();
+      roomTarget.dispose();
       renderer.dispose();
     };
   }, []);
 
   const activeProject = projects[modulo(step, projects.length)];
-  const canOpen = Number(activeProject.index) <= 3;
   const openActiveProject = () => {
-    if (canOpen) onProjectOpen(activeProject.href);
+    onProjectOpen(activeProject.href);
   };
 
   return (
@@ -1424,14 +1455,10 @@ function FilmCanvas({
       </div>
       <canvas
         ref={canvasRef}
-        className={`${styles.filmCanvas} ${canOpen ? styles.filmCanvasOpenable : ""}`}
-        role={canOpen ? "link" : undefined}
-        tabIndex={canOpen ? 0 : -1}
-        aria-label={
-          canOpen
-            ? `Open ${activeProject.title} case study. Drag horizontally to browse projects.`
-            : "Drag horizontally to browse Joi projects"
-        }
+        className={`${styles.filmCanvas} ${styles.filmCanvasOpenable}`}
+        role="link"
+        tabIndex={0}
+        aria-label={`Open ${activeProject.title}. Drag horizontally to browse projects.`}
         onKeyDown={(event) => {
           if (event.key !== "Enter" && event.key !== " ") return;
           event.preventDefault();
@@ -1448,6 +1475,8 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
   const filmActiveRef = useRef(false);
   const [step, setStep] = useState(0);
   const [filmReady, setFilmReady] = useState(false);
+  /** Which room object the reader picked — lights the matching interest chip. */
+  const [pickedInterest, setPickedInterest] = useState<RoomObjectId | null>(null);
   const [computerReady, setComputerReady] = useState(false);
   const [particleForm, setParticleForm] = useState(0);
   const [activeSection, setActiveSection] = useState<SectionId>(initialSection);
@@ -1619,6 +1648,18 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
           frame. The 3D room and the lanyard badge mount beside the About copy — those land
           with the room build and read the same activeSection state.
         */}
+        {/* The room and the badge live on their own layer beneath the About copy. */}
+        <div
+          className={`${styles.aboutScene} ${activeSection === "about-me" ? styles.aboutSceneActive : ""}`}
+        >
+          <div className={styles.aboutRoomBox}>
+            <AboutRoom active={activeSection === "about-me"} onPick={setPickedInterest} />
+          </div>
+          <div className={styles.badgeBox}>
+            <LanyardBadge active={activeSection === "about-me"} />
+          </div>
+        </div>
+
         <section
           className={`${styles.closingPanel} ${styles.aboutPanel} ${activeSection === "about-me" ? styles.closingPanelActive : ""}`}
           aria-label="About me"
@@ -1644,14 +1685,15 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
             </li>
           </ol>
           <ul className={styles.interestChips} aria-label="Interests">
-            <li data-interest="crt-monitor">图形与渲染</li>
-            <li data-interest="tablet-pen">产品设计</li>
-            <li data-interest="handheld">游戏</li>
-            <li data-interest="headphones">音乐</li>
-            <li data-interest="camera">摄影</li>
-            <li data-interest="cat-figure">猫</li>
-            <li data-interest="bookstack">阅读</li>
-            <li data-interest="window">广州</li>
+            {ROOM_OBJECTS.map((object) => (
+              <li
+                key={object.id}
+                data-interest={object.id}
+                className={pickedInterest === object.id ? styles.interestActive : ""}
+              >
+                {object.labelZh}
+              </li>
+            ))}
           </ul>
           <div className={styles.closingActions}>
             <a href="/resume/gallo-liu-resume-cn.pdf" download>RESUME / PDF</a>
