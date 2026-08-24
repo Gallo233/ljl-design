@@ -11,3 +11,4 @@ out/
 joi-doorway-video/node_modules/
 joi-doorway-video/out/
 joi-doorway-video/dist/
+.env.local

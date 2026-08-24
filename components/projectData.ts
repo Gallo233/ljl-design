@@ -49,6 +49,14 @@ export type ProjectCase = {
   loop: ProjectLoopStep[];
   figures: ProjectFigure[];
   sections: ProjectSection[];
+  experience?: {
+    href: string;
+    eyebrow: string;
+    title: string;
+    body: string;
+    bodyZh: string;
+    action: string;
+  };
   nextSlug: string;
   nextTitle: string;
 };
@@ -205,139 +213,145 @@ export const projects: ProjectCase[] = [
         ],
       },
     ],
-    nextSlug: "joi-map",
-    nextTitle: "JOI MAP — REACH",
+    nextSlug: "joi-mobile",
+    nextTitle: "JOI MOBILE — WITH YOU",
   },
   {
-    slug: "joi-map",
+    slug: "joi-mobile",
     index: "02",
-    title: "JOI MAP — REACH",
-    date: "JUNE — JULY 2026",
-    kind: "WORLD-FACING AI GUIDE",
+    title: "JOI MOBILE — WITH YOU",
+    date: "JULY — AUGUST 2026",
+    kind: "NATIVE CHARACTER COMPANION",
+    tagline: "The same relationship, carried with you.",
     role: "PRODUCT / DESIGN / SWIFTUI",
-    repo: "https://github.com/Gallo233/joi-map-ios",
-    status: "WORKING SWIFTUI MVP",
-    stack: "SWIFTUI / MAPKIT / VISION / LOCAL FALLBACK",
+    repo: "https://github.com/Gallo233/Joi-Mobile",
+    status: "WORKING NATIVE PROTOTYPE",
+    stack: "SWIFTUI / LIVE2D / VRM / LOCAL MEMORY",
     summary:
-      "Joi Map extends a virtual personality toward real places, combining location, maps, visual recognition, narration, routes, and follow-up questions.",
+      "Joi Mobile brings the companion relationship to iPhone: a native character stage, conversation, user-confirmed memory, and a local library for characters the person already owns.",
     summaryZh:
-      "Joi Map 把虚拟人格延伸到真实地点，把定位、地图、视觉识别、讲解、路线与追问连接成一个持续的现场体验。",
-    question: "How far can a personality travel before it changes the way we notice the world?",
+      "Joi Mobile 把陪伴关系带到 iPhone：原生角色舞台、持续对话、由用户确认的记忆，以及存放用户自有角色文件的本地角色库。",
+    question: "How can the same companion move to a phone without turning character files and memory into somebody else's cloud account?",
     caseFrame: {
       decision:
-        "Treat locate → understand → narrate → recommend → remember as one continuous guide loop.",
+        "Design the phone around a character-first stage, local character ownership, and memory that only becomes durable after explicit confirmation.",
       outcome:
-        "A working SwiftUI MVP connecting MapKit, multilingual interaction, visual recognition, narration, routes, sources, and correction.",
+        "A working SwiftUI prototype with full- and half-body stages, conversation controls, a consented memory flow, and local character import.",
     },
-    cover: "/assets/joi-map-v3.png",
+    cover: "/work/joi-mobile/chat-stage.png",
     motion: {
-      src: "/work/joi-map/reel-joi-map.mp4",
-      poster: "/reel/02-joi-map/still.avif",
-      label: "REAL BUILD / LOCATING → PLACE",
-      caption: "The Simulator controls are cropped away; the loop uses only the running iOS product and its on-device place state.",
+      src: "/work/joi-mobile/reel-joi-mobile.mp4",
+      poster: "/reel/02-joi-mobile/still.avif",
+      label: "JOI MOBILE / GENERATED PRODUCT FILM",
+      caption: "The restored Joi Mobile product film moves through conversation, character, place, and explicit memory states.",
     },
-    loopTitle: "A guide should continue across modes.",
-    loopTitleZh: "导览不应被拆成一组 AI 按钮。",
+    loopTitle: "A companion should survive the change of screen.",
+    loopTitleZh: "换了一块屏幕，关系也不该重置。",
     loop: [
       {
         index: "01",
-        label: "LOCATE",
-        title: "Begin with the place.",
-        body: "Map state, walking context, and nearby candidates establish where the guide is standing with the person.",
+        label: "ARRIVE",
+        title: "Begin with the character, not a dashboard.",
+        body: "The app opens on a native stage where presence, conversation, and the current character remain one continuous surface.",
       },
       {
         index: "02",
-        label: "UNDERSTAND",
-        title: "Make uncertainty visible.",
-        body: "Recognition can stay local, show confidence, expose sources, and ask the person to correct what the system cannot confirm.",
+        label: "TALK",
+        title: "Keep conversation close to the body.",
+        body: "Text, push-to-talk, session controls, and full- or half-body presentation stay reachable without covering the character.",
       },
       {
         index: "03",
-        label: "NARRATE",
-        title: "Add context without replacing the place.",
-        body: "Joi turns a result into a short explanation that can be heard while attention stays on the world outside the screen.",
+        label: "REMEMBER",
+        title: "Make durable memory a choice.",
+        body: "A proposed memory becomes persistent only after the person reviews and confirms it; an empty state remains honest when nothing is saved.",
       },
       {
         index: "04",
-        label: "REMEMBER",
-        title: "Let the route become a conversation.",
-        body: "The next recommendation can use what has already been noticed instead of resetting at every map pin.",
+        label: "BRING",
+        title: "Let people bring characters they own.",
+        body: "The local library accepts Joi character packages, VRM files, and Live2D ZIP archives without presenting upload as the default path.",
       },
     ],
     figures: [
       {
-        src: "/work/joi-map/joi-map-place.png",
-        alt: "Joi Map working iOS interface showing the Contemporary Jewish Museum place guide",
-        caption: "Place guide / confidence, sources, correction, narration, and nearby picks",
+        src: "/work/joi-mobile/chat-stage.png",
+        alt: "Current Joi Mobile conversation stage in the iOS Simulator",
+        caption: "Current native build / conversation, session, memory, and library remain on one stage",
       },
       {
-        src: "/work/joi-map/joi-map-locating.png",
-        alt: "Joi Map working iOS interface in local locating mode",
-        caption: "Local locating state / the app remains useful while the backend is offline",
+        src: "/work/joi-mobile/half-body-stage.png",
+        alt: "Joi Mobile half-body character presentation in the current iOS build",
+        caption: "Presentation state / the stage can move between full- and half-body framing",
       },
       {
-        src: "/assets/joi-map-v3.png",
-        alt: "Joi Map character system with a map, camera, bag, and location details",
-        caption: "Field identity / the same personality prepared for the outside world",
+        src: "/work/joi-mobile/memory-empty.png",
+        alt: "Joi Mobile memory screen showing an honest empty state",
+        caption: "Memory boundary / nothing is implied to be saved before confirmation",
+      },
+      {
+        src: "/work/joi-mobile/character-library.png",
+        alt: "Joi Mobile local character library accepting character package, VRM, and Live2D ZIP files",
+        caption: "Local character library / the test character shown is a third-party sample, not original Joi character art",
       },
     ],
     sections: [
       {
-        heading: "Beyond Location",
-        headingZh: "不只定位",
+        heading: "Companion, Not Mini Desktop",
+        headingZh: "不是桌面版的缩小",
         body: [
-          "A normal map answers where. Joi Map is interested in where, what, why, and what might be worth noticing next.",
-          "The MVP combines MapKit, location state, nearby cultural routes, photo recognition, narration, sources, correction, and follow-up questions.",
+          "Joi Mobile does not copy the Windows shell onto a narrow screen. It starts from the moment that matters on a phone: opening the app and finding the same character already there.",
+          "Conversation, character presentation, memory, and the library stay close enough to feel like one relationship instead of four product tabs.",
         ],
         bodyZh: [
-          "普通地图回答在哪里，Joi Map 更关心在哪里、这是什么、为什么值得注意，以及下一步还可以看见什么。",
-          "当前 MVP 把 MapKit、定位状态、附近文化路线、拍照识别、讲解、信源、纠错与追问整合到一起。",
+          "Joi Mobile 不是把 Windows 外壳缩小塞进手机，而是从手机上最重要的时刻出发：打开应用时，同一个角色已经在那里。",
+          "对话、角色呈现、记忆与角色库彼此保持靠近，让它们像同一段关系，而不是四个相互割裂的功能标签。",
         ],
       },
       {
-        heading: "A Continuous Field Loop",
-        headingZh: "连续的现场循环",
+        heading: "The Character Stays Yours",
+        headingZh: "角色仍然属于用户",
         body: [
-          "The interaction is designed as one loop rather than a collection of AI buttons: locate, understand, narrate, recommend, remember, and continue the conversation.",
-          "The map, place card, audio player, nearby list, sources, correction tools, and follow-up questions all belong to the same place state rather than separate feature demos.",
+          "The current library is built around local import. Joi character packages, VRM files, and Live2D ZIP archives can enter the app from files the person controls.",
+          "This is an ownership decision before it is a format decision: a character should not become inaccessible just because an account, marketplace, or server changes.",
         ],
         bodyZh: [
-          "交互不是一组 AI 按钮，而是一个连续循环：定位、理解、讲解、推荐、记住，并继续对话。",
-          "地图、地点卡、音频播放器、附近列表、信源、纠错与追问共同属于同一个地点状态，而不是彼此割裂的功能演示。",
+          "当前角色库围绕本地导入设计，用户可以从自己控制的文件中导入 Joi 角色包、VRM 与 Live2D ZIP。",
+          "这首先是所有权选择，其次才是格式选择：角色不应该因为账号、市场或服务器变化而突然失去访问权。",
         ],
       },
       {
-        heading: "Local Before Certain",
-        headingZh: "先在本地工作，再谈确定",
+        heading: "Memory By Consent",
+        headingZh: "经确认才成为记忆",
         body: [
-          "The MVP can enter a local mode when backend services are unavailable. On-device suggestions remain useful, but the interface names uncertainty instead of presenting every result as fact.",
-          "The place view exposes confidence, source access, and correction together. Verification is part of the guide loop, not a settings task hidden somewhere else.",
+          "Continuity on a phone can easily become surveillance by convenience. The prototype instead treats durable memory as a proposal the person can inspect, accept, or leave empty.",
+          "The empty state is a product state, not missing content. It makes the boundary visible before the system asks to cross it.",
         ],
         bodyZh: [
-          "当后端服务不可用时，MVP 可以进入本地模式。设备端建议仍然可用，但界面会明确表达不确定性，而不是把每个结果都包装成事实。",
-          "地点页把置信度、信源入口和纠错放在一起。核验属于导览循环本身，而不是藏在设置里的额外任务。",
+          "手机上的连续性很容易以便利之名滑向监视。当前原型把长期记忆视为一项提议：用户可以检查、确认，也可以让它保持为空。",
+          "空状态不是缺失内容，而是一种正式的产品状态；系统在请求跨越边界之前，先让边界可见。",
         ],
       },
       {
-        heading: "Language and Pace",
-        headingZh: "语言与行走节奏",
+        heading: "What Is Real Now",
+        headingZh: "当前真实完成的部分",
         body: [
-          "Manual language switching currently supports Simplified Chinese, Traditional Chinese, English, Japanese, and Korean. Narration is designed to be short enough to accompany walking rather than demand full-screen attention.",
-          "The deeper opportunity is pace: what Joi says next should depend on whether the person is approaching, pausing, asking a follow-up, or choosing to move on.",
+          "The portfolio now shows the current SwiftUI build: native conversation stage, full- and half-body framing, session controls, memory empty state, and local character library.",
+          "The character used during testing is a third-party sample. It validates rendering and interaction, but is not presented as original Joi artwork.",
         ],
         bodyZh: [
-          "应用目前支持简中、繁中、英语、日语和韩语手动切换。讲解被控制在适合行走时聆听的长度，而不是要求用户一直盯着屏幕。",
-          "更深的机会在于节奏：Joi 下一句说什么，应该取决于人正在靠近、停留、追问，还是决定继续前行。",
+          "作品集现在展示的是当前 SwiftUI 版本：原生对话舞台、全身与半身构图、会话控制、记忆空状态以及本地角色库。",
+          "测试中使用的角色是第三方样例，用于验证渲染和交互，不会被表述为 Joi 的原创角色资产。",
         ],
       },
       {
-        heading: "The Boundary",
-        headingZh: "边界",
+        heading: "Where It Goes",
+        headingZh: "下一步",
         body: [
-          "The deeper design problem is deciding how close a virtual personality should stand to a real moment. The product should add attention and context without replacing the place itself.",
+          "The next milestone is a reliable daily loop across character import, conversation, explicit memory review, and handoff between desktop and phone—without reviving the retired Joi Map product.",
         ],
         bodyZh: [
-          "更深层的设计问题是：虚拟人格应该站得离真实时刻多近。产品应当增加注意力与上下文，而不是替代地点本身。",
+          "下一阶段是把角色导入、对话、明确的记忆复核，以及桌面与手机之间的连续体验做成可靠的日常循环，而不是重新启用已经废止的 Joi Map。",
         ],
       },
     ],
@@ -347,5 +361,6 @@ export const projects: ProjectCase[] = [
 ];
 
 export function getProject(slug: string) {
-  return projects.find((project) => project.slug === slug);
+  const canonicalSlug = slug === "joi-map" ? "joi-mobile" : slug;
+  return projects.find((project) => project.slug === canonicalSlug);
 }

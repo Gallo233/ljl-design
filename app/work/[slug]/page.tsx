@@ -3,9 +3,10 @@ import "../../../styles.css";
 import "../../../experience.css";
 import "./project-detail.css";
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { getProject, projects } from "../../../components/projectData";
-import { Live2DRouteMount } from "../../../components/Live2DRouteMount";
+import { JoiWebEmbed } from "../../../components/JoiWebEmbed";
+import { PageScrollState } from "../../../components/PageScrollState";
 
 type ProjectPageProps = {
   params: Promise<{ slug: string }>;
@@ -30,12 +31,13 @@ export async function generateMetadata({ params }: ProjectPageProps): Promise<Me
 
 export default async function ProjectPage({ params }: ProjectPageProps) {
   const { slug } = await params;
+  if (slug === "joi-map") redirect(sitePath("/work/joi-mobile"));
   const project = getProject(slug);
   if (!project) notFound();
 
   return (
     <main className={`project-page project-page--${project.slug}`}>
-      {project.slug === "joi" && <Live2DRouteMount />}
+      {project.slug === "joi" && <PageScrollState />}
       <header className="project-detail-nav">
         <a className="wordmark" href={sitePath("/")}>GALLO</a>
         <nav aria-label="Project navigation">
@@ -85,6 +87,20 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
             </div>
           </section>
 
+          {project.slug === "joi" ? (
+            <JoiWebEmbed />
+          ) : project.experience ? (
+            <a className="project-web-experience" href={sitePath(project.experience.href)}>
+              <span>{project.experience.eyebrow}</span>
+              <div>
+                <h2>{project.experience.title}</h2>
+                <p>{project.experience.body}</p>
+                <p lang="zh-CN">{project.experience.bodyZh}</p>
+              </div>
+              <strong>{project.experience.action} <b aria-hidden="true">↗</b></strong>
+            </a>
+          ) : null}
+
           <figure className="project-detail-motion">
             <video
               autoPlay
@@ -93,7 +109,7 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
               muted
               playsInline
               poster={sitePath(project.motion.poster)}
-              preload="metadata"
+              preload="auto"
               aria-describedby={`${project.slug}-motion-caption`}
             >
               <source src={sitePath(project.motion.src)} type="video/mp4" />
