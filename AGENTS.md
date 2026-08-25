@@ -239,13 +239,19 @@ untracked (7.4 MB of screenshots).
 
 ## Conventions and gotchas
 
-**Package manager.** There is a `pnpm-lock.yaml`, but pnpm is not installed on the author's
-machine. Use `npm`. `node_modules` is already populated.
+**Package manager.** Use `npm`. `node_modules` is already populated. (The `pnpm-lock.yaml` and
+`pnpm-workspace.yaml` that used to sit here were traps — pnpm is not installed on the author's
+machine — and have been removed.)
 
 ```bash
 npm run dev      # next dev -H 127.0.0.1
 npx tsc --noEmit # typecheck
 ```
+
+**Never `npm run build` while a dev server is running.** They share `.next/`, and the build
+overwrites the chunk map the running dev server is serving from — every route starts answering
+500 with `Cannot find module './vendor-chunks/…'`. It looks exactly like a code regression and is
+not one. Stop the dev server first, or restart it after the build.
 
 **Three.js is untyped here.** `app/joi-signal-lab/three.d.ts` declares `three` and its jsm
 submodules as bare modules. `THREE.Foo` works as a *value* but not as a *type* — use `any` in type
