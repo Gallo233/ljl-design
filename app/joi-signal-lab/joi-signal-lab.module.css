@@ -39,10 +39,10 @@
 .experience a { color: inherit; text-decoration: none; }
 .experience button { color: inherit; font: inherit; }
 
-.computerCanvas,
-.computerLayer,
 .heroField,
 .filmLayer,
+.filmUi,
+.stageLayer,
 .filmCanvas,
 .blueField,
 .scanlines,
@@ -89,23 +89,9 @@
   box-shadow: 0 -22px 80px rgba(110, 137, 183, .24);
 }
 
-.computerLayer {
-  z-index: 2;
-  opacity: var(--computer-opacity);
-  transform: scale(var(--computer-scale));
-  transform-origin: 50% 58%;
-  will-change: opacity, transform;
-}
-
-.computerCanvas {
-  display: block;
-  outline: none;
-  cursor: crosshair;
-  touch-action: pan-y;
-}
-
 .filmLayer {
-  z-index: 5;
+  /* Backdrop only now — the reel's picture moved onto the stage canvas above it. */
+  z-index: 1;
   overflow: clip;
   /* Arrives with --film-reveal, then clears out again as About Me comes up. */
   opacity: calc(var(--film-reveal) * (1 - var(--reel-exit)));
@@ -117,6 +103,31 @@
 }
 
 .filmLayerActive { pointer-events: auto; }
+
+/*
+ * The stage canvas layer. It sits above both CSS backdrops and below the type,
+ * and it is deliberately NOT inside `.filmLayer`: that layer's opacity, clip-path
+ * and translate are the reel arriving, and the canvas now carries the hero the reel
+ * is arriving over. The cross-fade between the two moved into the shader, which is
+ * the whole point of the merge.
+ */
+.stageLayer {
+  z-index: 4;
+  pointer-events: auto;
+}
+
+/*
+ * The reel's own furniture — rolling title, arrows, dots, hint. Still choreographed
+ * by the reel's arrival, hence the same variables the film layer uses, minus the
+ * clip-path and scale that only ever made sense on a picture.
+ */
+.filmUi {
+  z-index: 6;
+  opacity: calc(var(--film-reveal) * (1 - var(--reel-exit)));
+  pointer-events: none;
+  transform: translateY(calc(var(--film-shift) - var(--reel-exit) * 8svh));
+  will-change: opacity, transform;
+}
 
 .blueField {
   z-index: 0;
@@ -1062,8 +1073,9 @@
   .titleExitForward,
   .titleEnterBackward,
   .titleExitBackward { animation: none; }
-  .computerLayer,
+  .stageLayer,
   .filmLayer,
+  .filmUi,
   .heroCopy,
   .terminalHud { will-change: auto; }
 }

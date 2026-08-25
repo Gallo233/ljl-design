@@ -4,8 +4,10 @@ import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from
 import { useRouter } from "next/navigation";
 import * as THREE from "three";
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
-import { Joi9000Hero } from "./Joi9000Hero";
 import { createRoomScene } from "./room3d";
+import { createHeroScene } from "./heroScene";
+import { createPostChain } from "./postfx";
+import { detectQuality } from "./quality";
 import { AboutRoom } from "./AboutRoom";
 import { LanyardBadge } from "./badge/LanyardBadge";
 import { ROOM_OBJECTS, type RoomObjectId } from "./roomObjects";
@@ -881,20 +883,39 @@ function buildHandheldModel() {
   };
 }
 
+/**
+ * The stage: one canvas, one WebGL context, every fullscreen scene on the page.
+ *
+ * It renders the hero terminal into slot A and the film reel into slot B, blends
+ * them by the same reveal the CSS layers used to cross-fade on, and puts the result
+ * through `postfx.ts` — one pane of glass over both worlds instead of two canvases
+ * under a stack of CSS approximations.
+ *
+ * The About room keeps its own small context on purpose. It is a panel widget in a
+ * box, not a fullscreen layer that cross-fades with anything, so folding it in here
+ * would buy a scissor rectangle and no seam.
+ */
 function FilmCanvas({
   step,
   revealRef,
+  entryRef,
   onStepChange,
   onProjectOpen,
   onReady,
+  onHeroReady,
+  onFormChange,
   onDragStateChange,
 }: {
   step: number;
   /** Live reel reveal, 0 before it arrives to 1 once it has. */
   revealRef: { current: number };
+  /** Hero journey, 0 at the top to 1 when the reel has fully arrived. */
+  entryRef: { current: number };
   onStepChange: (step: number) => void;
   onProjectOpen: (href: string) => void;
   onReady: () => void;
+  onHeroReady: () => void;
+  onFormChange: (index: number) => void;
   /** Lets the scroll driver suspend snapping while the reader is dragging the reel. */
   onDragStateChange: (active: boolean) => void;
 }) {
@@ -905,7 +926,11 @@ function FilmCanvas({
   const onProjectOpenRef = useRef(onProjectOpen);
   const onReadyRef = useRef(onReady);
   const onDragStateChangeRef = useRef(onDragStateChange);
+  const onHeroReadyRef = useRef(onHeroReady);
+  const onFormChangeRef = useRef(onFormChange);
   useEffect(() => { onDragStateChangeRef.current = onDragStateChange; }, [onDragStateChange]);
+  useEffect(() => { onHeroReadyRef.current = onHeroReady; }, [onHeroReady]);
+  useEffect(() => { onFormChangeRef.current = onFormChange; }, [onFormChange]);
   useEffect(() => { stepRef.current = step; }, [step]);
   useEffect(() => { onStepChangeRef.current = onStepChange; }, [onStepChange]);
   useEffect(() => { onProjectOpenRef.current = onProjectOpen; }, [onProjectOpen]);
@@ -914,18 +939,31 @@ function FilmCanvas({
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const isMobile = window.matchMedia("(max-width: 760px)").matches;
-    // MSAA over a full-screen canvas costs more on a phone than the softer edges are worth,
-    // especially with the hero's second WebGL context alive on the same GPU.
+    const tier = detectQuality();
+    const reducedMotion = tier.reducedMotion;
+    const isMobile = tier.isMobile;
+    // One context for the whole stage. MSAA over a full-screen canvas costs more on a
+    // phone than the softer edges are worth — and the post chain resolves most edges
+    // anyway, because everything it touches has been through a bloom pyramid.
     const renderer = new THREE.WebGLRenderer({
       canvas,
       alpha: true,
-      antialias: !isMobile,
+      antialias: tier.antialias,
       powerPreference: "high-performance",
     });
     renderer.setClearColor(0x000000, 0);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.shadowMap.enabled = tier.shadows;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+    const post = createPostChain(renderer, tier);
+    const hero = createHeroScene({
+      isMobile: tier.isMobile,
+      reducedMotion: tier.reducedMotion,
+      shadows: tier.shadows,
+      onFormChange: (index) => onFormChangeRef.current(index),
+      onModelReady: () => onHeroReadyRef.current(),
+    });
 
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(65, 1, 0.1, 305);
@@ -1219,10 +1257,13 @@ function FilmCanvas({
       width = Math.max(1, bounds.width);
       height = Math.max(1, bounds.height);
       const aspect = width / height;
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio, width < 720 ? 1.25 : 1.7));
+      const pixelRatio = Math.min(window.devicePixelRatio || 1, tier.dprCap);
+      renderer.setPixelRatio(pixelRatio);
       renderer.setSize(width, height, false);
       camera.aspect = aspect;
       camera.updateProjectionMatrix();
+      hero.setSize(width, height, pixelRatio);
+      post.setSize(width, height, pixelRatio);
       const reelY = aspect <= 1 ? -1.6 : -1.6 - 0.3 * aspect + 0.2;
       const widthScale = THREE.MathUtils.clamp((width - 500) / (2560 - 500), 0, 1);
       const sourceScale = THREE.MathUtils.lerp(0.7, 0.9, widthScale) + 0.1 * aspect;
@@ -1238,7 +1279,25 @@ function FilmCanvas({
         -((event.clientY - bounds.top) / Math.max(1, bounds.height) - 0.5),
       );
     };
+    /*
+     * One canvas now serves both worlds, so it also routes the pointer between them.
+     * The old arrangement got this for free: the film layer sat under
+     * `pointer-events: none` until the reel arrived. Here the boundary is explicit,
+     * and it is the same number the draw gate uses.
+     */
+    const HERO_OWNS_POINTER_UNTIL = 0.86;
+    const heroOwnsPointer = () => entryRef.current < HERO_OWNS_POINTER_UNTIL;
+
+    const heroPointerFromEvent = (event: PointerEvent) => {
+      const bounds = canvas.getBoundingClientRect();
+      hero.setPointer(
+        ((event.clientX - bounds.left) / Math.max(1, bounds.width)) * 2 - 1,
+        -(((event.clientY - bounds.top) / Math.max(1, bounds.height)) * 2 - 1),
+      );
+    };
+
     const handlePointerDown = (event: PointerEvent) => {
+      if (heroOwnsPointer()) return;
       pointerPosition(event);
       drag.active = true;
       onDragStateChangeRef.current(true);
@@ -1249,6 +1308,10 @@ function FilmCanvas({
       canvas.classList.add(styles.filmCanvasDragging);
     };
     const handlePointerMove = (event: PointerEvent) => {
+      if (heroOwnsPointer()) {
+        heroPointerFromEvent(event);
+        return;
+      }
       pointerPosition(event);
       if (!drag.active) return;
       const limit = width * 0.2;
@@ -1277,7 +1340,13 @@ function FilmCanvas({
     };
     const handlePointerUp = (event: PointerEvent) => finishDrag(event, true);
     const handlePointerCancel = (event: PointerEvent) => finishDrag(event, false);
-    const handleLeave = () => { if (!drag.active) targetPointer.set(0, 0); };
+    const handleLeave = () => {
+      hero.setPointer(0, 0);
+      if (!drag.active) targetPointer.set(0, 0);
+    };
+    // Clicking the terminal cycles the particle form — the hero's one interaction,
+    // and it must not fire once the reel owns the surface.
+    const handleClick = () => { if (heroOwnsPointer()) hero.cycleForm(); };
     const handleWheel = (event: WheelEvent) => {
       if (Math.abs(event.deltaX) <= Math.abs(event.deltaY)) return;
       event.preventDefault();
@@ -1298,22 +1367,30 @@ function FilmCanvas({
     canvas.addEventListener("pointerup", handlePointerUp);
     canvas.addEventListener("pointercancel", handlePointerCancel);
     canvas.addEventListener("pointerleave", handleLeave);
+    canvas.addEventListener("click", handleClick);
     canvas.addEventListener("wheel", handleWheel, { passive: false });
     const resizeObserver = new ResizeObserver(resize);
     resizeObserver.observe(canvas);
     resize();
 
+    let elapsed = 0;
     const render = () => {
       const delta = Math.min(clock.getDelta(), 0.05);
 
-      // Off-screen work is still work. The reel sits at reveal 0 for the whole hero section,
-      // and a hidden tab suspends nothing by itself. The first pass always runs: `onReady`
-      // fires from inside it and the boot loader waits on that.
-      if (readySent && (document.hidden || revealRef.current <= 0.001)) {
+      const reveal = revealRef.current;
+      const entry = entryRef.current;
+      const reelVisible = reveal > 0.001;
+      const heroVisible = entry < HERO_OWNS_POINTER_UNTIL;
+
+      // A hidden tab suspends nothing by itself, and the reel sits at reveal 0 for the
+      // whole hero section. The first pass always runs: `onReady` fires from inside it
+      // and the boot loader waits on that.
+      if (readySent && document.hidden) {
         reelMotions.forEach((motion) => motion.pause());
         frame = window.requestAnimationFrame(render);
         return;
       }
+      if (!reelVisible) reelMotions.forEach((motion) => motion.pause());
 
       if (!drag.active && observedStep !== stepRef.current) {
         observedStep = stepRef.current;
@@ -1405,7 +1482,34 @@ function FilmCanvas({
         renderer.setRenderTarget(null);
       }
 
-      renderer.render(scene, camera);
+      /*
+       * The stage, in order: hero into slot A, reel into slot B, then one chain over
+       * both. A scene that is not on screen is not drawn — but its slot is cleared,
+       * because a stale slot blended at even a hundredth would show yesterday's frame
+       * ghosted behind today's.
+       */
+      hero.update(delta, entry);
+      renderer.setRenderTarget(post.slotA);
+      renderer.clear();
+      if (heroVisible || !readySent) renderer.render(hero.scene, hero.camera);
+
+      renderer.setRenderTarget(post.slotB);
+      renderer.clear();
+      if (reelVisible || !readySent) renderer.render(scene, camera);
+      renderer.setRenderTarget(null);
+
+      elapsed += delta;
+      post.render({
+        blend: reveal,
+        // Slot A is the hero here, and the hero is the one scene that was authored
+        // under Neutral tone mapping — which a render target silently drops.
+        toneMapA: 1,
+        // Past the reel the stage eases toward the stage colour rather than cutting:
+        // the closing panels read on a calm tube, not a dead one.
+        dim: THREE.MathUtils.clamp((entryRef.current === 0 ? 0 : 0), 0, 1),
+        elapsed,
+      });
+
       if (!readySent) { readySent = true; onReadyRef.current(); }
       frame = window.requestAnimationFrame(render);
     };
@@ -1419,6 +1523,7 @@ function FilmCanvas({
       canvas.removeEventListener("pointerup", handlePointerUp);
       canvas.removeEventListener("pointercancel", handlePointerCancel);
       canvas.removeEventListener("pointerleave", handleLeave);
+      canvas.removeEventListener("click", handleClick);
       canvas.removeEventListener("wheel", handleWheel);
       window.clearTimeout(wheel.resetTimer);
       geometry.dispose();
@@ -1431,6 +1536,8 @@ function FilmCanvas({
       nightTideTarget.dispose();
       roomScene.dispose();
       roomTarget.dispose();
+      hero.dispose();
+      post.dispose();
       renderer.dispose();
     };
   }, []);
@@ -1497,8 +1604,24 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
     let cancelled = false;
     document.fonts.ready.then(() => { if (!cancelled) setFontsReady(true); });
     // Fonts must never hold the machine hostage — a CDN stall boots us anyway.
-    const failsafe = window.setTimeout(() => { if (!cancelled) setFontsReady(true); }, 3200);
-    return () => { cancelled = true; window.clearTimeout(failsafe); };
+    const fontFailsafe = window.setTimeout(() => { if (!cancelled) setFontsReady(true); }, 3200);
+    /*
+     * Nor may anything else. The boot screen holds the page still, so a system that
+     * never reports ready is not a slow loader — it is a page nobody can scroll. A
+     * missing GLB, a refused WebGL context, a decoder that 404s: all of them end here
+     * instead of in a reader staring at a lock they cannot break.
+     */
+    const bootFailsafe = window.setTimeout(() => {
+      if (cancelled) return;
+      setFontsReady(true);
+      setFilmReady(true);
+      setComputerReady(true);
+    }, 9000);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(fontFailsafe);
+      window.clearTimeout(bootFailsafe);
+    };
   }, []);
 
   // The reference focuses its scroll container when the intro releases; focusing the
@@ -1610,13 +1733,6 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
     >
       <div className={styles.stage}>
         <div className={styles.heroField} aria-hidden="true" />
-        <div className={styles.computerLayer}>
-          <Joi9000Hero
-            progressRef={entryRef}
-            onFormChange={setParticleForm}
-            onReady={() => setComputerReady(true)}
-          />
-        </div>
 
         <section className={styles.heroCopy} aria-labelledby="joi9000-title">
           <p>PERSONAL AI SYSTEM · GUANGZHOU / 2026</p>
@@ -1645,9 +1761,21 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
           aria-label="Selected Joi work"
         >
           <div className={styles.blueField} aria-hidden="true" />
+        </section>
+
+        {/*
+          The stage canvas sits above both CSS backdrops and carries every fullscreen
+          scene. It is deliberately outside `.filmLayer`: that layer's opacity and
+          clip-path are the reel's arrival, and applying them to the canvas would fade
+          the hero out along with the reel it is handing over to.
+        */}
+        <div className={styles.stageLayer}>
           <FilmCanvas
             step={step}
             revealRef={filmRevealRef}
+            entryRef={entryRef}
+            onHeroReady={() => setComputerReady(true)}
+            onFormChange={setParticleForm}
             onStepChange={setStep}
             onProjectOpen={(href) => {
               // Frames whose destination is a section of this page scroll instead of
@@ -1670,6 +1798,12 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
             onReady={() => setFilmReady(true)}
             onDragStateChange={(active: boolean) => { dragActiveRef.current = active; }}
           />
+        </div>
+
+        <section
+          className={`${styles.filmUi} ${activeSection === "selected-work" ? styles.filmLayerActive : ""}`}
+          aria-label="Selected Joi work"
+        >
           <RollingProjectTitle step={step} />
 
           <div className={styles.controls}>
@@ -1844,9 +1978,9 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
           </div>
         )}
 
-        <div className={styles.scanlines} aria-hidden="true" />
+        {/* Scanlines and grain now come from the post chain. What stays is the
+            vignette, which is the tube's edge over the DOM as well as the canvas. */}
         <div className={styles.vignette} aria-hidden="true" />
-        <div className={styles.grain} aria-hidden="true" />
 
         <SiteHUD />
 
