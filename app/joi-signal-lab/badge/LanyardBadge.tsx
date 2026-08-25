@@ -25,7 +25,18 @@ const SEGMENT_LENGTH = 16;
  * a sub-6px release counts as a click and flips the card. The sim sleeps when still —
  * rAF stops entirely — and wakes on pointer or on the section becoming active.
  */
-export function LanyardBadge({ active }: { active: boolean }) {
+export function LanyardBadge({
+  active,
+  pullRef,
+  onPulledToBottom,
+}: {
+  active: boolean;
+  /** How far the reader has scrolled through About, 0 to 1. Lets the page pull the
+   *  badge down, so scrolling and dragging are visibly the same gesture. */
+  pullRef?: { current: number };
+  /** Fired once when the card is dragged to the bottom of its run. */
+  onPulledToBottom?: () => void;
+}) {
   const rootRef = useRef<HTMLDivElement>(null);
   const svgPathRef = useRef<SVGPathElement>(null);
   const stitchRef = useRef<SVGPathElement>(null);
@@ -34,6 +45,10 @@ export function LanyardBadge({ active }: { active: boolean }) {
   const [hasBackArt, setHasBackArt] = useState(true);
   const backArtRef = useRef<HTMLImageElement>(null);
   const wakeRef = useRef<() => void>(() => {});
+  const onPulledRef = useRef(onPulledToBottom);
+  onPulledRef.current = onPulledToBottom;
+  const pullSourceRef = useRef(pullRef);
+  pullSourceRef.current = pullRef;
 
   // An image that 404s before hydration errors into the void — onError never fires.
   // One post-mount check catches that case; the art appears the moment the author
@@ -53,10 +68,18 @@ export function LanyardBadge({ active }: { active: boolean }) {
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
     let anchorX = root.clientWidth / 2;
+    let boxHeight = Math.max(1, root.clientHeight);
     const rope = createRope(anchorX, -6, ROPE_SEGMENTS, SEGMENT_LENGTH);
+    /*
+     * How far down the badge's run the page has pulled it. Scrolling through About
+     * lowers the anchor; dragging the card lowers the card. Both are the same motion
+     * to the reader, which is the point — the gesture and the scroll are one thing.
+     */
+    const anchorY = () => -6 + (pullSourceRef.current?.current ?? 0) * boxHeight * 0.42;
     const resize = () => {
       anchorX = root.clientWidth / 2;
-      rope.setAnchor(anchorX, -6);
+      boxHeight = Math.max(1, root.clientHeight);
+      rope.setAnchor(anchorX, anchorY());
       wake();
     };
     const resizeObserver = new ResizeObserver(resize);
@@ -69,6 +92,7 @@ export function LanyardBadge({ active }: { active: boolean }) {
 
     // Pointer bookkeeping: recent samples give release velocity; distance gates the flip.
     let dragging = false;
+    let pulled = false;
     let downAt = { x: 0, y: 0, time: 0 };
     let moved = 0;
     const samples: Array<{ x: number; y: number; t: number }> = [];
@@ -100,9 +124,16 @@ export function LanyardBadge({ active }: { active: boolean }) {
       card.style.setProperty("--swing", (Math.max(-1, Math.min(1, vx * 0.25))).toFixed(3));
     };
 
+    let lastPull = -1;
     const tick = (time: number) => {
       const dt = lastTime ? Math.min(time - lastTime, 64) : 16;
       lastTime = time;
+      const pull = pullSourceRef.current?.current ?? 0;
+      if (Math.abs(pull - lastPull) > 0.0005) {
+        lastPull = pull;
+        rope.setAnchor(anchorX, anchorY());
+        stillFrames = 0;
+      }
       const moving = rope.step(dt);
       draw();
       if (moving) stillFrames = 0;
@@ -135,6 +166,7 @@ export function LanyardBadge({ active }: { active: boolean }) {
     const onPointerDown = (event: PointerEvent) => {
       const point = localPoint(event);
       dragging = true;
+      pulled = false;
       moved = 0;
       downAt = { x: point.x, y: point.y, time: performance.now() };
       samples.length = 0;
@@ -153,6 +185,11 @@ export function LanyardBadge({ active }: { active: boolean }) {
       const point = localPoint(event);
       moved = Math.max(moved, Math.hypot(point.x - downAt.x, point.y - downAt.y));
       rope.drag(point.x, point.y);
+      // Pulled to the end of its run: the reader has asked to go on to Contact.
+      if (!pulled && point.y > boxHeight * 0.8) {
+        pulled = true;
+        onPulledRef.current?.();
+      }
       const now = performance.now();
       samples.push({ x: point.x, y: point.y, t: now });
       while (samples.length > 2 && now - samples[0].t > 90) samples.shift();

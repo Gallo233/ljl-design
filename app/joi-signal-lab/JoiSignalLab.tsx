@@ -8,7 +8,6 @@ import { createRoomScene } from "./room3d";
 import { createHeroScene } from "./heroScene";
 import { createPostChain } from "./postfx";
 import { detectQuality } from "./quality";
-import { AboutRoom } from "./AboutRoom";
 import { LanyardBadge } from "./badge/LanyardBadge";
 import { ROOM_OBJECTS, type RoomObjectId } from "./roomObjects";
 import { SiteHUD } from "../../components/SiteHUD";
@@ -905,6 +904,8 @@ function FilmCanvas({
   onReady,
   onHeroReady,
   onFormChange,
+  onRoomHover,
+  onRoomPick,
   onDragStateChange,
 }: {
   step: number;
@@ -919,6 +920,8 @@ function FilmCanvas({
   onReady: () => void;
   onHeroReady: () => void;
   onFormChange: (index: number) => void;
+  onRoomHover: (id: RoomObjectId | null) => void;
+  onRoomPick: (id: RoomObjectId | null) => void;
   /** Lets the scroll driver suspend snapping while the reader is dragging the reel. */
   onDragStateChange: (active: boolean) => void;
 }) {
@@ -931,6 +934,10 @@ function FilmCanvas({
   const onDragStateChangeRef = useRef(onDragStateChange);
   const onHeroReadyRef = useRef(onHeroReady);
   const onFormChangeRef = useRef(onFormChange);
+  const onRoomHoverRef = useRef(onRoomHover);
+  const onRoomPickRef = useRef(onRoomPick);
+  useEffect(() => { onRoomHoverRef.current = onRoomHover; }, [onRoomHover]);
+  useEffect(() => { onRoomPickRef.current = onRoomPick; }, [onRoomPick]);
   useEffect(() => { onDragStateChangeRef.current = onDragStateChange; }, [onDragStateChange]);
   useEffect(() => { onHeroReadyRef.current = onHeroReady; }, [onHeroReady]);
   useEffect(() => { onFormChangeRef.current = onFormChange; }, [onFormChange]);
@@ -1267,6 +1274,7 @@ function FilmCanvas({
       camera.updateProjectionMatrix();
       hero.setSize(width, height, pixelRatio);
       post.setSize(width, height, pixelRatio);
+      roomScene.setFullAspect(aspect);
       const reelY = aspect <= 1 ? -1.6 : -1.6 - 0.3 * aspect + 0.2;
       const widthScale = THREE.MathUtils.clamp((width - 500) / (2560 - 500), 0, 1);
       const sourceScale = THREE.MathUtils.lerp(0.7, 0.9, widthScale) + 0.1 * aspect;
@@ -1290,6 +1298,18 @@ function FilmCanvas({
      */
     const HERO_OWNS_POINTER_UNTIL = 0.86;
     const heroOwnsPointer = () => entryRef.current < HERO_OWNS_POINTER_UNTIL;
+    /** Once the room is the picture, it is also what the pointer is pointing at. */
+    const roomOwnsPointer = () => exitRef.current > 0.55;
+    const roomPointer = { x: 0, y: 0 };
+    let hoveredRoomObject: RoomObjectId | null = null;
+
+    const normalisedPointer = (event: PointerEvent | MouseEvent) => {
+      const bounds = canvas.getBoundingClientRect();
+      return {
+        x: ((event.clientX - bounds.left) / Math.max(1, bounds.width)) * 2 - 1,
+        y: -(((event.clientY - bounds.top) / Math.max(1, bounds.height)) * 2 - 1),
+      };
+    };
 
     const heroPointerFromEvent = (event: PointerEvent) => {
       const bounds = canvas.getBoundingClientRect();
@@ -1313,6 +1333,19 @@ function FilmCanvas({
     const handlePointerMove = (event: PointerEvent) => {
       if (heroOwnsPointer()) {
         heroPointerFromEvent(event);
+        return;
+      }
+      if (roomOwnsPointer()) {
+        const ndc = normalisedPointer(event);
+        roomPointer.x = ndc.x;
+        roomPointer.y = ndc.y;
+        const hit = roomScene.raycastAt(ndc);
+        if (hit !== hoveredRoomObject) {
+          hoveredRoomObject = hit;
+          roomScene.setHover(hit);
+          onRoomHoverRef.current(hit);
+          canvas.style.cursor = hit ? "pointer" : "";
+        }
         return;
       }
       pointerPosition(event);
@@ -1345,11 +1378,25 @@ function FilmCanvas({
     const handlePointerCancel = (event: PointerEvent) => finishDrag(event, false);
     const handleLeave = () => {
       hero.setPointer(0, 0);
+      roomPointer.x = 0;
+      roomPointer.y = 0;
+      if (hoveredRoomObject) {
+        hoveredRoomObject = null;
+        roomScene.setHover(null);
+        onRoomHoverRef.current(null);
+        canvas.style.cursor = "";
+      }
       if (!drag.active) targetPointer.set(0, 0);
     };
     // Clicking the terminal cycles the particle form — the hero's one interaction,
     // and it must not fire once the reel owns the surface.
-    const handleClick = () => { if (heroOwnsPointer()) hero.cycleForm(); };
+    const handleClick = (event: MouseEvent) => {
+      if (heroOwnsPointer()) { hero.cycleForm(); return; }
+      if (!roomOwnsPointer()) return;
+      const hit = roomScene.raycastAt(normalisedPointer(event));
+      roomScene.focus(hit);
+      onRoomPickRef.current(hit);
+    };
     const handleWheel = (event: WheelEvent) => {
       if (Math.abs(event.deltaX) <= Math.abs(event.deltaY)) return;
       event.preventDefault();
@@ -1382,6 +1429,7 @@ function FilmCanvas({
 
       const reveal = revealRef.current;
       const entry = entryRef.current;
+      const exit = exitRef.current;
       const reelVisible = reveal > 0.001;
       const heroVisible = entry < HERO_OWNS_POINTER_UNTIL;
 
@@ -1472,13 +1520,18 @@ function FilmCanvas({
         renderer.setRenderTarget(null);
       }
 
-      // Same economy for the room: frame 05 only samples its target while adjacent.
+      /*
+       * The room has two jobs: it is the picture inside reel frame 05, and once the
+       * reel hands over it is the whole stage — the reader walks out of the machine
+       * and into the room it was sitting in. One scene, two cameras, updated once.
+       */
       const roomDistance = Math.min(
         modulo(activeProject - 4, projects.length),
         modulo(4 - activeProject, projects.length),
       );
+      const roomIsStage = exit > 0.001;
+      if (roomDistance <= 1 || roomIsStage) roomScene.update(performance.now(), roomPointer);
       if (roomDistance <= 1) {
-        roomScene.update(performance.now());
         renderer.setRenderTarget(roomTarget);
         renderer.clear();
         renderer.render(roomScene.scene, roomScene.frameCamera);
@@ -1494,7 +1547,8 @@ function FilmCanvas({
       hero.update(delta, entry);
       renderer.setRenderTarget(post.slotA);
       renderer.clear();
-      if (heroVisible || !readySent) renderer.render(hero.scene, hero.camera);
+      if (roomIsStage) renderer.render(roomScene.scene, roomScene.fullCamera);
+      else if (heroVisible || !readySent) renderer.render(hero.scene, hero.camera);
 
       renderer.setRenderTarget(post.slotB);
       renderer.clear();
@@ -1507,7 +1561,16 @@ function FilmCanvas({
        * more colour split, more grain — because that is the moment the page stops
        * being a room with a computer in it and becomes the computer's own output.
        */
-      const exit = exitRef.current;
+      /*
+       * Leaving the reel is a push, not a dissolve. The ribbon comes at the camera
+       * through the exit and the room is already behind it, so the cut lands at the
+       * moment the film is too close to read — you go through the picture rather
+       * than watching it fade.
+       */
+      camera.position.z = 5 - exit * 3.1;
+      camera.fov = 65 + exit * 14;
+      camera.updateProjectionMatrix();
+
       post.uniforms.uLensDistortion.value = THREE.MathUtils.lerp(0.42, 0.92, reveal);
       post.uniforms.uChromaticAberrationStrength.value = THREE.MathUtils.lerp(0.6, 1.15, reveal);
       post.uniforms.uNoiseIntensity.value = THREE.MathUtils.lerp(0.055, 0.085, reveal);
@@ -1518,13 +1581,18 @@ function FilmCanvas({
 
       elapsed += delta;
       post.render({
-        blend: reveal,
-        // Slot A is the hero here, and the hero is the one scene that was authored
-        // under Neutral tone mapping — which a render target silently drops.
-        toneMapA: 1,
-        // Past the reel the tube eases down rather than cutting out: the closing
-        // panels read on a calm machine, not a dead one.
-        dim: THREE.MathUtils.clamp(exit * 0.72, 0, 1),
+        // The reel arrives on `reveal` and leaves on `exit`. Dropping the exit term
+        // is what left the film hanging behind About and Contact: `reveal` saturates
+        // at the anchor and never comes back down on its own.
+        // The handover is deliberately late and quick: the reel holds the frame while
+        // it pushes in, then gives way over the last third of the exit.
+        blend: reveal * (1 - smoothStep((exit - 0.62) / 0.3)),
+        // Only the hero was authored under Neutral tone mapping, which a render
+        // target drops. The room in the same slot never had it.
+        toneMapA: roomIsStage ? 0 : 1,
+        // No dimming past the reel any more — the room is the picture there, not an
+        // afterglow, and dimming it would just make the About section look broken.
+        dim: 0,
         elapsed,
       });
 
@@ -1603,6 +1671,7 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
   const [filmReady, setFilmReady] = useState(false);
   /** Which room object the reader picked — lights the matching interest chip. */
   const [pickedInterest, setPickedInterest] = useState<RoomObjectId | null>(null);
+  const [hoveredInterest, setHoveredInterest] = useState<RoomObjectId | null>(null);
   const [computerReady, setComputerReady] = useState(false);
   const [fontsReady, setFontsReady] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -1666,6 +1735,8 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
   const entryRef = useRef(0);
   const filmRevealRef = useRef(0);
   const reelExitRef = useRef(0);
+  /** How far through About the reader is — the page's own pull on the badge. */
+  const aboutProgressRef = useRef(0);
   const dragActiveRef = useRef(false);
 
   useEffect(() => {
@@ -1721,7 +1792,9 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
       style.setProperty("--terminal-opacity", (1 - smoothStep(entry / 0.85)).toFixed(4));
       style.setProperty("--terminal-shift", `${(entry * 18).toFixed(2)}px`);
       style.setProperty("--reel-exit", reelExit.toFixed(4));
-      style.setProperty("--about-progress", progressWithin("about-me", screens).toFixed(4));
+      const aboutProgress = progressWithin("about-me", screens);
+      aboutProgressRef.current = aboutProgress;
+      style.setProperty("--about-progress", aboutProgress.toFixed(4));
       style.setProperty("--contact-progress", progressWithin("contact", screens).toFixed(4));
     },
     onSectionChange: setActiveSection,
@@ -1797,6 +1870,8 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
             exitRef={reelExitRef}
             onHeroReady={() => setComputerReady(true)}
             onFormChange={setParticleForm}
+            onRoomHover={setHoveredInterest}
+            onRoomPick={setPickedInterest}
             onStepChange={setStep}
             onProjectOpen={(href) => {
               // Frames whose destination is a section of this page scroll instead of
@@ -1857,16 +1932,27 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
           frame. The 3D room and the lanyard badge mount beside the About copy — those land
           with the room build and read the same activeSection state.
         */}
-        {/* The room and the badge live on their own layer beneath the About copy. */}
+        {/*
+          The room is the stage itself once the reel hands over, so what is left on
+          this layer is the badge — and the label for whatever object the reader is
+          pointing at out there in the room.
+        */}
         <div
           className={`${styles.aboutScene} ${activeSection === "about-me" ? styles.aboutSceneActive : ""}`}
         >
-          <div className={styles.aboutRoomBox}>
-            <AboutRoom active={activeSection === "about-me"} onPick={setPickedInterest} />
-          </div>
           <div className={styles.badgeBox}>
-            <LanyardBadge active={activeSection === "about-me"} />
+            <LanyardBadge
+              active={activeSection === "about-me"}
+              pullRef={aboutProgressRef}
+              onPulledToBottom={() => scrollToSection.current("contact")}
+            />
           </div>
+          {hoveredInterest && (
+            <p className={styles.roomLabel} aria-hidden="true">
+              {ROOM_OBJECTS.find((entry) => entry.id === hoveredInterest)?.labelZh}
+              <span>{ROOM_OBJECTS.find((entry) => entry.id === hoveredInterest)?.label}</span>
+            </p>
+          )}
         </div>
 
         <section
@@ -1898,7 +1984,11 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
               <li
                 key={object.id}
                 data-interest={object.id}
-                className={pickedInterest === object.id ? styles.interestActive : ""}
+                className={
+                  pickedInterest === object.id || hoveredInterest === object.id
+                    ? styles.interestActive
+                    : ""
+                }
               >
                 {object.labelZh}
               </li>

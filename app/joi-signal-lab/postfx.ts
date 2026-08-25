@@ -412,7 +412,7 @@ export function createPostChain(renderer: any, tier: QualityTier): PostChain {
     renderer.capabilities.isWebGL2 || renderer.extensions.has("EXT_color_buffer_half_float");
   const targetType = canHalfFloat ? THREE.HalfFloatType : THREE.UnsignedByteType;
 
-  const makeTarget = (width: number, height: number, depth: boolean) => {
+  const makeTarget = (width: number, height: number, depth: boolean, samples = 0) => {
     const target = new THREE.WebGLRenderTarget(Math.max(1, width), Math.max(1, height), {
       type: targetType,
       format: THREE.RGBAFormat,
@@ -423,6 +423,7 @@ export function createPostChain(renderer: any, tier: QualityTier): PostChain {
       depthBuffer: depth,
       stencilBuffer: false,
       generateMipmaps: false,
+      samples,
     });
     // Scene targets hold linear light and the base targets hold encoded colour;
     // neither is an sRGB-tagged texture, because tagging one would make three
@@ -431,8 +432,11 @@ export function createPostChain(renderer: any, tier: QualityTier): PostChain {
     return target;
   };
 
-  const slotA = makeTarget(2, 2, true);
-  const slotB = makeTarget(2, 2, true);
+  // The canvas's own `antialias` only ever applied to the default framebuffer, so
+  // moving every scene through a target lost it. These ask for it back explicitly.
+  const sceneSamples = tier.antialias && renderer.capabilities.isWebGL2 ? 4 : 0;
+  const slotA = makeTarget(2, 2, true, sceneSamples);
+  const slotB = makeTarget(2, 2, true, sceneSamples);
   const sceneTarget = makeTarget(2, 2, false);
   const baseTargets = [makeTarget(2, 2, false), makeTarget(2, 2, false)];
   let baseIndex = 0;
@@ -446,9 +450,12 @@ export function createPostChain(renderer: any, tier: QualityTier): PostChain {
 
   const uniforms: Record<string, { value: any }> = {
     // Bloom and phosphor — steps 1 and 2.
-    uBloomIntensity: { value: 1.0 },
-    uBloomThreshold: { value: 0.1 },
-    uBloomSmoothing: { value: 0.2 },
+    // The source's 0.1 threshold is tuned for a dark CRT. Our reel plays bright
+    // product screens, where 0.1 means every pixel blooms and every frame blows out.
+    // The knee starts where a highlight actually is instead.
+    uBloomIntensity: { value: 0.32 },
+    uBloomThreshold: { value: 0.62 },
+    uBloomSmoothing: { value: 0.28 },
     uBloomRadius: { value: 0.5 },
     uPhosphor: { value: new THREE.Vector3(1.0, 0.8, 0.0) },
     uPhosphorAmount: { value: 0.1 },

@@ -540,63 +540,62 @@
   transition: opacity .6s ease;
 }
 
-.aboutRoomBox {
+/*
+ * The room is the stage now, not a box on the panel, so what lives on this layer is
+ * the label for whatever object the reader is pointing at out in the scene.
+ */
+.roomLabel {
   position: absolute;
-  top: 8svh;
-  right: clamp(14px, 5vw, 90px);
-  width: min(46vw, 660px);
-  aspect-ratio: 4 / 3;
-  pointer-events: auto;
+  right: clamp(26px, 6vw, 120px);
+  top: 16svh;
+  margin: 0;
+  display: grid;
+  gap: 4px;
+  justify-items: end;
+  text-align: right;
+  font-family: var(--font-signal-display), Georgia, serif;
+  font-size: clamp(22px, 2.6vw, 40px);
+  line-height: 1;
+  pointer-events: none;
+  animation: roomLabelIn .3s ease both;
 }
 
-.aboutRoom {
-  position: relative;
-  width: 100%;
-  height: 100%;
-}
-
-.roomTooltip {
-  position: absolute;
-  top: 0;
-  left: 0;
-  z-index: 3;
-  padding: 5px 9px;
+.roomLabel span {
   font-family: var(--font-signal-mono), monospace;
   font-size: 9px;
-  letter-spacing: .14em;
-  color: var(--ink);
-  background: rgba(10, 18, 33, .88);
-  border: 1px solid rgba(242, 238, 232, .25);
-  border-radius: 4px;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity .18s ease;
-  white-space: nowrap;
+  letter-spacing: .18em;
+  color: var(--coral);
 }
 
+@keyframes roomLabelIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+
+/*
+ * The badge hangs on the right, clear of the copy in the bottom left. Its box is the
+ * rope's world: the lanyard is pinned to the top of this element and the card swings
+ * inside it, so the height here is how far the badge can be pulled down.
+ */
 .badgeBox {
   position: absolute;
   top: 0;
-  left: clamp(30px, 16vw, 300px);
-  width: 300px;
-  height: 72svh;
+  right: clamp(24px, 12vw, 260px);
+  width: 320px;
+  height: 100%;
   pointer-events: none;
 }
 
 @media (max-width: 900px) {
-  .aboutRoomBox {
-    top: 6svh;
-    right: 4vw;
-    width: min(62vw, 420px);
-  }
-  .badgeBox { left: clamp(14px, 8vw, 120px); height: 56svh; }
+  .badgeBox { right: clamp(10px, 5vw, 90px); width: 240px; }
+  .roomLabel { top: 12svh; font-size: clamp(18px, 5vw, 26px); }
 }
 
 @media (max-width: 600px) {
-  /* On a phone the copy panel owns the viewport; the room steps back small and the
-     badge stands down — a drag toy under a scroll thumb is a fight, not a feature. */
-  .aboutRoomBox { width: 58vw; top: 4svh; }
+  /* On a phone the copy owns the viewport and a drag toy under a scrolling thumb is
+     a fight, not a feature. */
   .badgeBox { display: none; }
+  .roomLabel { display: none; }
 }
 
 /* Section nav in the header. Scrolls rather than navigates — it is one page. */
