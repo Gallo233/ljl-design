@@ -1162,10 +1162,6 @@ function FilmCanvas({
         varying vec3 vWorldPosition;
         varying vec3 vWorldNormal;
 
-        float hash(vec2 value) {
-          return fract(sin(dot(value, vec2(12.9898, 78.233))) * 43758.5453);
-        }
-
         void main() {
           vec2 filmUv = vUv;
           filmUv.x -= uFlex * pow(filmUv.y - 0.5, 2.0) * 0.0001;
@@ -1213,9 +1209,25 @@ function FilmCanvas({
           bool topBottom = filmUv.y < uBorderY || filmUv.y > 1.0 - uBorderY;
           vec3 color = (sideBorder || topBottom) ? vec3(0.007, 0.009, 0.014) : image;
 
+          /*
+           * Perforations, inset from a sealed edge.
+           *
+           * These used to be cut at filmUv.y < 0.047, which reaches the very edge of
+           * the ribbon — so the holes opened outward and the strip read as a comb
+           * rather than as film. Real stock keeps a continuous rail of base along both
+           * edges and punches the perforations inside it. SEAL is that rail.
+           */
+          const float HOLE_SEAL = 0.016;   // continuous film base at the outer edge
+          const float HOLE_INNER = 0.060;  // how far in the perforation row reaches
+          const float HOLE_RADIUS = 0.34;  // corner rounding, in hole-local units
           float holePhase = fract(filmDistance * 1.92);
-          bool hole = (filmUv.y < 0.047 || filmUv.y > 0.953) && holePhase > 0.22 && holePhase < 0.78;
-          if (hole) discard;
+          float edgeBand = min(filmUv.y, 1.0 - filmUv.y);
+          float holeCentre = (HOLE_SEAL + HOLE_INNER) * 0.5;
+          float holeHalf = (HOLE_INNER - HOLE_SEAL) * 0.5;
+          vec2 holeLocal = vec2((holePhase - 0.5) * 2.0, (edgeBand - holeCentre) / holeHalf);
+          vec2 holeQ = abs(holeLocal) - vec2(0.56, 1.0) + HOLE_RADIUS;
+          float holeSdf = length(max(holeQ, 0.0)) + min(max(holeQ.x, holeQ.y), 0.0) - HOLE_RADIUS;
+          if (holeSdf < 0.0) discard;
 
           vec3 viewDirection = normalize(cameraPosition - vWorldPosition);
           float facing = abs(dot(normalize(vWorldNormal), viewDirection));
@@ -1227,9 +1239,6 @@ function FilmCanvas({
           float viewDistance = distance(cameraPosition, vWorldPosition);
           float farFade = smoothstep(12.0, 29.0, viewDistance);
           color = mix(color, vec3(0.008, 0.026, 0.052), farFade * 0.88);
-          float filmGrain = hash(gl_FragCoord.xy + floor(uTime * 0.4)) - 0.5;
-          float scratch = smoothstep(0.996, 1.0, hash(vec2(floor(gl_FragCoord.x * 0.24), 17.0)));
-          color += filmGrain * 0.032 + scratch * 0.035;
 
           float depthVisibility = 1.0 - smoothstep(18.0, 30.0, viewDistance);
           float endVisibility = 1.0 - smoothstep(0.86, 1.0, filmUv.x);
