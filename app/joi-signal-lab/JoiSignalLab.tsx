@@ -1573,7 +1573,6 @@ function FilmCanvas({
 
       post.uniforms.uLensDistortion.value = THREE.MathUtils.lerp(0.42, 0.92, reveal);
       post.uniforms.uChromaticAberrationStrength.value = THREE.MathUtils.lerp(0.6, 1.15, reveal);
-      post.uniforms.uNoiseIntensity.value = THREE.MathUtils.lerp(0.055, 0.085, reveal);
       post.uniforms.uSepiaIntensity.value = THREE.MathUtils.lerp(0.18, 0.1, reveal);
       // A little of the last frame while the reel is being thrown, and none of it
       // when the picture is still — persistence on a static frame is just softness.
@@ -1735,8 +1734,6 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
   const entryRef = useRef(0);
   const filmRevealRef = useRef(0);
   const reelExitRef = useRef(0);
-  /** How far through About the reader is — the page's own pull on the badge. */
-  const aboutProgressRef = useRef(0);
   const dragActiveRef = useRef(false);
 
   useEffect(() => {
@@ -1792,9 +1789,7 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
       style.setProperty("--terminal-opacity", (1 - smoothStep(entry / 0.85)).toFixed(4));
       style.setProperty("--terminal-shift", `${(entry * 18).toFixed(2)}px`);
       style.setProperty("--reel-exit", reelExit.toFixed(4));
-      const aboutProgress = progressWithin("about-me", screens);
-      aboutProgressRef.current = aboutProgress;
-      style.setProperty("--about-progress", aboutProgress.toFixed(4));
+      style.setProperty("--about-progress", progressWithin("about-me", screens).toFixed(4));
       style.setProperty("--contact-progress", progressWithin("contact", screens).toFixed(4));
     },
     onSectionChange: setActiveSection,
@@ -1941,11 +1936,7 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
           className={`${styles.aboutScene} ${activeSection === "about-me" ? styles.aboutSceneActive : ""}`}
         >
           <div className={styles.badgeBox}>
-            <LanyardBadge
-              active={activeSection === "about-me"}
-              pullRef={aboutProgressRef}
-              onPulledToBottom={() => scrollToSection.current("contact")}
-            />
+            <LanyardBadge active={activeSection === "about-me"} />
           </div>
           {hoveredInterest && (
             <p className={styles.roomLabel} aria-hidden="true">

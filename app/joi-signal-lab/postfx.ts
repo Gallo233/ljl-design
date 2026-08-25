@@ -473,7 +473,10 @@ export function createPostChain(renderer: any, tier: QualityTier): PostChain {
     uAspect: { value: 1.0 },
     // Grain — step 9. This is what replaces the CSS .grain layer.
     uTime: { value: 0.0 },
-    uNoiseIntensity: { value: 0.075 },
+    // Off. Ported and kept because it is step 9 of the reference chain, but a grain
+    // field over the whole stage read as dirt on the lens rather than as film stock,
+    // and it softened everything under it. Raise this if it is ever wanted back.
+    uNoiseIntensity: { value: 0.0 },
     uNoiseVelocity: { value: 1.0 },
   };
 
