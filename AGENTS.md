@@ -26,8 +26,10 @@ reverse-engineered; see **Research** below before re-deriving anything.
 ```
 /                CRT hero — "I design how AI enters human life."
 /selected-work   the film reel (6 frames)
-/about-me        closing panel (skeleton)
-/contact         closing panel (skeleton)
+/about-me        closing panel — copy, the 3D room, the lanyard badge
+/contact         closing panel — the call sheet
+/lab             research and retired prototypes, light editorial
+/play/night-tide Game Center — the 3D handheld and its four cartridges
 /work/<slug>     project detail — light editorial layout
 /classic         the previous light homepage, kept intact and unlinked
 /joi-signal-lab  redirects to /selected-work (old link)
@@ -45,8 +47,15 @@ app/
   page.tsx, selected-work/, about-me/, contact/   thin route wrappers
   joi-signal-lab/
     ExperienceShell.tsx     fonts + mounts the experience at a section
-    JoiSignalLab.tsx        the scroll experience, the film reel, closing panels
-    Joi9000Hero.tsx         the CRT terminal scene (Three.js)
+    JoiSignalLab.tsx        the scroll experience, the stage renderer, the reel, the panels
+    heroScene.ts            the CRT terminal, as a renderer-free scene
+    room3d.ts               the desk scene: reel frame 05 and the About inset
+    roomObjects.ts          desk object ids <-> interest chips, one source of truth
+    postfx.ts               the nine-step CRT chain  <-- read its header before editing
+    quality.ts              device tiers: DPR caps, bloom levels, persistence, shadows
+    badge/                  the lanyard: verlet rope + the CSS holographic card
+    AboutRoom.tsx           the About panel's interactive room mount
+    useScrollDriver.ts      smoothing, velocity, snapping, the boot lock
     sections.ts             section table and scroll math   <-- start here
     joi-signal-lab.module.css
     three.d.ts
@@ -61,8 +70,12 @@ app/
   robots.ts, sitemap.ts     generated /robots.txt and /sitemap.xml
   icon.svg                  favicon — the header wordmark at 32px
   opengraph-image.png       share card (+ .alt.txt); source in scripts/
+  lab/                      /lab — the filing drawer of research and postmortems
 components/
-  projectData.ts            case-study content model, bilingual — DATA CLEARED
+  projectData.ts            case-study content model, bilingual
+  SiteHUD.tsx               the fixed metadata strip, both worlds
+  RevealRoot.tsx            scroll-entry reveals — read its header before touching
+  ArrivalFade.tsx           the landing half of the reel -> detail transition
   NativeProjectDemos.tsx    code-drawn device mockups — PLACEHOLDERS, not finished
   Live2DGate.tsx, Live2DRouteMount.tsx, ParticlePrologue.tsx, ...
 scripts/
@@ -103,12 +116,17 @@ screen to read it in, and `JoiSignalLab` sets the page height from it inline.
 
 ```
 hero           position 0     ← snaps
-selected-work  position 1     ← snaps, asymmetric window
-about-me       position 3.4   ← nav target only, snap: null
-contact        position 5     ← nav target only, snap: null
+selected-work  position 2     ← snaps, asymmetric window
+about-me       position 5.2   ← nav target only, snap: null
+contact        position 7.6   ← nav target only, snap: null
 
-TOTAL_SCREENS = 5 + 1 = 6
+TOTAL_SCREENS = 7.6 + 1 = 8.6
 ```
+
+The gap report asked for 8–12 screens against the reference's 17.8; this is the low end of
+that, and the room went where it was most needed. The hero→reel handoff now breathes across
+roughly 1.0→1.7 screens instead of finishing inside 0.22, and the reel holds about 2.4 screens
+of interactive dwell for six frames.
 
 Only the first two snap. About Me and Contact carry a position but no snap window, so they never
 yank a reader who is partway through reading them.
@@ -125,7 +143,8 @@ those components keep their original timing while the page grows.
 
 `REEL_ANCHOR` **must** equal where Selected Work begins. Set it later and deep-linking to
 `/selected-work` lands between the hero fade and the film entrance — hero at opacity 0, film at
-reveal 0, nothing on screen. This has already happened once.
+reveal 0, nothing on screen. This has already happened once, which is why `sections.ts` now
+throws in development if the two ever disagree.
 
 If you change section boundaries, re-check that deep-linking to each route shows something.
 
@@ -133,22 +152,61 @@ If you change section boundaries, re-check that deep-linking to each route shows
 
 ## Rendering
 
-Two `WebGLRenderer` instances, two canvases, Three.js **r178**, WebGL2:
+One stage `WebGLRenderer`, Three.js **r178**, WebGL2. The scenes are renderer-free modules
+the stage composites:
 
-- `Joi9000Hero.tsx` — the terminal scene, DPR capped 1.65 / 1.25 mobile
-- `FilmCanvas` in `JoiSignalLab.tsx` — the reel, DPR capped 1.7 / 1.25
+- `heroScene.ts` — the terminal: GLB, CRT screen material, particle morphs, beam, fog
+- the reel scene, built inside `FilmCanvas` in `JoiSignalLab.tsx`
+- `room3d.ts` — the desk, used twice: as reel frame 05's render target and, separately,
+  as the About panel's interactive inset
 
-CRT texture is CSS overlays: `.scanlines`, `.vignette`, `.grain` in the module CSS.
+`FilmCanvas` owns the canvas, the loop and the pointer routing. It draws the hero into the
+post chain's slot A and the reel into slot B, blends them by the reel's own reveal, and puts
+the result through `postfx.ts`. `quality.ts` holds the tier decisions (DPR 1.5 / 1.25 mobile,
+bloom levels, persistence, shadows, MSAA).
 
-### Do not merge the canvases without asking
+**The About room keeps its own small context on purpose.** It is a panel widget in a box, not
+a fullscreen layer that cross-fades with anything; folding it into the stage would buy a
+scissor rectangle and no seam. Two contexts, not one, and that is the intended number.
 
-A refactor to one canvas + one `EffectComposer` running the ported shader.se post chain was built
-and then **rejected by the user**. The code is not in the repo. Do not redo it on your own
-initiative.
+### The post chain
 
-The reasoning that killed it is worth keeping: the post chain was being applied to six placeholder
-frames. **Content before rendering.** Get real assets into the reel first; the grade is worth
-doing only once there is something to grade.
+`postfx.ts` runs the reference's nine steps in the documented order: selective bloom → warm
+phosphor add → temporal persistence → gamma → sepia → brightness and contrast → lens
+distortion with a rounded bezel → vertical chromatic aberration → gaussian grain last. Numbers
+come from `docs/shader-research/`, and they are measurements. The CSS `.scanlines` and `.grain`
+layers are gone; `.vignette` stays, because it is the tube's edge over the DOM as well.
+
+Three r178 behaviours this depends on, all verified in `node_modules` rather than remembered:
+
+- **Rendering into a render target forces linear output and disables tone mapping** (both
+  selections test `_currentRenderTarget === null`). So the chain owns the single linear→sRGB
+  conversion, and it sits between the light transport and the grade — bloom is physical and
+  belongs in linear, while contrast pivoting on 0.5 and grain scaled by `(1 - colour)` were
+  authored on encoded values. Never add `<colorspace_fragment>` to a chain shader: that is a
+  second encode and it lifts the whole picture into milk.
+- The hero was authored under `NeutralToneMapping`, which a render target drops. The blend
+  pass re-applies three's own mapper **to the hero tap only** — the reel and the room never
+  had it.
+- three's injected common chunk already declares `luminance()`. Chain helpers are namespaced
+  (`postLuma`, `postLinearToSrgb`) for that reason.
+
+The light half of the chain runs once, in a base pass, rather than once for the persistence
+path and once for the direct path. That is not tidiness: two copies of an encode is how a
+chain like this ends up converting twice.
+
+**What is still DOM, deliberately.** The reference renders its UI into a texture and pushes it
+through the same distortion, then halves the aberration where UI alpha is non-zero. Our
+typography stays DOM above the canvas, so the headings are not curved or aberrated. The CSS
+backdrops (`.heroField`, `.blueField`) are likewise outside the glass. Both are known gaps,
+recorded rather than hidden.
+
+### The record this replaces
+
+An earlier attempt at this merge was rejected, and the reasoning was right at the time: the
+post chain was being graded against six placeholder frames. **Content before rendering.** That
+condition is now met — every frame carries real content — and the merge was redone in that
+order, content first. The old warning no longer applies; this section is what does.
 
 ---
 
@@ -162,59 +220,76 @@ seven-point chordal `CatmullRomCurve3` tension 1, 160-segment strip, half-height
 viewport crossing at a 10% threshold, one frame per release. **Do not "improve" these numbers.**
 They are `SOURCE`-labeled facts, not guesses.
 
-Frame art is currently drawn procedurally onto a `4096 × 512` atlas — **683 × 512 per frame**.
-That is too low for real content. The plan is per-frame textures at `1024 × 768`, with the three
-video frames as prebaked AVIF sprite sheets rather than `<video>`. See the asset spec.
+Every frame is a real destination now, and three of the six are live rather than atlas art:
+
+```
+01  JOI            video texture      -> /work/joi
+02  JOI MOBILE     video texture      -> /work/joi-mobile
+03  GAME CENTER    live 3D handheld   -> /play/night-tide      (render target)
+04  THE LAB        drawn folder       -> /lab
+05  MY ROOM        live 3D desk       -> scrolls to /about-me  (render target)
+06  CONTACT        drawn call sheet   -> scrolls to /contact
+```
+
+Frames 05 and 06 are sections of this same page, so the open handler scrolls instead of
+pushing a route — a push would remount the lab and replay the boot. The two render-target
+frames are only drawn while the reader is within one frame of them.
+
+The placeholder desaturation that used to wash frames 04–06 is gone: nothing is a placeholder
+any more, so the film-stock desaturation is uniform across all six.
+
+Atlas art still lives on a `4096 × 512` sheet — **683 × 512 per frame** — which is fine for the
+drawn frames and would not be for photography. If real stills ever replace them, go to per-frame
+`1024 × 768` textures; see the asset spec.
 
 ---
 
 ## Content plan
 
-### The prose has been cleared — this is deliberate
+### The prose was cleared, and has now been rewritten
 
-Four surfaces were emptied on purpose so the rewrite starts from a blank page instead of
-editing around a skeleton. **They are not bugs, and they are not half-finished work someone
-abandoned. Do not "restore" them from git.**
+Four surfaces were emptied on purpose so the rewrite could start from a blank page instead of
+editing around a skeleton. **That clearing is done.** The copy on them now is a fresh draft, not
+a restoration from git — the old prose stays gone deliberately.
 
 | Surface | State |
 |---|---|
-| `/work/joi` | Shell + the live Joi session. Everything else — summary, metadata, case frame, motion video, loop, sections, figures — gone. |
-| `/work/joi-mobile` | Shell only. |
-| `/about-me` | Empty panel. |
-| `/contact` | Empty panel. |
+| `/work/joi` | Full bilingual case study, plus the live Joi session. |
+| `/work/joi-mobile` | Full bilingual case study. No figures yet — the four iOS screenshots it wants are in `docs/asset-requests.md`. Do not stand in Joi Map imagery; that is a retired, different product. |
+| `/about-me` | Copy, the interest chips, the 3D room and the lanyard badge. The internship timeline is still an explicit placeholder slot. |
+| `/contact` | The call sheet: email, GitHub, resume. |
 
-What survived, and why:
+Two rules that outlived the clearing:
 
-- **The schema.** `components/projectData.ts` keeps every type; only the data is gone, and every
-  content field is now optional. `app/work/[slug]/page.tsx` skips any block whose data is absent,
-  so entries can come back one field at a time.
-- **The slots.** The two closing `<section>`s in `JoiSignalLab.tsx` are still there but empty.
-  They are scroll positions (`sections.ts`), nav targets, and the elements `--about-progress` /
-  `--contact-progress` animate. Deleting them means re-deriving the scroll layout later.
-- **The Joi session.** `components/JoiWebEmbed.tsx` on `/work/joi` is the one thing on these
-  pages that is not prose, so it stayed.
+- **Only wire assets that exist.** Every `src` in `projectData.ts` points at a file in `public/`
+  today. The previous version referenced five images that had never been committed, so the page
+  rendered broken figures for weeks without anyone noticing.
+- **The slots are load-bearing.** The closing `<section>`s in `JoiSignalLab.tsx` are scroll
+  positions (`sections.ts`), nav targets, and the elements `--about-progress` /
+  `--contact-progress` animate. Deleting one means re-deriving the scroll layout.
 
-⚠️ **Before deploying:** `/about-me` and `/contact` are now blank screens, and `main` deploys on
-push. Either rebuild the copy first or accept that state knowingly.
+Drafted copy carries a `// COPY-REVIEW` marker. It is written to be read, not to be filler, but
+it has not been through the author yet.
 
 ### The reel
 
-Read `docs/design-audits/reel-content-design.md` and `reel-asset-spec.md`. Short version:
+`docs/design-audits/reel-content-design.md` and `reel-asset-spec.md` planned this, and both are
+**partly superseded** — read them for the reasoning, not for the current line-up. What changed,
+and why:
 
-```
-01 JOI            Windows screen recording, agent trace, the pause before approval
-02 JOI MAP        iOS recording: NEARBY -> VISION -> ROUTE
-03 零刻：夜潮      Godot action game, ~/Documents/godot/ashen_blade
-04 实验室 LAB      contact sheet; 司天监 VN lives here until it has a vertical slice
-05 我的房间        cartoon 3D desk; clicking an object jumps to that interest
-06 联系            clapperboard; the reel needs an ending
-```
+- **03 is the Game Center, not a Night Tide screen recording.** The frame renders the actual 3D
+  handheld live into a target and links to `/play/night-tide`, where four cartridges are
+  playable. The planned gameplay capture is not needed and not wanted.
+- **04 dropped 司天监.** The lab files four real things instead: the CRT/shader research, the
+  Live2D binding work, the particle prologue retrospective, and the leitower postmortem — which
+  reverses the old "leitower is not used" decision. Knowing why you stopped is the entry.
+- **05 is live**, a procedural 3D desk rather than a planned asset, and it doubles as the About
+  panel's interactive room.
+- **06 is drawn** rather than photographed.
 
-Decided and closed: `leitower` is not used. The Joi character-system material folds into
-`/work/joi` rather than getting its own frame.
-
-**Blocked on assets.** The three recordings are the critical path. Do not fabricate placeholder
-content that pretends to be real footage — the reel's whole premise is "this was filmed."
+Still true, and the reason 01 and 02 look the way they do: **do not fabricate content that
+pretends to be real footage.** Those two frames play genuine recordings. The drawn frames are
+drawn — labelled, abstract, obviously graphic — precisely so they never pass as photography.
 
 ---
 
@@ -271,11 +346,20 @@ turns every typecheck into a diff you have to remember not to commit.
 
 ## Open questions
 
-Recorded in `docs/design-audits/reel-content-design.md` §4. The live ones:
+The three that used to live here are all answered: 司天监 is out of the reel entirely,
+`leitower` is in the LAB as its postmortem, and the closing panels have their depth.
 
-1. Does 司天监 stay inside the LAB frame until it reaches M1?
-2. Does the killed `leitower` prototype go into LAB as a "why I stopped" entry?
-3. `/about-me` and `/contact` are structure only — layout depth is undecided pending assets.
+What is actually open:
+
+1. **Assets the author owns.** `docs/asset-requests.md` is the list, and it is short: a portrait
+   for the badge front, the character art for its holographic back, the internship timeline, the
+   interest copy, four Joi Mobile screenshots, and a reference image for the LAB page's layout.
+   Everything ships without them; each has a stable slot to drop into.
+2. **The drafted copy** carries `// COPY-REVIEW` and has not been through the author.
+3. **The post chain's grade** is set to measured defaults driven by scroll. Distortion, grain,
+   sepia and aberration are the knobs, all in the `post.uniforms` block in `FilmCanvas`.
+4. **~35 MB of orphaned assets** in `public/` — the doorway-era art, a stale duplicate reel
+   directory, a duplicated Live2D vendor copy. Confirm before deleting; git can undo it.
 
 ---
 
@@ -293,4 +377,9 @@ sessions worth carrying forward:
   `document.visibilityState` and whether a bare rAF loop ticks before diagnosing anything else.
   What *can* be checked: deep-link landing values, route responses, DOM structure, typecheck.
 - **When a decision has been made, it is made.** Rejected approaches are recorded above so they do
-  not get quietly reintroduced.
+  not get quietly reintroduced — and when one is deliberately reversed, the record says so and
+  why, rather than being quietly deleted.
+- **Never hide content behind machinery that can fail.** Reveal animations arm elements from
+  JavaScript, one at a time, only while off-screen; the boot lock releases on a timer; the
+  handheld folds to a flat screen when WebGL refuses. A lost animation costs nothing. A blank
+  page costs everything.

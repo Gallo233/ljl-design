@@ -899,6 +899,7 @@ function FilmCanvas({
   step,
   revealRef,
   entryRef,
+  exitRef,
   onStepChange,
   onProjectOpen,
   onReady,
@@ -911,6 +912,8 @@ function FilmCanvas({
   revealRef: { current: number };
   /** Hero journey, 0 at the top to 1 when the reel has fully arrived. */
   entryRef: { current: number };
+  /** How far the reel has handed over to the closing panels, 0 to 1. */
+  exitRef: { current: number };
   onStepChange: (step: number) => void;
   onProjectOpen: (href: string) => void;
   onReady: () => void;
@@ -1498,15 +1501,30 @@ function FilmCanvas({
       if (reelVisible || !readySent) renderer.render(scene, camera);
       renderer.setRenderTarget(null);
 
+      /*
+       * The glass is not a constant. Inside the terminal the picture is nearly flat
+       * and quiet; as the reel arrives the tube asserts itself — more curvature,
+       * more colour split, more grain — because that is the moment the page stops
+       * being a room with a computer in it and becomes the computer's own output.
+       */
+      const exit = exitRef.current;
+      post.uniforms.uLensDistortion.value = THREE.MathUtils.lerp(0.42, 0.92, reveal);
+      post.uniforms.uChromaticAberrationStrength.value = THREE.MathUtils.lerp(0.6, 1.15, reveal);
+      post.uniforms.uNoiseIntensity.value = THREE.MathUtils.lerp(0.055, 0.085, reveal);
+      post.uniforms.uSepiaIntensity.value = THREE.MathUtils.lerp(0.18, 0.1, reveal);
+      // A little of the last frame while the reel is being thrown, and none of it
+      // when the picture is still — persistence on a static frame is just softness.
+      post.uniforms.uPersistence.value = Math.min(0.34, Math.abs(reelVelocity) * 0.02);
+
       elapsed += delta;
       post.render({
         blend: reveal,
         // Slot A is the hero here, and the hero is the one scene that was authored
         // under Neutral tone mapping — which a render target silently drops.
         toneMapA: 1,
-        // Past the reel the stage eases toward the stage colour rather than cutting:
-        // the closing panels read on a calm tube, not a dead one.
-        dim: THREE.MathUtils.clamp((entryRef.current === 0 ? 0 : 0), 0, 1),
+        // Past the reel the tube eases down rather than cutting out: the closing
+        // panels read on a calm machine, not a dead one.
+        dim: THREE.MathUtils.clamp(exit * 0.72, 0, 1),
         elapsed,
       });
 
@@ -1647,6 +1665,7 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
   // per frame — the reference keeps these in motion values for the same reason.
   const entryRef = useRef(0);
   const filmRevealRef = useRef(0);
+  const reelExitRef = useRef(0);
   const dragActiveRef = useRef(false);
 
   useEffect(() => {
@@ -1686,6 +1705,7 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
 
       entryRef.current = entry;
       filmRevealRef.current = filmReveal;
+      reelExitRef.current = reelExit;
       filmActiveRef.current = filmReveal > 0.55 && screens < aboutStart - 0.4;
 
       const style = experience.style;
@@ -1774,6 +1794,7 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
             step={step}
             revealRef={filmRevealRef}
             entryRef={entryRef}
+            exitRef={reelExitRef}
             onHeroReady={() => setComputerReady(true)}
             onFormChange={setParticleForm}
             onStepChange={setStep}
