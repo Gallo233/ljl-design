@@ -1,4 +1,19 @@
 .project-page {
+  /*
+   * The site's three voices, arriving in the light world.
+   *
+   * `redesign.css` declares --sans and --mono on :root, and /classic imports that same
+   * file — so redefining them at the root would re-typeset the old homepage too, which
+   * is meant to stay exactly as it was found. Overriding here keeps the change inside
+   * the route that asked for it, and everything downstream already reads the tokens.
+   *
+   * The legacy stacks stay on as fallbacks rather than being replaced outright: these
+   * are next/font variables, and a page that renders before they resolve should land on
+   * the typeface it used to have instead of on Times.
+   */
+  --sans: var(--font-signal-body), "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --mono: var(--font-signal-mono), "SFMono-Regular", "Roboto Mono", Consolas, monospace;
+
   --project-accent: #df765d;
   --project-field: #edf3fb;
   --project-field-deep: #73839a;
@@ -17,7 +32,7 @@
   max-width: 18ch;
   margin: 28px 0 0;
   color: var(--project-accent);
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: var(--font-signal-display), Georgia, "Times New Roman", serif;
   font-size: clamp(24px, 2.5vw, 42px);
   font-style: italic;
   line-height: 1.05;
@@ -589,4 +604,48 @@
 @media (prefers-reduced-motion: reduce) {
   .project-detail-figure img,
   .project-detail-nav nav a { transition: none; }
+}
+
+
+/*
+ * The body voice, asked for again at element+class specificity.
+ *
+ * Two things stop the token override alone from landing. `redesign.css` sets
+ * `font-family: var(--sans)` on `body`, which resolves --sans *above* this subtree, so
+ * descendants inherit a computed Inter rather than re-reading the variable. And
+ * `styles.css` carries its own bare `.project-page` rule naming the Inter stack
+ * outright, which ties on specificity and wins on order.
+ *
+ * `main.project-page` outranks both without touching the shared legacy sheet — which
+ * `/classic` also imports, and which is meant to stay exactly as it was found. Rules
+ * that name `var(--mono)` inside this subtree already pick the override up on their own.
+ */
+main.project-page {
+  font-family: var(--sans);
+}
+
+/*
+ * The two headings, re-cut for a serif that only ships one weight.
+ *
+ * The hero was a 900-weight grotesque tracked to -0.075em — numbers that exist because
+ * a heavy sans at that size closes its own counters and needs pulling back in. Instrument
+ * Serif is 400 and nothing else, so asking for 900 gets a synthesised bold: smeared
+ * stems, and the tight tracking then collides the serifs into each other.
+ *
+ * So the weight is stated at 400 rather than inherited, the tracking is relaxed to about
+ * a quarter of what it was, and the line is opened slightly — a serif's ascenders and
+ * descenders need the room a grotesque does not.
+ */
+.project-page .project-detail-hero h1 {
+  font-family: var(--font-signal-display), Georgia, serif;
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  line-height: 0.88;
+}
+
+.project-page .project-detail-section h2 {
+  font-family: var(--font-signal-display), Georgia, serif;
+  font-weight: 400;
+  letter-spacing: -0.015em;
+  line-height: 1.04;
 }

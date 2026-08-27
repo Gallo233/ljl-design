@@ -13,6 +13,7 @@ import { JoiWebEmbed } from "../../../components/JoiWebEmbed";
 import { JoiMobileIPhoneShowcase } from "../../../components/joi-mobile-iphone/JoiMobileIPhoneShowcase";
 import { PageScrollState } from "../../../components/PageScrollState";
 import { SHARE_CARD, canonicalPath } from "../../site";
+import { fontVariables } from "../../fonts";
 
 /**
  * Project detail — the light editorial layout you land in after stepping out of
@@ -92,7 +93,7 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
   const hasBody = hasLoop || hasSections || hasFigures || hasNext;
 
   return (
-    <main className={`project-page project-page--${project.slug}`}>
+    <main className={`${fontVariables} project-page project-page--${project.slug}`}>
       {project.slug === "joi" && <PageScrollState />}
       <ArrivalFade />
       <RevealRoot />
