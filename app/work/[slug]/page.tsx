@@ -1,6 +1,13 @@
 import "../../../redesign.css";
-import "../../../styles.css";
-import "../../../experience.css";
+// `styles.css` and `experience.css` used to be imported whole here — 137 KB written for
+// the old homepage, of which 47 selectors out of 1,116 can reach this route. See the
+// header of `work-legacy-base.css`; both originals are untouched because /classic still
+// imports them, and this keeps their surviving rules in their original order.
+//
+// It sits beside them at the repo root rather than in this folder because the bundler
+// orders route-local CSS ahead of root-level CSS: from `./` it landed *before*
+// redesign.css and took `--ink` with it, which is a different colour.
+import "../../../work-legacy-base.css";
 import "./project-detail.css";
 import type { Metadata } from "next";
 import Link from "next/link";
