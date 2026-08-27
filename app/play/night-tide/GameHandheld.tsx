@@ -18,6 +18,22 @@ type Phase = "boot" | "idle" | "play";
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 const GAME_BUILD_URL = `${basePath}/games/night-tide/index.html?v=embedded-font-2`;
 
+/**
+ * Where the synthetic key events are allowed to land.
+ *
+ * They used to go to `"*"`, which means "whoever is in that frame" — while inbound
+ * messages were checked against the frame's own window. The asymmetry is the bug:
+ * if the build URL ever resolves cross-origin, anything that ends up in the frame
+ * receives the input stream.
+ *
+ * Resolved against the document rather than parsed alone, because `GAME_BUILD_URL`
+ * is a path — `basePath` is a path prefix, not a host — and `new URL()` on its own
+ * rejects anything without a scheme. Parsing it unresolved throws a TypeError on
+ * every keypress, which is a worse bug than the one being fixed.
+ */
+const gameOrigin = () =>
+  typeof window === "undefined" ? "*" : new URL(GAME_BUILD_URL, window.location.href).origin;
+
 /** Every cartridge on the shelf, Godot build first. */
 const shelf = [nightTideEntry, ...arcadeGames];
 
@@ -120,7 +136,7 @@ export function GameHandheld() {
     if (!mapping) return;
     iframeRef.current?.contentWindow?.postMessage(
       { type: "joi-key", action, key: mapping.key, code: mapping.code },
-      "*",
+      gameOrigin(),
     );
   }, []);
 

@@ -54,7 +54,12 @@ app/
     postfx.ts               the nine-step CRT chain  <-- read its header before editing
     quality.ts              device tiers: DPR caps, bloom levels, persistence, shadows
     badge/                  the lanyard: verlet rope + the CSS holographic card
-    AboutRoom.tsx           the About panel's interactive room mount
+    roomBase.ts             the desk capture: node names and atlas ids, pure data
+    roomRecords.ts          the record rig — retired, see the note in its header
+    oceanScene.ts           the sea behind the hero, tier-aware throughout
+    solarSystem.ts          the hero's sky: planets, nebula, star field
+    heroLightOrb.ts         the orb the reader can pick up in the hero
+    JoiMusicPlayer.tsx      the deck UI over the room
     useScrollDriver.ts      smoothing, velocity, snapping, the boot lock
     sections.ts             section table and scroll math   <-- start here
     joi-signal-lab.module.css
@@ -134,7 +139,8 @@ yank a reader who is partway through reading them.
 ### The one constraint that will bite you
 
 ```ts
-export const REEL_ANCHOR = SECTIONS[1].position;
+const reelSection = SECTIONS.find((section) => section.id === "selected-work");
+export const REEL_ANCHOR = reelSection.position;
 ```
 
 The hero's camera flight and the film's entrance were both tuned against a 0..1 range that ends
@@ -143,8 +149,13 @@ those components keep their original timing while the page grows.
 
 `REEL_ANCHOR` **must** equal where Selected Work begins. Set it later and deep-linking to
 `/selected-work` lands between the hero fade and the film entrance — hero at opacity 0, film at
-reveal 0, nothing on screen. This has already happened once, which is why `sections.ts` now
-throws in development if the two ever disagree.
+reveal 0, nothing on screen. This has already happened once, which is why `sections.ts` throws in
+development if the anchor is not also `SECTIONS[1]`.
+
+The lookup is by id on purpose. The guard used to read `SECTIONS[1].position` into the constant
+and then assert it against `SECTIONS[1].position`, which cannot fail — inserting a section above
+Selected Work would have moved the anchor silently, which is the exact accident the guard is
+there to catch.
 
 If you change section boundaries, re-check that deep-linking to each route shows something.
 
@@ -353,8 +364,10 @@ The three that used to live here are all answered: 司天监 is out of the reel 
 What is actually open:
 
 1. **Assets the author owns.** `docs/asset-requests.md` is the list, and it is short: a portrait
-   for the badge front, the internship timeline, the interest copy, four Joi Mobile screenshots,
-   and a reference image for the LAB page's layout. The holographic badge-back art has landed.
+   for the badge front, the interest copy, four Joi Mobile screenshots, and a reference image
+   for the LAB page's layout. The holographic badge-back art has landed. The internship timeline
+   no longer has a slot in the markup: the About prose was removed on purpose and is being
+   rewritten as labels hanging off the room's objects, so that copy lands in `roomObjects.ts`.
    Everything ships without them; each has a stable slot to drop into.
 2. **The drafted copy** carries `// COPY-REVIEW` and has not been through the author.
 3. **The post chain's grade** is set to measured defaults driven by scroll. Distortion, grain,

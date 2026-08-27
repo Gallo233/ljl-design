@@ -238,7 +238,7 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
               <section className="project-detail-section" key={section.heading} data-reveal>
                 <div>
                   <p className="project-detail-kicker">{section.heading}</p>
-                  <h2>{section.headingZh}</h2>
+                  <h2 lang="zh-CN">{section.headingZh}</h2>
                 </div>
                 <div className="project-detail-section-copy">
                   {section.body.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}

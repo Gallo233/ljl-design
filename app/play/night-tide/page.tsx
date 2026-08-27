@@ -46,8 +46,8 @@ export default function GameCenterPage() {
         <span className={styles.build}>4 CARTRIDGES / WEB</span>
         <div className={styles.heading}>
           <p className={styles.kicker}>03 / GAME CENTER</p>
-          <h1>游戏厅</h1>
-          <p className={styles.subtitle}>
+          <h1 lang="zh-CN">游戏厅</h1>
+          <p className={styles.subtitle} lang="zh-CN">
             一台跑在浏览器里的掌机。零刻：夜潮是 Godot 动作原型，另外三张卡带是贪吃蛇、俄罗斯方块和吃豆人。
             键盘、触屏都能玩；手机横过来会占满整屏。
           </p>
