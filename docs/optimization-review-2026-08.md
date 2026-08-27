@@ -9,6 +9,54 @@
 
 ---
 
+## 执行状态（v3 · 2026-08-27 收工时）
+
+**回滚点：`029e385`**（此前工作区全部改动已存档提交）。之后 12 个提交，每批独立可回滚。
+
+| 编号 | 状态 | 落在哪个提交 |
+|---|---|---|
+| P0-1 唱片死代码 | ✅ **按方案 A 退役** | `a0820eb` 删整套 rig，保留платter 自转与隐藏循环 |
+| P0-2 滚动自取消 | ✅ | `005df9c` `lastWrittenY` 标记，覆盖 bootLock 分支 |
+| P0-3 wheel 归属 | ✅ | `005df9c` `reelOwnsPointer()` |
+| P0-4 REEL_ANCHOR | ✅ | `005df9c` 按 id 查找后断言 |
+| P0-5 /classic 元数据 | ✅ 已实测 `noindex, nofollow` | `005df9c` 新增 `app/classic/layout.tsx` |
+| P0-6 上下文丢失 | ✅ 诚实档（删 `preventDefault`） | `20fc114`；完整档（重建 renderer）**未做**，单列 |
+| P0-7 postMessage | ✅ **用修正后的写法** | `d4ac88b` `new URL(url, location.href).origin` |
+| P0-8 GLB 纹理 | ✅ 只收 GLB 自带纹理，不碰外部 screenMap | `005df9c` |
+| P1-1/2/3 热路径 | ✅ | `f41c9ab` 写入缓存 + O(1) 查表 + rect 缓存 |
+| P1-4 badge 早退 | ✅ | `20fc114` |
+| P1-5 阴影 autoUpdate | ✅ 位移阈值失效 | `28af57f` |
+| P1-6 ocean | ⚠️ **部分，且 v2 的修法有错** | `28af57f`，见下 |
+| P1-7 nebula | ✅ `visible` 门控 | `28af57f` |
+| P1-8 updateWorldMatrix | ❌ **主动不做**，见下 |
+| P1-9 console3d 接 quality | ✅ + 离屏暂停 | `f41c9ab` |
+| P1-10 forceContextLoss | ✅ | `20fc114` |
+| P1-11 小对象分配 | ❌ 主动不做（原文即「有可感卡顿再动」） |
+| 死 CSS / 死导出 / 死变量 | ✅ 5 处全清 | `4d8c4fd` |
+| reduced-motion | ✅ 两块合一 + 补 3 个漏网动画 | `4d8c4fd` |
+| 菜单 dialog 焦点 | ✅ 焦点/trap/Escape/滚动锁全部实测 | `612f186` |
+| lang="zh-CN" ×2 | ✅ | `d4ac88b` |
+| 文档漂移 | ✅ AGENTS.md 模块表 + REEL_ANCHOR 段 + asset-requests | `d4ac88b` |
+
+### 执行中发现的两个新问题（v2 也没抓到）
+
+1. **P1-6 的修法会冻住海面。** v2 说「dirty-check `live` vs `target`」跳过 wave table 重写——
+   但 `oceanScene.ts:961` 每帧推进 `wavePhase[i]`，而相位正是写在同一张表里的（`waveData[i*4+2]`）。
+   照做海就不动了。已改为**拆表**：方向/波数/振幅/choppy 半张按收敛 dirty-check（省掉每波每帧两次
+   三角函数 + 一次 pow），相位半张照旧每帧写。`sampleWave` 的每帧对象分配也已复用。
+2. **P1-8 主动不做。** `heroScene` 里 `computer.rotation` 是在 `updateFinalCamera()` **之后**
+   才设置的，把矩阵更新提前到「动画后一次 `updateMatrixWorld`」需要重排帧内顺序，
+   在一个逐帧调过的场景里换来的是几次矩阵乘法。收益小、回归风险实在，留给「真出现掉帧再说」。
+
+### 审查里仍未做的（按价值排序）
+
+JSON-LD（`/work` Article、`/` Person）· sitemap `lastModified` · 游戏最高分 localStorage ·
+`room-capture` 解码后体积上限 · hero 文案滚过后的 visibility cutoff（无障碍） ·
+reel 拖拽的键盘替代 · `og:title` 模板 · 两条重定向补尾斜杠 · robots 的 AI 爬虫策略（内容决定） ·
+`JoiSignalLab.tsx` 结构拆分（仍 2400+ 行） · `postfx.ts` 13-tap kernel 去重。
+
+---
+
 ## v2 改了什么（GLM 请先读这段）
 
 v1 里有三处会导致**白干或干错**的问题，已在正文修正：

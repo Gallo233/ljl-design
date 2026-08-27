@@ -9,6 +9,56 @@
 
 ---
 
+## 执行状态（v3 · 2026-08-27 收工时）
+
+**§A.0 已裁决：选 A（维持退役）。** ⛔ 段落就此解除，Phase 4 改为下方的 Phase 4'。
+**落地顺序已按批准的 1 → 3 → 2 执行。** 回滚点 `029e385`，之后 12 个提交。
+
+| 阶段 | 状态 |
+|---|---|
+| **Phase 0** 地基 | ✅ **全部完成**（滚动自取消 / wheel 门槛 / reduced-motion / 死代码 / 菜单焦点） |
+| **Phase 1.1** 速度驱动后处理 | ✅ 新增 `scrollSignal.ts`，驱动 distortion + aberration + persistence 三个旋钮 |
+| **Phase 1.2** 消费进度钩子 | ⚠️ 部分：`--contact-progress` 已消费；`--about-progress` 见下 |
+| **Phase 1.3** DOM 字过玻璃 | ❌ 未做 |
+| **Phase 1.4** Boot loader 升级 | ❌ 未做（但 Phase 3 的回程跳过已改变了它的语境，建议重估） |
+| **Phase 3.1** veil 叙事化 | ✅ `EJECTING — {目的地}`（用了 §A.1 默认值） |
+| **Phase 3.2** 进场合流 | ❌ 未做 |
+| **Phase 3.3** 回程跳过 boot | ✅ **两条路径都实测过**：回程 0 个子节点、340ms；首次进入仍 3/3 SYSTEMS、760ms |
+| **Phase 2.1** 引入 GSAP | ❌ **主动没做**，见下 |
+| **Phase 2.2** 品牌字体进轻世界 | ✅ `/work` 三种字全部实测到位；`/lab` 本来就已经转好了 |
+| **Phase 2.3** h1 入场 | ✅ 用纯 CSS clip 揭开做的（§A.6 的「克制」档） |
+| **Phase 2.4** Interlude 节奏 | ✅ CSS counter 骨架，无短注（§A.2 默认值） |
+| **Phase 2.5** `data-reveal` clip 变体 | ✅ |
+| **Phase 2.6** CSS 债务收敛 | ❌ 未做 |
+| **Phase 4'** 低成本触觉替代 | ⚠️ 清理已做完；灯光色温见下 |
+
+### 三个和方案原文不一致的地方，都是有理由的
+
+1. **速度驱动后处理不含 grain。** 方案把 grain 列为四旋钮之一，但 `uNoiseIntensity` 恒为 0 是
+   **最近两个提交刻意做的**（`55aed23`「读起来像镜头上的脏东西而不是胶片颗粒」、
+   `b9c89bb`「关掉叠加层之后，它是最后一个挡在读者和画面之间的东西」）。
+   把 grain 挂到速度曲线上等于从后门推翻这个决定。旋钮留着，理由写在 `scrollSignal.ts` 里。
+2. **没有引入 GSAP。** 决定 1 授权了它，但 Phase 2 里真正要它做的只有 h1 入场——
+   §A.6 的默认档是「整块 clip 升起」，纯 CSS 十几行就够，还能在 JS 没跑起来时正常显示。
+   为一个入场动画加一个依赖不划算。**如果之后要逐字 stagger 或更复杂的编排，再引不迟**，
+   边界（只在轻世界、不用 ScrollTrigger）保持不变。
+3. **`--about-progress` 驱动房间灯光色温没做**——方案说「`room3d.ts` 灯光组微调」，
+   但 **room3d 里没有灯**：房间是完全烘焙的（lightmap + atlas），`grep` 灯光零结果。
+   要做只能给 baked shader 加 tint uniform，那是在一张 Blender 里已经定过调的图上再调色，
+   撞上 AGENTS.md 冻结的色彩管理。**建议改成别的 About 氛围手段，或明确授权动 baked 色调。**
+
+### 另外两个执行中才暴露的坑（已绕过，记下来）
+
+- **`--contact-progress` 不能用来 gate 内容。** 深链 `/contact` 落在 progress = 0，
+  下面还有整整一屏。任何「按进度逐行落位」都会把邮箱藏在读者没有理由做的滚动后面。
+  已实现为**装饰**（call sheet 的横线随进度填充），不是揭示。
+- **`/work` 换字体要在 `main.project-page` 上提specificity。** 两层拦路：
+  `redesign.css` 在 `body` 上解析 `--sans`（子元素继承的是算好的 Inter，不会重读变量）；
+  `styles.css:3166` 另有一条裸 `.project-page` 直接写死 Inter 栈，同权重靠顺序赢。
+  两个文件 `/classic` 都在用，不能改——已实测 `/classic` 完全没挂字体变量。
+
+---
+
 ## ⛔ 动手前必须裁决的一件事
 
 **Phase 4（唱片装置复活）建立在一个错误前提上。**
