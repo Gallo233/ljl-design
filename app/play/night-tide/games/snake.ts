@@ -7,6 +7,7 @@ import {
   type ArcadeGame,
   type GameContext,
 } from "./types";
+import { createBestScore } from "./bestScore";
 
 const COLUMNS = 24;
 const ROWS = 18;
@@ -52,7 +53,8 @@ export const snake: ArcadeGame = {
     let timer = 0;
     let interval = START_INTERVAL;
     let score = 0;
-    let best = 0;
+    // Kept across ejects and reloads; the readout has always claimed it was.
+    const bestScore = createBestScore("snake");
     let dead = false;
 
     const placeFood = () => {
@@ -110,8 +112,10 @@ export const snake: ArcadeGame = {
       const hitSelf = body.slice(0, -1).some((part) => part.x === head.x && part.y === head.y);
       if (hitWall || hitSelf) {
         dead = true;
-        best = Math.max(best, score);
-        setStatus(`GAME OVER / ${String(score).padStart(3, "0")} · A 重开`);
+        const record = bestScore.submit(score);
+        setStatus(
+          `GAME OVER / ${String(score).padStart(3, "0")}${record ? " · NEW BEST" : ""} · A 重开`,
+        );
         return;
       }
 
@@ -183,7 +187,7 @@ export const snake: ArcadeGame = {
       context.textBaseline = "middle";
       context.fillText(`SCORE ${String(score).padStart(3, "0")}`, ORIGIN_X - 4, ORIGIN_Y - 26);
       context.textAlign = "right";
-      context.fillText(`BEST ${String(Math.max(best, score)).padStart(3, "0")}`, ORIGIN_X + BOARD_WIDTH + 4, ORIGIN_Y - 26);
+      context.fillText(`BEST ${String(Math.max(bestScore.get(), score)).padStart(3, "0")}`, ORIGIN_X + BOARD_WIDTH + 4, ORIGIN_Y - 26);
       context.textAlign = "left";
 
       if (dead) {

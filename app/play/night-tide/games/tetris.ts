@@ -7,6 +7,7 @@ import {
   type ArcadeGame,
   type GameContext,
 } from "./types";
+import { createBestScore } from "./bestScore";
 
 const COLUMNS = 10;
 const ROWS = 20;
@@ -120,6 +121,7 @@ export const tetris: ArcadeGame = {
     let lockTimer = 0;
     let repeatTimer = 0;
     let score = 0;
+    const bestScore = createBestScore("tetris");
     let lines = 0;
     let level = 1;
     let dead = false;
@@ -158,7 +160,11 @@ export const tetris: ArcadeGame = {
       if (collides(candidate)) {
         dead = true;
         piece = null;
-        setStatus(`GAME OVER / ${score} · START 重开`);
+        // The record only means anything at the end of a run, so that is where it shows.
+        const record = bestScore.submit(score);
+        setStatus(
+          `GAME OVER / ${score}${record ? " · NEW BEST" : ` · BEST ${bestScore.get()}`} · START 重开`,
+        );
         return;
       }
       piece = candidate;

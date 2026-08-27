@@ -6,6 +6,7 @@ import {
   type ArcadeGame,
   type GameContext,
 } from "./types";
+import { createBestScore } from "./bestScore";
 
 /**
  * The maze. `#` wall, `.` pellet, `o` power pellet, ` ` empty, `-` ghost-house door.
@@ -101,6 +102,7 @@ export const pacman: ArcadeGame = {
     let player: Actor;
     let ghosts: Ghost[] = [];
     let score = 0;
+    const bestScore = createBestScore("pacman");
     let lives = 3;
     let pelletsLeft = 0;
     let mouth = 0;
@@ -223,7 +225,12 @@ export const pacman: ArcadeGame = {
         respawnTimer -= delta;
         if (respawnTimer <= 0) {
           if (lives > 0) reset(false);
-          else setStatus(`GAME OVER / ${score} · A 重开`);
+          else {
+            const record = bestScore.submit(score);
+            setStatus(
+              `GAME OVER / ${score}${record ? " · NEW BEST" : ` · BEST ${bestScore.get()}`} · A 重开`,
+            );
+          }
         }
         return;
       }
@@ -252,6 +259,7 @@ export const pacman: ArcadeGame = {
         setStatus(`PAC-MAN / ${score} · ♥${lives}`);
         if (pelletsLeft === 0) {
           won = true;
+          bestScore.submit(score);
           setStatus(`CLEARED / ${score} · A 再来`);
           return;
         }

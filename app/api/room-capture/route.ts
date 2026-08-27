@@ -16,6 +16,20 @@ import path from "node:path";
 
 const OUT_DIR = path.join(process.cwd(), ".next", "cache", "room-preview");
 
+/**
+ * Ceiling on a decoded frame.
+ *
+ * Production 404s and the name is sanitised, so what is left is the development case:
+ * any local process can POST here, and without a bound it can write a file of any size
+ * as fast as it can send one. A 4K PNG of this scene is comfortably under two megabytes,
+ * so eight is generous for a screenshot sink and still refuses to fill a disk.
+ *
+ * Checked against the decoded length rather than the string's, because base64 is what
+ * arrives and bytes are what get written — the encoded form is a third larger, and
+ * measuring the wrong one is how a limit ends up meaning something other than it says.
+ */
+const MAX_BYTES = 8 * 1024 * 1024;
+
 export async function POST(request: Request) {
   if (process.env.NODE_ENV === "production") {
     return new Response("Not found", { status: 404 });
@@ -30,6 +44,12 @@ export async function POST(request: Request) {
   const safeName = name.replace(/[^a-zA-Z0-9._-]/g, "-").slice(0, 80);
   const file = path.join(OUT_DIR, `${safeName}.png`);
   const bytes = Buffer.from(dataUrl.slice("data:image/png;base64,".length), "base64");
+  if (bytes.length > MAX_BYTES) {
+    return Response.json(
+      { error: `frame is ${bytes.length} bytes; the limit is ${MAX_BYTES}` },
+      { status: 413 },
+    );
+  }
 
   await mkdir(OUT_DIR, { recursive: true });
   await writeFile(file, bytes);
