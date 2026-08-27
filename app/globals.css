@@ -77,7 +77,40 @@ canvas {
 [data-reveal="2"] { transition-delay: .08s; }
 [data-reveal="3"] { transition-delay: .16s; }
 
+/*
+ * A second reveal shape, for headings.
+ *
+ * Rise-and-fade is right for a block of copy, which arrives as an object. A heading
+ * reads better wiped up from its own baseline: the type itself stays put and only the
+ * mask moves, so the words look set rather than flown in. Opt in with
+ * `data-reveal="clip"` — `RevealRoot` does not need to tell the two apart, because the
+ * shape lives entirely here.
+ *
+ * The resting clip is inset by a negative amount rather than left unset, so nothing
+ * crops a descender or a text-shadow at the end of the transition. Unarmed elements
+ * keep the same slack, which means a page whose script never ran is not clipped either.
+ */
+[data-reveal="clip"] {
+  clip-path: inset(-25% -25% -25% -25%);
+  transition:
+    clip-path .78s cubic-bezier(.22, .8, .3, 1),
+    opacity .48s ease,
+    transform .78s cubic-bezier(.22, .8, .3, 1);
+}
+
+[data-reveal="clip"].reveal-armed {
+  opacity: 0;
+  clip-path: inset(0 -25% 100% -25%);
+  transform: translateY(6%);
+}
+
 @media (prefers-reduced-motion: reduce) {
   [data-reveal] { transition: none; }
   [data-reveal].reveal-armed { opacity: 1; transform: none; }
+  [data-reveal="clip"] { transition: none; }
+  [data-reveal="clip"].reveal-armed {
+    opacity: 1;
+    clip-path: inset(-25% -25% -25% -25%);
+    transform: none;
+  }
 }

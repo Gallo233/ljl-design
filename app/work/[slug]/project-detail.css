@@ -649,3 +649,61 @@ main.project-page {
   letter-spacing: -0.015em;
   line-height: 1.04;
 }
+
+
+/*
+ * Chapter marks between the sections.
+ *
+ * The case studies run as one long column of headings and copy, and past the second
+ * section there is nothing that says how far in you are. This is the skeleton of the
+ * interlude: a hairline across the full measure and a large mono numeral sitting on it,
+ * counted by CSS rather than written into the markup — the sections are already ordered
+ * and already numbered by being in that order, so numbering them twice would be a second
+ * source of truth to keep in step.
+ *
+ * No annotation line yet; that is copy, and copy is the author's. The rule and the
+ * numeral read on their own until it arrives.
+ */
+.project-page article {
+  counter-reset: project-section;
+}
+
+.project-page .project-detail-section {
+  counter-increment: project-section;
+  position: relative;
+}
+
+/*
+ * Only on a section that follows another one.
+ *
+ * A chapter mark separates this section from the previous, so a section with nothing
+ * above it has nothing to be separated from — and the mark would otherwise sit directly
+ * under the hero, reading as a rule across the top of the body.
+ *
+ * The adjacent-sibling selector says that directly. `:first-of-type` does not work here
+ * and looks as though it should: the hero is a <section> too, so the first
+ * `.project-detail-section` is not the first section of its type and the exception never
+ * matches.
+ */
+.project-page .project-detail-section + .project-detail-section {
+  padding-top: 34px;
+}
+
+.project-page .project-detail-section + .project-detail-section::before {
+  content: counter(project-section, decimal-leading-zero);
+  position: absolute;
+  top: 0;
+  right: 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+  width: 100%;
+  color: var(--project-accent);
+  font-family: var(--mono);
+  font-size: clamp(28px, 4vw, 54px);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -.02em;
+  line-height: 1;
+  text-align: right;
+  opacity: .22;
+  pointer-events: none;
+}

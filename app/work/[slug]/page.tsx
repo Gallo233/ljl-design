@@ -115,7 +115,7 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
             <p className="project-detail-kicker">
               {project.index}{project.kind ? ` / ${project.kind}` : ""}
             </p>
-            <h1>{project.title}</h1>
+            <h1 data-reveal="clip">{project.title}</h1>
             {project.tagline && <p className="project-detail-tagline">{project.tagline}</p>}
           </div>
 
