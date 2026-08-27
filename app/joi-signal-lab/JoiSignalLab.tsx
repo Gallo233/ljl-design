@@ -1990,6 +1990,16 @@ function FilmCanvas({
   );
 }
 
+/*
+ * `useLayoutEffect` on the client, `useEffect` on the server.
+ *
+ * React warns when a component that renders on the server uses a layout effect, and
+ * this one has to be a layout effect: it decides whether the boot screen is drawn at
+ * all, and an ordinary effect makes that decision one frame too late — which is one
+ * frame of full-screen cream, i.e. exactly the blink it exists to remove.
+ */
+const useBeforePaint = typeof window !== "undefined" ? useLayoutEffect : useEffect;
+
 export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSignalLabProps) {
   const router = useRouter();
   const experienceRef = useRef<HTMLElement>(null);
@@ -2005,6 +2015,8 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
   const [playingMixId, setPlayingMixId] = useState<string | null>(null);
   const [computerReady, setComputerReady] = useState(false);
   const [fontsReady, setFontsReady] = useState(false);
+  /** True when this mount is the way back from a detail page rather than an arrival. */
+  const [returning, setReturning] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   /*
    * What each custom property was last set to.
@@ -2020,6 +2032,8 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
   const menuSheetRef = useRef<HTMLDivElement>(null);
   /** True while the leave-transition veil covers the stage on the way to a detail page. */
   const [leaving, setLeaving] = useState(false);
+  /** Where the veil is on its way to, so it can say so. */
+  const [leavingTo, setLeavingTo] = useState<string | null>(null);
   const [seaState, setSeaState] = useState(0);
   /** 33⅓ by default, the way a deck is left. */
   const [deckRpm, setDeckRpm] = useState(33 + 1 / 3);
@@ -2122,12 +2136,31 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
     };
   }, [menuOpen]);
 
-  // Returning from a detail page: land back on the frame the reader left from.
-  useEffect(() => {
+  /*
+   * Returning from a detail page: land back on the frame the reader left from, and do
+   * not make them watch the machine start up again.
+   *
+   * Booting is a first-arrival story. On the way back it is pure friction — the same
+   * cream field, the same three systems counting up, in front of a page the reader has
+   * already seen. What they left under was a cream veil, and the boot screen happens to
+   * be the same cream, so the way home is to keep the colour and drop the chrome: no
+   * wordmark, no pulse, no system count, and a shorter lift.
+   *
+   * The cream itself stays until the stage is genuinely ready. Lifting it early would
+   * trade a boot screen for a black one, which is not an improvement. And the boot lock
+   * is deliberately untouched — it is what holds the page where the deep link put it
+   * while the models parse, and that job does not change just because nobody is being
+   * shown a progress count.
+   *
+   * Read before paint, or the boot screen renders for a frame on the way back and the
+   * whole point is a visible blink.
+   */
+  useBeforePaint(() => {
     try {
       const raw = sessionStorage.getItem("reel:return");
       if (!raw) return;
       sessionStorage.removeItem("reel:return");
+      setReturning(true);
       const saved = JSON.parse(raw) as { step?: number };
       if (typeof saved.step === "number") setStep(saved.step);
     } catch {
@@ -2316,6 +2349,7 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
                 sessionStorage.setItem("reel:return", JSON.stringify({ step }));
                 sessionStorage.setItem("reel:arrive", "1");
               } catch {}
+              setLeavingTo(href);
               setLeaving(true);
               window.setTimeout(() => router.push(href), 300);
             }}
@@ -2513,17 +2547,35 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
 
         <SiteHUD />
 
-        <div className={`${styles.loader} ${ready ? styles.loaderReady : ""}`} role="status" aria-live="polite">
-          <span>GALLO / JOI</span>
-          <i />
-          <strong>
-            BOOTING JOI9000
-            <em>{loadedSystems}/3 SYSTEMS</em>
-          </strong>
+        <div
+          className={`${styles.loader} ${ready ? styles.loaderReady : ""} ${returning ? styles.loaderReturning : ""}`}
+          role={returning ? undefined : "status"}
+          aria-live={returning ? undefined : "polite"}
+          aria-hidden={returning ? true : undefined}
+        >
+          {!returning && (
+            <>
+              <span>GALLO / JOI</span>
+              <i />
+              <strong>
+                BOOTING JOI9000
+                <em>{loadedSystems}/3 SYSTEMS</em>
+              </strong>
+            </>
+          )}
         </div>
 
-        {/* The way out: cream over everything, then the route swap happens under it. */}
-        <div className={`${styles.leaveVeil} ${leaving ? styles.leaveVeilActive : ""}`} aria-hidden="true" />
+        {/*
+          The way out: cream over everything, then the route swap happens under it.
+
+          The line names where the machine is going. Three hundred milliseconds of blank
+          cream is the one moment in the transition that says nothing at all, and a
+          transport that announces what it is doing is the whole conceit of this page —
+          the reader is stepping out of a machine, so the machine says so.
+        */}
+        <div className={`${styles.leaveVeil} ${leaving ? styles.leaveVeilActive : ""}`} aria-hidden="true">
+          {leavingTo && <span>EJECTING — {leavingTo}</span>}
+        </div>
       </div>
     </main>
   );

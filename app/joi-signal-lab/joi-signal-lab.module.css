@@ -1094,18 +1094,39 @@
 .loader strong { display: grid; gap: 4px; justify-self: end; justify-items: end; font-weight: 500; }
 .loader strong em { font-style: normal; font-size: 8px; letter-spacing: .2em; opacity: .55; }
 .loaderReady { opacity: 0; visibility: hidden; pointer-events: none; }
+/*
+ * The way home. Same cream, none of the ceremony: the reader left this page under a
+ * cream veil and is coming back to it, so this is the tail of that veil rather than a
+ * second boot. Shorter, because it is a lift and not a title card.
+ */
+.loaderReturning { transition-duration: 340ms, 340ms; }
 
 /* The exit veil: the detail pages' paper colour, so the route swap hides under it. */
 .leaveVeil {
   position: absolute;
   inset: 0;
   z-index: 40;
+  display: grid;
+  place-items: center;
   background: #fff6e8;
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
   transition: opacity .3s ease, visibility 0s linear .3s;
 }
+
+/* The transport, saying where it is going. Arrives a beat behind the colour. */
+.leaveVeil span {
+  font-family: var(--font-signal-mono), monospace;
+  font-size: 10px;
+  letter-spacing: .22em;
+  color: #8a5a4a;
+  opacity: 0;
+  translate: 0 4px;
+  transition: opacity .22s ease .1s, translate .22s ease .1s;
+}
+
+.leaveVeilActive span { opacity: .8; translate: 0 0; }
 
 .leaveVeilActive {
   opacity: 1;
@@ -1530,6 +1551,7 @@
   .controls > button,
   .dots button { transition: none; }
   .deckShelf i { transition: none; }
+  .leaveVeil span { transition: none; }
   .stageLayer,
   .filmLayer,
   .filmUi,
