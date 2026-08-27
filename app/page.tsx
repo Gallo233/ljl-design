@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { ExperienceShell } from "./joi-signal-lab/ExperienceShell";
+import { PersonJsonLd } from "../components/JsonLd";
 
 /**
  * The canonical is declared here rather than in the root layout on purpose: metadata
@@ -11,5 +12,10 @@ export const metadata: Metadata = {
 };
 
 export default function HomePage() {
-  return <ExperienceShell section="hero" />;
+  return (
+    <>
+      <PersonJsonLd />
+      <ExperienceShell section="hero" />
+    </>
+  );
 }

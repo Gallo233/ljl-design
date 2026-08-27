@@ -14,6 +14,7 @@ import { JoiMobileIPhoneShowcase } from "../../../components/joi-mobile-iphone/J
 import { PageScrollState } from "../../../components/PageScrollState";
 import { SHARE_CARD, canonicalPath } from "../../site";
 import { fontVariables } from "../../fonts";
+import { ProjectJsonLd } from "../../../components/JsonLd";
 
 /**
  * Project detail — the light editorial layout you land in after stepping out of
@@ -50,7 +51,10 @@ export async function generateMetadata({ params }: ProjectPageProps): Promise<Me
       // so the fields that should survive are repeated here.
       type: "article",
       siteName: "Gallo",
-      title: project.title,
+      // The `%s — Gallo` template applies to `title` and not to this one, so a share
+      // card said "JOI — PRESENCE" where the tab said "JOI — PRESENCE — Gallo". /lab
+      // and the game centre already spell it out; this route was the odd one.
+      title: `${project.title} — Gallo`,
       ...(project.summary ? { description: project.summary } : {}),
       url,
       images: [SHARE_CARD],
@@ -59,7 +63,7 @@ export async function generateMetadata({ params }: ProjectPageProps): Promise<Me
       // Same replacement rule as `openGraph`: without this the card would still
       // carry the site-level title on every project page.
       card: "summary_large_image",
-      title: project.title,
+      title: `${project.title} — Gallo`,
       ...(project.summary ? { description: project.summary } : {}),
       images: [SHARE_CARD.url],
     },
@@ -68,7 +72,8 @@ export async function generateMetadata({ params }: ProjectPageProps): Promise<Me
 
 export default async function ProjectPage({ params }: ProjectPageProps) {
   const { slug } = await params;
-  if (slug === "joi-map") redirect(sitePath("/work/joi-mobile"));
+  // Slashed, because `trailingSlash: true` would otherwise 308 this a second time.
+  if (slug === "joi-map") redirect(sitePath("/work/joi-mobile/"));
   const project = getProject(slug);
   if (!project) notFound();
 
@@ -94,6 +99,7 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
 
   return (
     <main className={`${fontVariables} project-page project-page--${project.slug}`}>
+      <ProjectJsonLd project={project} />
       {project.slug === "joi" && <PageScrollState />}
       <ArrivalFade />
       <RevealRoot />
