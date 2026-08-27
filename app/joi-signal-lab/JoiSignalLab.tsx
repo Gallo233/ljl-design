@@ -904,6 +904,7 @@ function FilmCanvas({
   exitRef,
   roomPresenceRef,
   scrollVelocityRef,
+  signalRef,
   onStepChange,
   onProjectOpen,
   onReady,
@@ -929,6 +930,14 @@ function FilmCanvas({
   roomPresenceRef: { current: number };
   /** Scroll speed in screens per second, signed. Drives the tube's grip on the signal. */
   scrollVelocityRef: { current: number };
+  /**
+   * Filled in here: the smoothed instability, 0 at rest to 1 at speed.
+   *
+   * The signal is computed on this canvas because this is the loop that has a frame
+   * delta, and published so the DOM over the glass can be bent by the same number that
+   * bends the picture under it, rather than by a second one that drifts out of step.
+   */
+  signalRef: { current: number };
   /** True while the reader is at the deck, which is what puts the camera on it. */
   deckOpen: boolean;
   /** 33⅓ or 45; the platter follows it. */
@@ -1093,7 +1102,9 @@ function FilmCanvas({
      * fault rather than as speed, and the tier is already the place that decides how
      * much machine we are running on.
      */
-    const scrollSignal = createScrollSignal(tier.isMobile ? 0.5 : 1);
+    const scrollSignal = createScrollSignal(
+      tier.reducedMotion ? 0 : tier.isMobile ? 0.5 : 1,
+    );
     const reelMotions = reelMotionSources.map((source) => createReelMotion(source, isMobile));
     /** By the frame they belong to. The frame loop below asked for these by search. */
     const motionByProject = new Map(reelMotions.map((motion) => [motion.projectIndex, motion]));
@@ -1850,6 +1861,7 @@ function FilmCanvas({
        * in `scrollSignal.ts`.
        */
       const instability = scrollSignal.update(scrollVelocityRef.current, delta);
+      signalRef.current = instability;
 
       post.uniforms.uLensDistortion.value =
         (THREE.MathUtils.lerp(0.32, 0.72, reveal) + instability * 0.08) * reelOwnsFrame;
@@ -2172,6 +2184,8 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
   // per frame — the reference keeps these in motion values for the same reason.
   const entryRef = useRef(0);
   const scrollVelocityRef = useRef(0);
+  /** Filled by FilmCanvas each frame; read straight back out as `--velocity`. */
+  const signalRef = useRef(0);
   const filmRevealRef = useRef(0);
   const reelExitRef = useRef(0);
   /** About's full-stage room fades out before Contact owns the address and copy. */
@@ -2263,6 +2277,8 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
       write("--reel-exit", reelExit.toFixed(4));
       write("--about-progress", progressWithin("about-me", screens).toFixed(4));
       write("--contact-progress", progressWithin("contact", screens).toFixed(4));
+      // The same instability the post chain is using, for the type sitting over it.
+      write("--velocity", signalRef.current.toFixed(3));
     },
     onSectionChange: setActiveSection,
     // Don't snap out from under someone who is dragging the reel.
@@ -2345,6 +2361,7 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
             exitRef={reelExitRef}
             roomPresenceRef={roomPresenceRef}
             scrollVelocityRef={scrollVelocityRef}
+            signalRef={signalRef}
             deckOpen={musicPlayerOpen}
             deckRpm={deckRpm}
             deckProgress={deckProgress}
@@ -2581,7 +2598,27 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
               <span>GALLO / JOI</span>
               <i />
               <strong>
-                BOOTING JOI9000
+                <span>
+                  BOOTING JOI9000
+                  <b className={styles.loaderCursor} aria-hidden="true" />
+                </span>
+                {/*
+                  The three systems by name rather than as a count.
+                  
+                  They are the same three signals the gate has always been built from —
+                  the film, the terminal, the fonts — and naming them makes the wait
+                  legible: a reader who sits here for a moment can see *what* is slow.
+                  The names come from vocabulary the page already uses; the HUD has
+                  called the terminal the optical core since it was written.
+
+                  Hidden from assistive tech, which keeps the single spoken count below
+                  instead of announcing three separate lines as they land.
+                */}
+                <ul className={styles.loaderSystems} aria-hidden="true">
+                  <li className={filmReady ? styles.loaderSystemUp : ""}>FILM TRANSPORT</li>
+                  <li className={computerReady ? styles.loaderSystemUp : ""}>OPTICAL CORE</li>
+                  <li className={fontsReady ? styles.loaderSystemUp : ""}>TYPE SETTER</li>
+                </ul>
                 <em>{loadedSystems}/3 SYSTEMS</em>
               </strong>
             </>
