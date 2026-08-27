@@ -98,11 +98,22 @@ export const TOTAL_SCREENS = SECTIONS[SECTIONS.length - 1].position + 1;
  * lands exactly on that boundary, and anything later leaves the reader in the hand-off — hero
  * already faded, film not yet arrived, nothing on screen.
  */
-export const REEL_ANCHOR = SECTIONS[1].position;
+const reelSection = SECTIONS.find((section) => section.id === "selected-work");
+if (!reelSection) {
+  throw new Error("SECTIONS must contain 'selected-work' — see AGENTS.md, scroll architecture");
+}
+
+export const REEL_ANCHOR = reelSection.position;
 
 if (process.env.NODE_ENV !== "production" && REEL_ANCHOR !== SECTIONS[1].position) {
   // Belt-and-braces for future refactors: this equality has been broken once before,
   // and the failure mode is a blank screen on the /selected-work deep link.
+  //
+  // Looking the section up by id and *then* checking it is still second is what makes
+  // this bite. Reading `SECTIONS[1].position` into the constant and comparing it to
+  // `SECTIONS[1].position` — which is what stood here — is a tautology: it cannot fail,
+  // and inserting a section above Selected Work would have moved the anchor in silence
+  // rather than stopping the build.
   throw new Error("REEL_ANCHOR must equal SECTIONS[1].position — see AGENTS.md, scroll architecture");
 }
 

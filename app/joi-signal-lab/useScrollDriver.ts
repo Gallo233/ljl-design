@@ -84,6 +84,33 @@ export function useScrollDriver({ onFrame, onSectionChange, isLocked, bootLocked
     /** Where the page is pinned while the boot lock holds; null when free. */
     let bootLockY: number | null = null;
 
+    /*
+     * Where this driver last put the page itself.
+     *
+     * `window.scrollTo` fires a scroll event indistinguishable from a finger's, and
+     * the animation below writes one every frame it runs. Without this the glide
+     * cancelled itself: `onScroll` saw the animation's own output, read it as the
+     * reader taking over, and dropped the animation 80ms in. A 2.4s nav glide moved
+     * for two frames and stopped, the settle logic re-snapped, and the whole thing
+     * came out as a stutter-crawl instead of a glide.
+     *
+     * A scroll event counts as ours only if it arrives promptly after a write *and*
+     * lands where that write asked for. The tolerance absorbs the rounding the
+     * browser does to settle on a device pixel; the deadline means a stale position
+     * can never silently swallow a real gesture later.
+     */
+    let lastWrittenY: number | null = null;
+    let lastWriteAt = 0;
+    const scrollSelfTo = (y: number) => {
+      lastWrittenY = y;
+      lastWriteAt = performance.now();
+      window.scrollTo(0, y);
+    };
+    const isOwnScroll = () =>
+      lastWrittenY !== null &&
+      performance.now() - lastWriteAt < 100 &&
+      Math.abs(window.scrollY - lastWrittenY) <= 2;
+
     const viewport = () => Math.max(1, window.innerHeight);
     const targetScreens = () => window.scrollY / viewport();
     const maxScroll = () => Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
@@ -106,6 +133,8 @@ export function useScrollDriver({ onFrame, onSectionChange, isLocked, bootLocked
     const onScroll = () => {
       lastScrollAt = performance.now();
       // A real scroll gesture cancels an in-flight snap so the reader always wins.
+      // Only a real one, though — see `lastWrittenY`.
+      if (isOwnScroll()) return;
       if (animation && performance.now() - animation.startedAt > 80) animation = null;
     };
 
@@ -136,7 +165,7 @@ export function useScrollDriver({ onFrame, onSectionChange, isLocked, bootLocked
       // drags, programmatic scrolls) by simply putting the position back.
       if (optionsRef.current.bootLocked?.()) {
         if (bootLockY === null) bootLockY = window.scrollY;
-        if (window.scrollY !== bootLockY) window.scrollTo(0, bootLockY);
+        if (window.scrollY !== bootLockY) scrollSelfTo(bootLockY);
       } else if (bootLockY !== null) {
         bootLockY = null;
       }
@@ -145,7 +174,7 @@ export function useScrollDriver({ onFrame, onSectionChange, isLocked, bootLocked
         const elapsed = now - animation.startedAt;
         const t = Math.min(1, elapsed / animation.duration);
         const eased = easeInOutCubic(t);
-        window.scrollTo(0, animation.from + (animation.to - animation.from) * eased);
+        scrollSelfTo(animation.from + (animation.to - animation.from) * eased);
         if (t >= 1) animation = null;
       }
 

@@ -232,6 +232,9 @@ const scene = new THREE.Scene();
 
   let disposed = false;
   let modelLoaded = false;
+  /** Textures the computer GLB brought in; nothing else. See the harvest below. */
+  const ownedTextures = new Set<any>();
+
   const dracoLoader = new DRACOLoader();
   dracoLoader.setDecoderPath("/draco/");
   const loader = new GLTFLoader();
@@ -242,10 +245,20 @@ const scene = new THREE.Scene();
       if (disposed) return;
       const model = gltf.scene;
       const originalLogo = model.getObjectByName("logo");
+      /*
+       * Materials taken off the GLB on the way in.
+       *
+       * `material.dispose()` frees the program, not the maps hanging off it, and a
+       * material that has been replaced is no longer reachable from the scene graph
+       * at all — so neither it nor its textures would ever be reached by the traverse
+       * in `dispose`. Collected here and released with everything else below.
+       */
+      const retired: any[] = [];
       if (originalLogo) {
         originalLogo.visible = true;
         originalLogo.traverse((object: any) => {
           if (!object.isMesh) return;
+          retired.push(object.material);
           object.material = new THREE.MeshStandardMaterial({
             color: 0x090b0e,
             roughness: 0.34,
@@ -258,6 +271,7 @@ const scene = new THREE.Scene();
         object.castShadow = shadows && object.name !== "background";
         object.receiveShadow = true;
         if (object.name === "computer" && object.material) {
+          retired.push(object.material);
           object.material = object.material.clone();
           object.material.roughness = 0.8;
           /*
@@ -275,6 +289,7 @@ const scene = new THREE.Scene();
           object.material.side = THREE.DoubleSide;
         }
         if (object.name === "keyboard") {
+          retired.push(object.material);
           object.material = new THREE.MeshStandardMaterial({
             color: 0x050609,
             roughness: 0.2,
@@ -297,6 +312,31 @@ const scene = new THREE.Scene();
         // still has to draw in the beauty pass on layer 0.
         object.layers.enable(OCCLUDER_LAYER);
       });
+      /*
+       * Everything the GLB brought with it, in one place for `dispose` to free.
+       *
+       * Scoped deliberately to the model and the materials it arrived with. The
+       * screen's map is the film's render target, owned and released by the caller,
+       * and the orb, solar and dust modules each free their own — disposing textures
+       * from a blind walk of the whole scene would take those with it and leave the
+       * stage drawing black on the next mount.
+       */
+      const harvest = (material: any) => {
+        if (!material) return;
+        for (const value of Object.values(material)) {
+          if ((value as any)?.isTexture) ownedTextures.add(value);
+        }
+      };
+      model.traverse((object: any) => {
+        if (!object.isMesh) return;
+        if (Array.isArray(object.material)) object.material.forEach(harvest);
+        else harvest(object.material);
+      });
+      retired.forEach((material) => {
+        harvest(material);
+        material?.dispose?.();
+      });
+
       modelRoot.add(model);
       modelLoaded = true;
       // Six cube faces of shadow were rendered against an empty room. Ask for them again
@@ -700,6 +740,8 @@ const scene = new THREE.Scene();
         if (Array.isArray(object.material)) object.material.forEach((material: any) => material.dispose?.());
         else object.material?.dispose?.();
       });
+      ownedTextures.forEach((texture) => texture.dispose?.());
+      ownedTextures.clear();
       dracoLoader.dispose();
     },
   };

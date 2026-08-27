@@ -1626,6 +1626,14 @@ function FilmCanvas({
     };
     const handleWheel = (event: WheelEvent) => {
       if (Math.abs(event.deltaX) <= Math.abs(event.deltaY)) return;
+      // Same ownership contract the pointer path signs. Without it a two-finger
+      // sideways swipe anywhere on the page stepped the reel behind the reader's
+      // back: on the hero and down in About and Contact the film is not on screen,
+      // so the step was invisible, but it still fired `onStepChange` and still
+      // re-rendered — and the project it landed on was the one waiting when they
+      // scrolled back up. `reelOwnsPointer` reads scroll state, not the cursor, so
+      // it answers just as well for a wheel as for a finger.
+      if (!reelOwnsPointer()) return;
       event.preventDefault();
       const now = performance.now();
       wheel.accumulated += event.deltaX;
