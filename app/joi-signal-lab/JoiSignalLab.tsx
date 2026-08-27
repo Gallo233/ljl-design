@@ -1207,13 +1207,35 @@ function FilmCanvas({
       roomTarget.dispose();
       hero.dispose();
       post.dispose();
+      const surface = renderer.domElement;
       renderer.dispose();
-      // `dispose()` releases what Three allocated; the GL context itself lives on
-      // until the canvas is collected. A reader bouncing between the reel and a
-      // project page can outrun the collector and walk into the browser's
-      // per-tab context ceiling, at which point the oldest live context is killed
-      // — which is this one, on the way back.
-      renderer.forceContextLoss();
+      /*
+       * Give the context back, but only once the canvas has actually gone.
+       *
+       * `dispose()` releases what three allocated; the GL context itself lives on until
+       * the canvas is collected, and a reader bouncing between the reel and a project
+       * page can outrun the collector toward the browser's per-tab ceiling.
+       * `forceContextLoss()` is how you hand it back early — and it is permanent. The
+       * canvas can never render again.
+       *
+       * That is the trap this guard exists for. This cleanup does not only run when the
+       * reader leaves: React also tears an effect down and sets it straight back up on
+       * the *same* DOM node — StrictMode does it on every mount in development, and a
+       * router re-render does it in production. Killing the context there leaves the
+       * next line to construct a renderer on a dead canvas, where
+       * `getShaderPrecisionFormat` returns null and reading `.precision` off it throws
+       * before anything paints. Which is exactly what "back to reel" did.
+       *
+       * So the decision waits a macrotask for React to finish committing, and then asks
+       * the only question that distinguishes the two cases: is this canvas still in the
+       * document? Still attached means React kept it and is about to reuse it — and a
+       * reused canvas is a reused context, so there is nothing to reclaim. Detached
+       * means it is genuinely gone, and the context can go with it.
+       */
+      window.setTimeout(() => {
+        if (surface.isConnected) return;
+        renderer.forceContextLoss();
+      }, 0);
     };
   }, []);
 

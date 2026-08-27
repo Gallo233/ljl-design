@@ -33,6 +33,22 @@ P0 全部 8 条 · P1 的 9/11 条 · 死 CSS/死导出/死变量 · reduced-mot
 - **FilmCanvas 提取**：结构拆分做了 5 个缝里的 4 个。FilmCanvas 闭包了几十个上下文变量，
   收益是可读性、风险是行为，单独立项更稳妥。
 
+### ⚠️ P1-10 的修法有陷阱（上线后发现，已修）
+
+`renderer.forceContextLoss()` **不能无条件放在 effect cleanup 里**。它是永久的——画布之后
+再也不能渲染。而这个 cleanup 不只在读者离开时跑：React 会在**同一个 DOM 节点**上拆掉再装回
+一个 effect（开发态 StrictMode 每次挂载都这样，生产态 router 重渲染也会）。在那里把上下文
+打死，下一行就会在一张死画布上 `new THREE.WebGLRenderer()`，`getShaderPrecisionFormat()`
+返回 null,读 `.precision` 直接抛错,页面什么都没画出来就崩。
+
+**症状**：从任意 `/work/*` 点「BACK TO REEL」必崩 `Cannot read properties of null
+(reading 'precision')`,刷新又好了。
+
+**修法**：推迟一个 macrotask 等 React 提交完,再问唯一能区分两种情况的问题——
+画布还在文档里吗？还连着说明 React 留着要复用它,而复用画布就是复用上下文,没有东西要回收;
+已脱离说明是真的走了,上下文可以跟着走。已实测:两个 work 页各来回两轮,零报错、3/3 SYSTEMS、
+`isContextLost() === false`。
+
 ### 执行中发现的、v2 也没抓到的四个问题
 
 1. **P1-6 的修法会冻住海面。** `oceanScene.ts:961` 每帧推进 `wavePhase[i]`，而相位就写在
