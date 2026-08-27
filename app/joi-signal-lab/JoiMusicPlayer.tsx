@@ -11,7 +11,6 @@ type JoiMusicPlayerProps = {
    * in any more — carrying a record across the desk starts the same three mixes — so
    * the deck asks for a mix by id and this owns the audio either way.
    */
-  requestedMixId?: string | null;
   /** Fires whenever playback starts or stops, so the platter knows to turn. */
   onPlayingChange?: (mixId: string | null) => void;
   /**
@@ -97,13 +96,9 @@ type ActiveAudio = {
  * Three tiny generative ambient records. They begin only after a visitor gesture,
  * stay deliberately quiet, and require no external/copyrighted audio files.
  */
-/** The order the three wall records hang in, top to bottom. */
-export const MIX_ORDER = ["blue-hour", "joi-signal", "night-bus"] as const;
-
 export function JoiMusicPlayer({
   open,
   onClose,
-  requestedMixId = null,
   onPlayingChange,
   onProgressChange,
   rpm,
@@ -282,16 +277,6 @@ export function JoiMusicPlayer({
   const onPlayingChangeRef = useRef(onPlayingChange);
   useEffect(() => { onPlayingChangeRef.current = onPlayingChange; }, [onPlayingChange]);
   useEffect(() => { onPlayingChangeRef.current?.(playing); }, [playing]);
-
-  // A record landing on the deck starts that mix; the same record landing again is the
-  // deck being reloaded, not a toggle, so it restarts rather than stopping.
-  useEffect(() => {
-    if (!requestedMixId) return;
-    const mix = MIXES.find((entry) => entry.id === requestedMixId);
-    if (mix && playing !== mix.id) play(mix);
-    // `play` closes over live refs and would re-run this on every render if listed.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [requestedMixId]);
 
   useEffect(() => () => stop(false), []);
 

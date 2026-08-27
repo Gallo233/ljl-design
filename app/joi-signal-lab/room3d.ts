@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { DRACOLoader } from "three/examples/jsm/loaders/DRACOLoader.js";
 import { ROOM_OBJECTS, type RoomObjectId } from "./roomObjects";
-import { createRecordRig, type RecordId, type RecordRig } from "./roomRecords";
+import { createPlatterRig, type PlatterRig } from "./roomPlatter";
 import {
   BASE_ATLAS_EXPOSURE,
   BASE_ATLAS_IDS,
@@ -52,14 +52,8 @@ export type RoomScene = {
   setTonearm: (progress: number | null) => void;
   /** 33⅓ or 45. The platter and the pitch of the music follow it together. */
   setPlatterRpm: (rpm: number) => void;
-  /** Start carrying the record under the pointer, if there is one. */
-  grabRecordAt: (ndc: { x: number; y: number }) => RecordId | null;
-  /** Carry the held record to where the pointer is now. */
-  moveRecordTo: (ndc: { x: number; y: number }) => void;
-  /** Let go. Returns the record and whether it landed on the turntable. */
-  releaseRecord: () => { id: RecordId; docked: boolean } | null;
   /** Turn the platter, or stop it. */
-  setRecordSpinning: (spinning: boolean) => void;
+  setPlatterSpinning: (spinning: boolean) => void;
   dispose: () => void;
 };
 
@@ -193,7 +187,7 @@ export function createRoomScene(): RoomScene {
   const interactiveMeshes: any[] = [];
   const ownedTextures: any[] = [];
   let model: any = null;
-  let records: RecordRig | null = null;
+  let platter: PlatterRig | null = null;
 
   const disposeObject = (root: any) => {
     const geometries = new Set<any>();
@@ -320,9 +314,9 @@ export function createRoomScene(): RoomScene {
         }
       }
 
-      records = createRecordRig(model);
-      if (!records && process.env.NODE_ENV !== "production") {
-        console.warn("[about-room] no turntable found; records are not draggable");
+      platter = createPlatterRig(model);
+      if (!platter && process.env.NODE_ENV !== "production") {
+        console.warn("[about-room] no turntable found; the platter will not turn");
       }
 
       tonearm = model.getObjectByName(sanitizeNodeName("turntable_needle")) ?? null;
@@ -382,10 +376,10 @@ export function createRoomScene(): RoomScene {
       ? Math.max(0, Math.min((timeMs - lastFrameMs) * 0.001, 0.05))
       : 0;
     lastFrameMs = timeMs;
-    records?.update(delta);
+    platter?.update(delta);
 
     pickables.forEach((entry, id) => {
-      const lift = hovered === id && !records?.held() ? 0.28 : 0;
+      const lift = hovered === id ? 0.28 : 0;
       entry.nodes.forEach(({ node, home, up }) => {
         liftStep.copy(home).addScaledVector(up, lift).sub(node.position);
         node.position.addScaledVector(liftStep, reducedMotion ? 1 : 0.14);
@@ -492,27 +486,8 @@ export function createRoomScene(): RoomScene {
       orbitElevation = PLAYER_ELEVATION;
     },
     setTonearm: (progress) => { tonearmTarget = progress; },
-    setPlatterRpm: (rpm) => records?.setRpm(rpm),
-
-    grabRecordAt: (ndc) => {
-      if (!loaded || !records) return null;
-      fullCamera.updateMatrixWorld();
-      pointerNdc.set(ndc.x, ndc.y);
-      raycaster.setFromCamera(pointerNdc, fullCamera);
-      const hit = raycaster.intersectObjects(records.pickables, false)[0]?.object;
-      const id = hit ? records.recordFor(hit) : null;
-      if (id) records.grab(id, fullCamera);
-      return id;
-    },
-    moveRecordTo: (ndc) => {
-      if (!records?.held()) return;
-      fullCamera.updateMatrixWorld();
-      pointerNdc.set(ndc.x, ndc.y);
-      raycaster.setFromCamera(pointerNdc, fullCamera);
-      records.moveTo(raycaster.ray, fullCamera);
-    },
-    releaseRecord: () => records?.release() ?? null,
-    setRecordSpinning: (spinning) => records?.setSpinning(spinning),
+    setPlatterRpm: (rpm) => platter?.setRpm(rpm),
+    setPlatterSpinning: (spinning) => platter?.setSpinning(spinning),
     dispose: () => {
       disposed = true;
       if (model) disposeObject(model);

@@ -971,7 +971,6 @@
   to { opacity: 1; }
 }
 
-@keyframes musicRecordSpin { to { rotate: 360deg; } }
 
 @media (max-width: 760px) {
   .deckBar {

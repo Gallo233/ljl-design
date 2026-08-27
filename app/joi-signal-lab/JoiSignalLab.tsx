@@ -10,9 +10,8 @@ import { createOceanScene, SEA_STATES } from "./oceanScene";
 import { createPostChain } from "./postfx";
 import { detectQuality } from "./quality";
 import { LanyardBadge } from "./badge/LanyardBadge";
-import { JoiMusicPlayer, MIX_ORDER } from "./JoiMusicPlayer";
+import { JoiMusicPlayer } from "./JoiMusicPlayer";
 import { ROOM_OBJECTS, type RoomObjectId } from "./roomObjects";
-import { RECORD_IDS } from "./roomRecords";
 import { SiteHUD } from "../../components/SiteHUD";
 import {
   REEL_ANCHOR,
@@ -914,7 +913,6 @@ function FilmCanvas({
   onSeaStateChange,
   onRoomHover,
   onRoomPick,
-  onRecordDocked,
   recordPlaying,
   onDragStateChange,
 }: {
@@ -944,7 +942,6 @@ function FilmCanvas({
   onRoomHover: (id: RoomObjectId | null) => void;
   onRoomPick: (id: RoomObjectId | null) => void;
   /** A record was carried onto the turntable. */
-  onRecordDocked: (id: string) => void;
   /** True while a mix is playing, so the platter turns. */
   recordPlaying: boolean;
   /** Lets the scroll driver suspend snapping while the reader is dragging the reel. */
@@ -967,11 +964,9 @@ function FilmCanvas({
   const onSeaStateChangeRef = useRef(onSeaStateChange);
   const onRoomHoverRef = useRef(onRoomHover);
   const onRoomPickRef = useRef(onRoomPick);
-  const onRecordDockedRef = useRef(onRecordDocked);
   const recordPlayingRef = useRef(recordPlaying);
   useEffect(() => { onRoomHoverRef.current = onRoomHover; }, [onRoomHover]);
   useEffect(() => { onRoomPickRef.current = onRoomPick; }, [onRoomPick]);
-  useEffect(() => { onRecordDockedRef.current = onRecordDocked; }, [onRecordDocked]);
   useEffect(() => { recordPlayingRef.current = recordPlaying; }, [recordPlaying]);
   useEffect(() => { onDragStateChangeRef.current = onDragStateChange; }, [onDragStateChange]);
   useEffect(() => { onHeroReadyRef.current = onHeroReady; }, [onHeroReady]);
@@ -1445,8 +1440,6 @@ function FilmCanvas({
      */
     const reelOwnsPointer = () => !heroOwnsPointer() && !roomOwnsPointer();
 
-    /** Set while a record is being carried, so the drag is not read as a room click. */
-    let carryingRecord = false;
     /** Set while the hero's light orb is being carried. */
     let carryingOrb = false;
     /** A drag that actually moved the orb must not also cycle the sea behind it. */
@@ -1475,17 +1468,6 @@ function FilmCanvas({
         orbitY = event.clientY;
         canvas.setPointerCapture(event.pointerId);
         canvas.style.cursor = "grabbing";
-        return;
-      }
-      if (roomOwnsPointer()) {
-        // A record under the pointer wins over everything else in the room: it is the
-        // one thing here that is picked up rather than looked at.
-        const grabbed = roomScene.grabRecordAt(normalisedPointer(event));
-        if (grabbed) {
-          carryingRecord = true;
-          canvas.setPointerCapture(event.pointerId);
-          canvas.style.cursor = "grabbing";
-        }
         return;
       }
       if (!reelOwnsPointer()) return;
@@ -1524,10 +1506,6 @@ function FilmCanvas({
       }
       if (roomOwnsPointer()) {
         const ndc = normalisedPointer(event);
-        if (carryingRecord) {
-          roomScene.moveRecordTo(ndc);
-          return;
-        }
         roomPointer.x = ndc.x;
         roomPointer.y = ndc.y;
         const hit = roomScene.raycastAt(ndc);
@@ -1571,15 +1549,6 @@ function FilmCanvas({
         onProjectOpenRef.current(project.href);
       }
     };
-    const dropRecord = (event: PointerEvent) => {
-      if (!carryingRecord) return false;
-      carryingRecord = false;
-      if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
-      canvas.style.cursor = "";
-      const drop = roomScene.releaseRecord();
-      if (drop?.docked) onRecordDockedRef.current(drop.id);
-      return true;
-    };
     const dropOrb = (event: PointerEvent) => {
       if (!carryingOrb) return false;
       carryingOrb = false;
@@ -1592,12 +1561,10 @@ function FilmCanvas({
     };
     const handlePointerUp = (event: PointerEvent) => {
       if (dropOrb(event)) return;
-      if (dropRecord(event)) return;
       finishDrag(event, true);
     };
     const handlePointerCancel = (event: PointerEvent) => {
       if (dropOrb(event)) return;
-      if (dropRecord(event)) return;
       finishDrag(event, false);
     };
     const handleLeave = () => {
@@ -1632,7 +1599,7 @@ function FilmCanvas({
         onSeaStateChangeRef.current(next);
         return;
       }
-      if (!roomOwnsPointer() || carryingRecord || deckOpenRef.current) return;
+      if (!roomOwnsPointer() || deckOpenRef.current) return;
       const hit = roomScene.raycastAt(normalisedPointer(event));
       roomScene.focus(hit);
       onRoomPickRef.current(hit);
@@ -1675,7 +1642,7 @@ function FilmCanvas({
     const render = () => {
       const delta = Math.min(clock.getDelta(), 0.05);
 
-      roomScene.setRecordSpinning(recordPlayingRef.current);
+      roomScene.setPlatterSpinning(recordPlayingRef.current);
 
       const reveal = revealRef.current;
       const entry = entryRef.current;
@@ -2013,7 +1980,6 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
   // Which mix the turntable has been loaded with, and whether it is actually sounding.
   // The record on the deck turns off the second, not the first, so a paused deck sits
   // still with the record still on it.
-  const [requestedMixId, setRequestedMixId] = useState<string | null>(null);
   const [playingMixId, setPlayingMixId] = useState<string | null>(null);
   const [computerReady, setComputerReady] = useState(false);
   const [fontsReady, setFontsReady] = useState(false);
@@ -2308,12 +2274,6 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
             onRoomPick={(id) => {
               if (id === "joi-music-box") setMusicPlayerOpen(true);
             }}
-            onRecordDocked={(recordId) => {
-              // The wall hangs the records in the same order the panel lists the mixes.
-              const index = RECORD_IDS.indexOf(recordId as never);
-              const mixId = MIX_ORDER[index] ?? MIX_ORDER[0];
-              setRequestedMixId(mixId);
-            }}
             recordPlaying={playingMixId !== null}
             onStepChange={setStep}
             onProjectOpen={(href) => {
@@ -2342,7 +2302,6 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
         <JoiMusicPlayer
           open={musicPlayerOpen}
           onClose={() => setMusicPlayerOpen(false)}
-          requestedMixId={requestedMixId}
           onPlayingChange={setPlayingMixId}
           onProgressChange={setDeckProgress}
           rpm={deckRpm}
