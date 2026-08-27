@@ -3,7 +3,6 @@
 import { useEffect, useRef } from "react";
 import {
   SECTIONS,
-  TOTAL_SCREENS,
   getSection,
   keyboardDuration,
   sectionAt,
@@ -264,6 +263,3 @@ export function useScrollDriver({ onFrame, onSectionChange, isLocked, bootLocked
 
   return { sampleRef, scrollToSection };
 }
-
-/** Page height in CSS, so the scroll length always matches the section table. */
-export const scrollHeightStyle = { height: `${TOTAL_SCREENS * 100}svh` };

@@ -45,9 +45,7 @@
 .stageLayer,
 .filmCanvas,
 .blueField,
-.scanlines,
-.vignette,
-.grain {
+.vignette {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -182,14 +180,6 @@
   height: 1px;
 }
 
-.scanlines {
-  z-index: 9;
-  pointer-events: none;
-  opacity: .18;
-  mix-blend-mode: overlay;
-  background: repeating-linear-gradient(180deg, transparent 0 2px, rgba(0, 0, 0, .2) 2px 3px);
-}
-
 .vignette {
   z-index: 10;
   pointer-events: none;
@@ -201,18 +191,6 @@
   background:
     linear-gradient(180deg, rgba(5, 7, 12, .35), transparent 18%, transparent 76%, rgba(8, 15, 27, .14)),
     radial-gradient(ellipse at center, transparent 43%, rgba(0, 0, 0, .31) 100%);
-}
-
-.grain {
-  z-index: 11;
-  pointer-events: none;
-  opacity: .32;
-  mix-blend-mode: soft-light;
-  background:
-    repeating-radial-gradient(circle at 17% 23%, rgba(255,255,255,.34) 0 .42px, transparent .8px 2.6px),
-    repeating-linear-gradient(103deg, rgba(255,255,255,.05) 0 1px, transparent 1px 4px);
-  background-size: 8px 8px, 13px 13px;
-  animation: grainShift 320ms steps(2, end) infinite;
 }
 
 .heroCopy {
@@ -1009,11 +987,6 @@
   .deckSpeed, .deckAside { top: auto; bottom: 300px; translate: 0 0; }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .deckLayer { animation: none; }
-  .deckShelf i { transition: none; }
-}
-
 @keyframes roomLabelIn {
   from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: none; }
@@ -1428,11 +1401,6 @@
 }
 .hint span { color: var(--coral); }
 
-@keyframes grainShift {
-  0% { transform: translate(0, 0); }
-  33% { transform: translate(-1px, 1px); }
-  66% { transform: translate(1px, -1px); }
-}
 @keyframes loadingPulse { to { opacity: .28; transform: scale(.55); } }
 @keyframes titleEnterForward {
   0% { opacity: 0; filter: blur(2px); transform: translateY(-56%) rotateX(-38deg) scale(.98); }
@@ -1515,15 +1483,31 @@
   .hint { bottom: 13px; }
 }
 
+/*
+ * One block, holding every animation in the file.
+ *
+ * There were two of these, a few hundred lines apart, and the split was the bug: the
+ * deck's pair sat up by the deck rules and this one covered the rest, so anything
+ * added later landed in neither. Whatever is written here, write it here.
+ *
+ * The list below should stay exhaustive. To check it, list the keyframes and list the
+ * selectors that reference them — every one of those selectors belongs in this block
+ * or has a reason not to.
+ */
 @media (prefers-reduced-motion: reduce) {
-  .grain { animation: none; }
   .loader i { animation: none; }
-  .controls > button,
-  .dots button { transition: none; }
   .titleEnterForward,
   .titleExitForward,
   .titleEnterBackward,
   .titleExitBackward { animation: none; }
+  .deckLayer { animation: none; }
+  /* The three that were missed while the block was split in two. */
+  .menuSheet { animation: none; }
+  .interestActive { animation: none; }
+  .roomLabel { animation: none; }
+  .controls > button,
+  .dots button { transition: none; }
+  .deckShelf i { transition: none; }
   .stageLayer,
   .filmLayer,
   .filmUi,

@@ -2124,7 +2124,6 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
       const style = experience.style;
       style.setProperty("--journey", (screens / TOTAL_SCREENS).toFixed(4));
       style.setProperty("--film-reveal", filmReveal.toFixed(4));
-      style.setProperty("--computer-opacity", Math.max(0, 1 - filmReveal * 1.35).toFixed(4));
       style.setProperty("--film-shift", `${((1 - filmReveal) * 7).toFixed(3)}svh`);
       style.setProperty("--film-scale", (0.955 + filmReveal * 0.045).toFixed(4));
       style.setProperty("--film-clip", `${((1 - filmReveal) * 4.5).toFixed(3)}%`);
@@ -2161,7 +2160,6 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
       style={{
         // Scroll length comes from the section table, so adding a section extends the page.
         height: `${TOTAL_SCREENS * 100}svh`,
-        "--computer-scale": 1,
       } as CSSProperties}
     >
       <div className={styles.stage}>
