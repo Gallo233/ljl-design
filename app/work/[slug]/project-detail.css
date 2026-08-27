@@ -707,3 +707,26 @@ main.project-page {
   opacity: .22;
   pointer-events: none;
 }
+
+
+/*
+ * The hero heading waits for the cream.
+ *
+ * `ArrivalFade` holds a full-screen veil for 460ms coming in from the reel, and the clip
+ * wipe runs 780ms — so without a delay the first half of the entrance happens behind an
+ * opaque field and the reader arrives to a title already half set. Starting at 300ms
+ * puts the whole wipe in view and reads as the title rising out of the veil as it goes,
+ * which is the hand-off the reel's exit was promising.
+ *
+ * A fixed delay rather than a signal from ArrivalFade, deliberately: that component
+ * renders nothing at all on a direct visit, so coordinating would put two effects in a
+ * race over a third of a second of timing. Costing a direct visitor 300ms before the
+ * title moves is much the cheaper trade, and it still reads as a beat rather than a lag.
+ */
+.project-page .project-detail-hero h1[data-reveal] {
+  transition-delay: .3s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .project-page .project-detail-hero h1[data-reveal] { transition-delay: 0s; }
+}

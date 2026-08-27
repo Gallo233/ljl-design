@@ -100,23 +100,19 @@ const BLEND_FRAGMENT = /* glsl */ `
   }
 `;
 
-const PREFILTER_FRAGMENT = /* glsl */ `
-  precision highp float;
-  uniform sampler2D uSource;
-  uniform vec2 uSourceTexel;
-  uniform float uThreshold;
-  uniform float uSmoothing;
-  varying vec2 vUv;
-  ${SHARED_GLSL}
-
-  // Soft knee applied per tap, before averaging: thresholding the average instead
-  // lets one bright sprocket hole strobe the whole tile between frames.
-  vec3 knee(vec3 c) {
-    float lum = postLuma(postLinearToSrgb(c));
-    return c * smoothstep(uThreshold, uThreshold + uSmoothing, lum);
-  }
-  vec3 tap(vec2 uv) { return knee(texture2D(uSource, uv).rgb); }
-
+/**
+ * The 13-tap downsample, as one body.
+ *
+ * Prefilter and downsample run the identical Kawase-style kernel — four inner taps at
+ * half weight plus four overlapping quads at an eighth — and differ only in what `tap`
+ * does: the prefilter applies the soft knee, the downsample does not. That is why this
+ * is included rather than parameterised; each shader defines its own `tap` above the
+ * point it lands, and this is the arithmetic they share.
+ *
+ * Byte-identical to the two copies it replaced. A de-duplication, not a retune: the
+ * weights and the tap offsets are the shape of the bloom, and AGENTS.md freezes that.
+ */
+const DOWNSAMPLE_BODY_GLSL = /* glsl */ `
   void main() {
     vec2 d = uSourceTexel;
     vec3 a = tap(vUv + vec2(-2.0, 2.0) * d);
@@ -141,34 +137,33 @@ const PREFILTER_FRAGMENT = /* glsl */ `
   }
 `;
 
+const PREFILTER_FRAGMENT = /* glsl */ `
+  precision highp float;
+  uniform sampler2D uSource;
+  uniform vec2 uSourceTexel;
+  uniform float uThreshold;
+  uniform float uSmoothing;
+  varying vec2 vUv;
+  ${SHARED_GLSL}
+
+  // Soft knee applied per tap, before averaging: thresholding the average instead
+  // lets one bright sprocket hole strobe the whole tile between frames.
+  vec3 knee(vec3 c) {
+    float lum = postLuma(postLinearToSrgb(c));
+    return c * smoothstep(uThreshold, uThreshold + uSmoothing, lum);
+  }
+  vec3 tap(vec2 uv) { return knee(texture2D(uSource, uv).rgb); }
+
+  ${DOWNSAMPLE_BODY_GLSL}
+`;
+
 const DOWNSAMPLE_FRAGMENT = /* glsl */ `
   precision highp float;
   uniform sampler2D uSource;
   uniform vec2 uSourceTexel;
   varying vec2 vUv;
   vec3 tap(vec2 uv) { return texture2D(uSource, uv).rgb; }
-  void main() {
-    vec2 d = uSourceTexel;
-    vec3 a = tap(vUv + vec2(-2.0, 2.0) * d);
-    vec3 b = tap(vUv + vec2(0.0, 2.0) * d);
-    vec3 c = tap(vUv + vec2(2.0, 2.0) * d);
-    vec3 e = tap(vUv + vec2(-2.0, 0.0) * d);
-    vec3 f = tap(vUv);
-    vec3 g = tap(vUv + vec2(2.0, 0.0) * d);
-    vec3 h = tap(vUv + vec2(-2.0, -2.0) * d);
-    vec3 i = tap(vUv + vec2(0.0, -2.0) * d);
-    vec3 j = tap(vUv + vec2(2.0, -2.0) * d);
-    vec3 k = tap(vUv + vec2(-1.0, 1.0) * d);
-    vec3 l = tap(vUv + vec2(1.0, 1.0) * d);
-    vec3 m = tap(vUv + vec2(-1.0, -1.0) * d);
-    vec3 n = tap(vUv + vec2(1.0, -1.0) * d);
-    vec3 sum = (k + l + m + n) * 0.5;
-    sum += (a + b + f + e) * 0.125;
-    sum += (b + c + g + f) * 0.125;
-    sum += (e + f + i + h) * 0.125;
-    sum += (f + g + j + i) * 0.125;
-    gl_FragColor = vec4(sum * 0.25, 1.0);
-  }
+  ${DOWNSAMPLE_BODY_GLSL}
 `;
 
 const UPSAMPLE_FRAGMENT = /* glsl */ `
