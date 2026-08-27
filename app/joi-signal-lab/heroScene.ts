@@ -340,8 +340,10 @@ const scene = new THREE.Scene();
       modelRoot.add(model);
       modelLoaded = true;
       // Six cube faces of shadow were rendered against an empty room. Ask for them again
-      // now that there is something in it.
+      // now that there is something in it — and the same for the two maps above, which
+      // no longer redraw on their own.
       orb.invalidateShadow();
+      invalidateShadows();
     },
     undefined,
     (error: unknown) => {
@@ -417,6 +419,35 @@ const scene = new THREE.Scene();
   terminalKey.shadow.mapSize.set(1024, 1024);
   terminalKey.shadow.bias = -0.0006;
   terminalKey.shadow.normalBias = 0.02;
+  /*
+   * Shadow maps redraw on movement, not on the clock.
+   *
+   * These two 1024² maps were re-rendered every frame for a scene whose only moving
+   * part is the terminal's own slow drift — a tumble of a few hundredths of a radian on
+   * three long periods, plus the same again in height. `heroLightOrb` already settled
+   * this argument for the cube map next door; this is the same trade with a cheaper
+   * test, because the terminal is the only thing either map can be cast by.
+   *
+   * The thresholds are in the terminal's own units and sized to roughly a texel of
+   * movement at this frustum, so the map is rebuilt tens of frames apart instead of
+   * sixty times a second, and the edge never visibly steps.
+   */
+  if (shadows) {
+    keyLight.shadow.autoUpdate = false;
+    keyLight.shadow.needsUpdate = true;
+    terminalKey.shadow.autoUpdate = false;
+    terminalKey.shadow.needsUpdate = true;
+  }
+  let shadowedRotationX = Infinity;
+  let shadowedRotationZ = Infinity;
+  let shadowedPositionY = Infinity;
+  /** Re-cast both maps: the drift moved far enough, or the scene itself changed. */
+  const invalidateShadows = () => {
+    if (!shadows) return;
+    keyLight.shadow.needsUpdate = true;
+    terminalKey.shadow.needsUpdate = true;
+  };
+
   const terminalKeyTarget = new THREE.Object3D();
   scene.add(terminalKeyTarget);
   terminalKey.target = terminalKeyTarget;
@@ -683,6 +714,17 @@ const scene = new THREE.Scene();
       computer.rotation.x = Math.sin(time * 0.13) * 0.045;
       computer.rotation.z = Math.cos(time * 0.09) * 0.035;
       computer.position.y = computerHomeY + Math.sin(time * 0.21) * 0.075;
+    }
+    if (
+      shadows &&
+      (Math.abs(computer.rotation.x - shadowedRotationX) > 0.004 ||
+        Math.abs(computer.rotation.z - shadowedRotationZ) > 0.004 ||
+        Math.abs(computer.position.y - shadowedPositionY) > 0.006)
+    ) {
+      shadowedRotationX = computer.rotation.x;
+      shadowedRotationZ = computer.rotation.z;
+      shadowedPositionY = computer.position.y;
+      invalidateShadows();
     }
     screenLight.intensity = 3.7 + Math.sin(time * 1.2) * 0.24;
     camera.position.lerpVectors(initialCamera, finalCamera, cameraProgress);

@@ -1089,6 +1089,8 @@ function FilmCanvas({
       posterListeners.push({ image, draw });
     });
     const reelMotions = reelMotionSources.map((source) => createReelMotion(source, isMobile));
+    /** By the frame they belong to. The frame loop below asked for these by search. */
+    const motionByProject = new Map(reelMotions.map((motion) => [motion.projectIndex, motion]));
     let activeMotionProject = -1;
 
     const nightTideTarget = new THREE.WebGLRenderTarget(LIVE_FRAME_WIDTH, LIVE_FRAME_HEIGHT, {
@@ -1712,15 +1714,15 @@ function FilmCanvas({
       const activeProject = modulo(stepRef.current, projects.length);
       const wantsMotion = revealRef.current > 0.4 && !reducedMotion;
       if (activeProject !== activeMotionProject) {
-        reelMotions.find((motion) => motion.projectIndex === activeMotionProject)?.pause();
-        const next = reelMotions.find((motion) => motion.projectIndex === activeProject);
+        motionByProject.get(activeMotionProject)?.pause();
+        const next = motionByProject.get(activeProject);
         if (next) {
           next.restart();
           if (wantsMotion) next.play();
         }
         activeMotionProject = activeProject;
       }
-      const activeMotion = reelMotions.find((motion) => motion.projectIndex === activeMotionProject);
+      const activeMotion = motionByProject.get(activeMotionProject);
       if (activeMotion) {
         if (wantsMotion) activeMotion.play();
         else activeMotion.pause();
@@ -1835,8 +1837,14 @@ function FilmCanvas({
        * than watching it fade.
        */
       camera.position.z = 5 - exit * 3.1;
-      camera.fov = 65 + exit * 14;
-      camera.updateProjectionMatrix();
+      // Only the fov feeds the projection, and it only moves while the reel is being
+      // pushed through — which is a fraction of the scroll. Rebuilding the matrix on a
+      // value that has not changed is a wasted matrix and a wasted dirty flag.
+      const nextFov = 65 + exit * 14;
+      if (nextFov !== camera.fov) {
+        camera.fov = nextFov;
+        camera.updateProjectionMatrix();
+      }
 
       // How much of the frame the reel still owns. The reel arrives on `reveal` and
       // leaves on `exit`; `reveal` saturates at the anchor and never comes back down on

@@ -790,6 +790,16 @@ export function createSolarSystem(options: {
       starMaterial.uniforms.uTime.value = time;
       starMaterial.uniforms.uOpacity.value = visibility;
       nebulaMaterial.uniforms.uOpacity.value = visibility;
+      /*
+       * A fully transparent nebula is not a cheap nebula.
+       *
+       * It is a sphere the size of the sky, `frustumCulled = false`, running a
+       * fifteen-octave fbm per fragment — the most expensive shader in the scene — and
+       * multiplying the whole thing by an opacity of zero at the very end. The field
+       * itself is static; only the fade moves. So once it has faded out, stop drawing it
+       * rather than paying full price to render nothing.
+       */
+      nebula.visible = visibility > 0.01;
       ringMaterials.forEach((material: any) => {
         material.uniforms.uSun.value.copy(sunWorld);
         material.uniforms.uOpacity.value = visibility;

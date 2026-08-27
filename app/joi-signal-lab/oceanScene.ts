@@ -422,7 +422,32 @@ export function createOceanScene(options: OceanSceneOptions): OceanScene {
   }
 
   const scratchDir = new THREE.Vector2();
-  const writeWaveTable = (steepness: number, choppy: number, windAngle: number) => {
+  /*
+   * The table has two halves with very different lifetimes.
+   *
+   * Direction, wavenumber, amplitude and choppiness are functions of the sea state and
+   * the wind angle, and both of those converge — a few seconds after a state change, or
+   * after the pointer stops, they are constant. Phase is what actually makes the water
+   * move, and has to be rewritten every frame.
+   *
+   * They used to be written together, so a settled sea still ran two trig calls and a
+   * power per wave per frame to arrive at the numbers it already had. Splitting them
+   * keeps the water moving and stops recomputing the parts that are standing still.
+   */
+  let tabledSteepness = Infinity;
+  let tabledChoppy = Infinity;
+  let tabledWindAngle = Infinity;
+  const writeWaveShape = (steepness: number, choppy: number, windAngle: number) => {
+    if (
+      Math.abs(steepness - tabledSteepness) < 1e-6 &&
+      Math.abs(choppy - tabledChoppy) < 1e-6 &&
+      Math.abs(windAngle - tabledWindAngle) < 1e-6
+    ) {
+      return;
+    }
+    tabledSteepness = steepness;
+    tabledChoppy = choppy;
+    tabledWindAngle = windAngle;
     for (let i = 0; i < waveCount; i += 1) {
       const spread =
         (i % 2 === 0 ? 1 : -1) * 1.05 * Math.pow(i / Math.max(1, waveCount - 1), 0.7) +
@@ -432,9 +457,16 @@ export function createOceanScene(options: OceanSceneOptions): OceanScene {
       waveDir[i * 2 + 1] = scratchDir.y;
       waveData[i * 4] = waveK[i];
       waveData[i * 4 + 1] = (steepness / waveK[i]) * waveWeight[i];
-      waveData[i * 4 + 2] = wavePhase[i];
       waveData[i * 4 + 3] = choppy;
     }
+  };
+  /** Every frame, unconditionally: this is the motion. */
+  const writeWavePhase = () => {
+    for (let i = 0; i < waveCount; i += 1) waveData[i * 4 + 2] = wavePhase[i];
+  };
+  const writeWaveTable = (steepness: number, choppy: number, windAngle: number) => {
+    writeWaveShape(steepness, choppy, windAngle);
+    writeWavePhase();
   };
   writeWaveTable(SEA_STATES[0].steepness * steepnessScale, SEA_STATES[0].choppy, 0.18);
 
@@ -817,6 +849,8 @@ export function createOceanScene(options: OceanSceneOptions): OceanScene {
    * The same wave sum the vertex shader runs, for one point. Kept here rather than read
    * back from the GPU because one sine per wave is cheaper than a readback and exact.
    */
+  /** Reused: `sampleWave` is called on the frame loop and the result is read immediately. */
+  const waveSample = { height: 0, slopeX: 0, slopeZ: 0 };
   const sampleWave = (x: number, z: number) => {
     let height = 0;
     let slopeX = 0;
@@ -833,7 +867,10 @@ export function createOceanScene(options: OceanSceneOptions): OceanScene {
       slopeX += dirX * steep;
       slopeZ += dirZ * steep;
     }
-    return { height, slopeX, slopeZ };
+    waveSample.height = height;
+    waveSample.slopeX = slopeX;
+    waveSample.slopeZ = slopeZ;
+    return waveSample;
   };
 
   const boat = new THREE.Group();
