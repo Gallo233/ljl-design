@@ -11,6 +11,7 @@ import { createPostChain } from "./postfx";
 import { detectQuality } from "./quality";
 import { LanyardBadge } from "./badge/LanyardBadge";
 import { JoiMusicPlayer } from "./JoiMusicPlayer";
+import { createScrollSignal } from "./scrollSignal";
 import { ROOM_OBJECTS, type RoomObjectId } from "./roomObjects";
 import { SiteHUD } from "../../components/SiteHUD";
 import {
@@ -902,6 +903,7 @@ function FilmCanvas({
   entryRef,
   exitRef,
   roomPresenceRef,
+  scrollVelocityRef,
   onStepChange,
   onProjectOpen,
   onReady,
@@ -925,6 +927,8 @@ function FilmCanvas({
   exitRef: { current: number };
   /** The room belongs to About only and fades before Contact takes ownership. */
   roomPresenceRef: { current: number };
+  /** Scroll speed in screens per second, signed. Drives the tube's grip on the signal. */
+  scrollVelocityRef: { current: number };
   /** True while the reader is at the deck, which is what puts the camera on it. */
   deckOpen: boolean;
   /** 33⅓ or 45; the platter follows it. */
@@ -941,7 +945,6 @@ function FilmCanvas({
   onSeaStateChange: (index: number) => void;
   onRoomHover: (id: RoomObjectId | null) => void;
   onRoomPick: (id: RoomObjectId | null) => void;
-  /** A record was carried onto the turntable. */
   /** True while a mix is playing, so the platter turns. */
   recordPlaying: boolean;
   /** Lets the scroll driver suspend snapping while the reader is dragging the reel. */
@@ -1083,6 +1086,14 @@ function FilmCanvas({
       else image.addEventListener("load", draw, { once: true });
       posterListeners.push({ image, draw });
     });
+    /*
+     * Scroll speed, as something the picture has to survive.
+     *
+     * Halved on a phone: the same offsets over a small screen held close read as a
+     * fault rather than as speed, and the tier is already the place that decides how
+     * much machine we are running on.
+     */
+    const scrollSignal = createScrollSignal(tier.isMobile ? 0.5 : 1);
     const reelMotions = reelMotionSources.map((source) => createReelMotion(source, isMobile));
     /** By the frame they belong to. The frame loop below asked for these by search. */
     const motionByProject = new Map(reelMotions.map((motion) => [motion.projectIndex, motion]));
@@ -1830,9 +1841,20 @@ function FilmCanvas({
       // composite blend uses, and reach zero the moment the reel hands the frame over.
       // Note that the bezel radius and feather are already `mix(0, …, uLensDistortion)`
       // in the shader, so zeroing this takes the rounded corners with it.
-      post.uniforms.uLensDistortion.value = THREE.MathUtils.lerp(0.32, 0.72, reveal) * reelOwnsFrame;
+      /*
+       * How badly the signal is holding together, 0 when the page is still.
+       *
+       * It rides `reelOwnsFrame` with everything else here: the hero is a scene and
+       * the room is a room, and neither is being watched through a tube, so speed
+       * costs them nothing. Grain is deliberately not among the knobs — see the note
+       * in `scrollSignal.ts`.
+       */
+      const instability = scrollSignal.update(scrollVelocityRef.current, delta);
+
+      post.uniforms.uLensDistortion.value =
+        (THREE.MathUtils.lerp(0.32, 0.72, reveal) + instability * 0.08) * reelOwnsFrame;
       post.uniforms.uChromaticAberrationStrength.value =
-        THREE.MathUtils.lerp(0.18, 0.34, reveal) * reelOwnsFrame;
+        (THREE.MathUtils.lerp(0.18, 0.34, reveal) + instability * 0.22) * reelOwnsFrame;
 
       // Bright application screens need a much tighter CRT response than the dark
       // hero. The old settings added a broad 32% bloom to already relit whites, then
@@ -1875,7 +1897,7 @@ function FilmCanvas({
       // when the picture is still — persistence on a static frame is just softness.
       post.uniforms.uPersistence.value = roomIsStage
         ? 0
-        : Math.min(0.14, Math.abs(reelVelocity) * 0.008);
+        : Math.min(0.2, Math.abs(reelVelocity) * 0.008 + instability * 0.09 * reelOwnsFrame);
 
       elapsed += delta;
       post.render({
@@ -2116,6 +2138,7 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
   // Scroll-derived values live in refs and go straight to CSS variables. Nothing here re-renders
   // per frame — the reference keeps these in motion values for the same reason.
   const entryRef = useRef(0);
+  const scrollVelocityRef = useRef(0);
   const filmRevealRef = useRef(0);
   const reelExitRef = useRef(0);
   /** About's full-stage room fades out before Contact owns the address and copy. */
@@ -2143,9 +2166,10 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
 
   const { scrollToSection } = useScrollDriver({
     // Runs every frame. Writes CSS variables and refs directly — no React state, no re-render.
-    onFrame: ({ screens }) => {
+    onFrame: ({ screens, velocity }) => {
       const experience = experienceRef.current;
       if (!experience) return;
+      scrollVelocityRef.current = velocity;
 
       // The hero camera flight and the film entrance were tuned against a 0..1 range that ends
       // when the reel has arrived. Remap onto that range so their timing survives page growth.
@@ -2264,6 +2288,7 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
             entryRef={entryRef}
             exitRef={reelExitRef}
             roomPresenceRef={roomPresenceRef}
+            scrollVelocityRef={scrollVelocityRef}
             deckOpen={musicPlayerOpen}
             deckRpm={deckRpm}
             deckProgress={deckProgress}

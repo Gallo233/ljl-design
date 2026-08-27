@@ -404,6 +404,29 @@
 
 .contactPanel h2 { max-width: 20ch; }
 
+/*
+ * `--contact-progress` is written every frame by the scroll driver and, until now, read
+ * by nothing at all. It fills the call sheet's rule as the reader comes down the last
+ * screen.
+ *
+ * Deliberately a decoration and not a reveal. Deep-linking to /contact lands at
+ * progress 0 with a whole screen still below it, so anything *gated* on this variable
+ * would hide the email address behind a scroll the reader has no reason to make — which
+ * is the failure this file is supposed to be watching for. The panel's own entrance
+ * still owns whether the rows are visible.
+ */
+.contactPanel .closingKicker { position: relative; }
+.contactPanel .closingKicker::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: -7px;
+  height: 1px;
+  width: calc(var(--contact-progress, 0) * 100%);
+  background: var(--coral);
+  opacity: .5;
+}
+
 /* Staggered entrance: the panel fades as one, then its children land one beat apart. */
 .closingPanel > * {
   opacity: 0;
