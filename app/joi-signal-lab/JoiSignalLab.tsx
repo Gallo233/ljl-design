@@ -1999,6 +1999,8 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
   const [computerReady, setComputerReady] = useState(false);
   const [fontsReady, setFontsReady] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
+  const menuSheetRef = useRef<HTMLDivElement>(null);
   /** True while the leave-transition veil covers the stage on the way to a detail page. */
   const [leaving, setLeaving] = useState(false);
   const [seaState, setSeaState] = useState(0);
@@ -2049,6 +2051,59 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
   useEffect(() => {
     if (ready) experienceRef.current?.focus({ preventScroll: true });
   }, [ready]);
+
+  /*
+   * The menu sheet is a dialog; this is what made it one.
+   *
+   * It had the role and none of the behaviour. Opening it left focus on the button
+   * behind it, so a screen reader announced nothing and a keyboard reader had to
+   * guess the menu was there. Escape was bound to the sheet's own `onKeyDown` — a
+   * div that never takes focus — so it only fired if the reader had already tabbed
+   * onto a link inside. Tab walked straight out of the sheet and down the page
+   * underneath, which was still scrolling.
+   *
+   * The scroll lock reuses `bootLocked` rather than putting `overflow: hidden` on
+   * the body: this page's scroll position *is* its state, and zeroing it would drop
+   * the reader back at the hero every time they opened the menu.
+   */
+  useEffect(() => {
+    if (!menuOpen) return;
+    const sheet = menuSheetRef.current;
+    if (!sheet) return;
+    const opener = menuButtonRef.current;
+    const items = () => Array.from(sheet.querySelectorAll<HTMLAnchorElement>("a[href]"));
+    items()[0]?.focus();
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setMenuOpen(false);
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const focusable = items();
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const active = document.activeElement;
+      const outside = !sheet.contains(active);
+      // Wrap at both ends, and pull focus back if it has already left the sheet.
+      if (event.shiftKey && (active === first || outside)) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (active === last || outside)) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      // Hand focus back to what opened it, so the reader keeps their place.
+      opener?.focus();
+    };
+  }, [menuOpen]);
 
   // Returning from a detail page: land back on the frame the reader left from.
   useEffect(() => {
@@ -2140,7 +2195,8 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
     // Don't snap out from under someone who is dragging the reel.
     isLocked: () => filmActiveRef.current && dragActiveRef.current,
     // The boot screen holds the page still until every system is warm.
-    bootLocked: () => !readyRef.current,
+    // The menu is modal, so the page behind it holds still — same pin the boot uses.
+    bootLocked: () => !readyRef.current || menuOpen,
   });
 
   // Keep the address bar in step with where the reader actually is, without adding history
@@ -2387,6 +2443,7 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
             <i />
           </div>
           <button
+            ref={menuButtonRef}
             type="button"
             className={styles.menu}
             aria-expanded={menuOpen}
@@ -2401,14 +2458,13 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
 
         {menuOpen && (
           <div
+            ref={menuSheetRef}
             className={styles.menuSheet}
             role="dialog"
+            aria-modal="true"
             aria-label="Sections"
             onClick={(event) => {
               if (event.target === event.currentTarget) setMenuOpen(false);
-            }}
-            onKeyDown={(event) => {
-              if (event.key === "Escape") setMenuOpen(false);
             }}
           >
             <nav>
