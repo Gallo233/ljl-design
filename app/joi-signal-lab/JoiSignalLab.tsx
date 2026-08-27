@@ -1345,6 +1345,18 @@ function FilmCanvas({
     let readySent = false;
     let width = 1;
     let height = 1;
+    /*
+     * Where the canvas sits in the viewport.
+     *
+     * Three separate helpers each called `getBoundingClientRect`, so one pointermove
+     * forced up to two layout flushes, interleaved with the cursor, class and style
+     * writes that follow it — read/write/read/write on a full-screen canvas, which is
+     * the textbook shape of layout thrash. The stage is `position: fixed` at the origin
+     * and the canvas fills it, so this only moves when the viewport does, and the
+     * ResizeObserver below already says when that happens.
+     */
+    let boundsLeft = 0;
+    let boundsTop = 0;
     let entryOffset = curveLength * 0.5;
     let entryVelocity = 0;
     let reelOffset = stepRef.current * FRAME_WIDTH;
@@ -1362,6 +1374,8 @@ function FilmCanvas({
       const bounds = canvas.getBoundingClientRect();
       width = Math.max(1, bounds.width);
       height = Math.max(1, bounds.height);
+      boundsLeft = bounds.left;
+      boundsTop = bounds.top;
       const aspect = width / height;
       const pixelRatio = Math.min(window.devicePixelRatio || 1, tier.dprCap);
       renderer.setPixelRatio(pixelRatio);
@@ -1379,12 +1393,13 @@ function FilmCanvas({
       ribbon.scale.setScalar(scale);
     };
 
+    /** Normalised device coordinates, from the cached rect. */
+    const ndcX = (clientX: number) => ((clientX - boundsLeft) / width) * 2 - 1;
+    const ndcY = (clientY: number) => -(((clientY - boundsTop) / height) * 2 - 1);
+
     const pointerPosition = (event: PointerEvent) => {
-      const bounds = canvas.getBoundingClientRect();
-      targetPointer.set(
-        (event.clientX - bounds.left) / Math.max(1, bounds.width) - 0.5,
-        -((event.clientY - bounds.top) / Math.max(1, bounds.height) - 0.5),
-      );
+      // Half of NDC: this one wants -0.5..0.5, not -1..1.
+      targetPointer.set(ndcX(event.clientX) * 0.5, ndcY(event.clientY) * 0.5);
     };
     /*
      * One canvas now serves both worlds, so it also routes the pointer between them.
@@ -1404,18 +1419,14 @@ function FilmCanvas({
     let orbitY = 0;
     let hoveredRoomObject: RoomObjectId | null = null;
 
-    const normalisedPointer = (event: PointerEvent | MouseEvent) => {
-      const bounds = canvas.getBoundingClientRect();
-      return {
-        x: ((event.clientX - bounds.left) / Math.max(1, bounds.width)) * 2 - 1,
-        y: -(((event.clientY - bounds.top) / Math.max(1, bounds.height)) * 2 - 1),
-      };
-    };
+    const normalisedPointer = (event: PointerEvent | MouseEvent) => ({
+      x: ndcX(event.clientX),
+      y: ndcY(event.clientY),
+    });
 
     const heroPointerFromEvent = (event: PointerEvent) => {
-      const bounds = canvas.getBoundingClientRect();
-      const x = ((event.clientX - bounds.left) / Math.max(1, bounds.width)) * 2 - 1;
-      const y = -(((event.clientY - bounds.top) / Math.max(1, bounds.height)) * 2 - 1);
+      const x = ndcX(event.clientX);
+      const y = ndcY(event.clientY);
       hero.setPointer(x, y);
       ocean.setPointer(x, y);
     };
@@ -1491,10 +1502,10 @@ function FilmCanvas({
         return;
       }
       if (orbiting) {
-        const bounds = canvas.getBoundingClientRect();
+        // Cached size, same as the NDC helpers — an orbit drag is a stream of moves.
         roomScene.orbitPlayer(
-          (event.clientX - orbitX) / Math.max(1, bounds.width),
-          (event.clientY - orbitY) / Math.max(1, bounds.height),
+          (event.clientX - orbitX) / width,
+          (event.clientY - orbitY) / height,
         );
         orbitX = event.clientX;
         orbitY = event.clientY;
@@ -1999,6 +2010,16 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
   const [computerReady, setComputerReady] = useState(false);
   const [fontsReady, setFontsReady] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  /*
+   * What each custom property was last set to.
+   *
+   * All thirteen below were written unconditionally every frame, so a page sitting
+   * perfectly still went on dirtying the style of the element the whole experience
+   * hangs off, sixty times a second. Most of them hold the same value for most of the
+   * scroll — `--film-*` is pinned at both ends of its crossfade, and the two progress
+   * variables are 0 until their section is reached.
+   */
+  const cssCacheRef = useRef(new Map<string, string>());
   const menuButtonRef = useRef<HTMLButtonElement>(null);
   const menuSheetRef = useRef<HTMLDivElement>(null);
   /** True while the leave-transition veil covers the stage on the way to a detail page. */
@@ -2177,19 +2198,25 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
       filmActiveRef.current = filmReveal > 0.55 && screens < aboutStart - 0.4;
 
       const style = experience.style;
-      style.setProperty("--journey", (screens / TOTAL_SCREENS).toFixed(4));
-      style.setProperty("--film-reveal", filmReveal.toFixed(4));
-      style.setProperty("--film-shift", `${((1 - filmReveal) * 7).toFixed(3)}svh`);
-      style.setProperty("--film-scale", (0.955 + filmReveal * 0.045).toFixed(4));
-      style.setProperty("--film-clip", `${((1 - filmReveal) * 4.5).toFixed(3)}%`);
-      style.setProperty("--film-radius", `${((1 - filmReveal) * 34).toFixed(2)}px`);
-      style.setProperty("--hero-opacity", (1 - smoothStep(entry / 0.7)).toFixed(4));
-      style.setProperty("--hero-shift", `${(entry * -28).toFixed(2)}px`);
-      style.setProperty("--terminal-opacity", (1 - smoothStep(entry / 0.85)).toFixed(4));
-      style.setProperty("--terminal-shift", `${(entry * 18).toFixed(2)}px`);
-      style.setProperty("--reel-exit", reelExit.toFixed(4));
-      style.setProperty("--about-progress", progressWithin("about-me", screens).toFixed(4));
-      style.setProperty("--contact-progress", progressWithin("contact", screens).toFixed(4));
+      const cache = cssCacheRef.current;
+      const write = (name: string, value: string) => {
+        if (cache.get(name) === value) return;
+        cache.set(name, value);
+        style.setProperty(name, value);
+      };
+      write("--journey", (screens / TOTAL_SCREENS).toFixed(4));
+      write("--film-reveal", filmReveal.toFixed(4));
+      write("--film-shift", `${((1 - filmReveal) * 7).toFixed(3)}svh`);
+      write("--film-scale", (0.955 + filmReveal * 0.045).toFixed(4));
+      write("--film-clip", `${((1 - filmReveal) * 4.5).toFixed(3)}%`);
+      write("--film-radius", `${((1 - filmReveal) * 34).toFixed(2)}px`);
+      write("--hero-opacity", (1 - smoothStep(entry / 0.7)).toFixed(4));
+      write("--hero-shift", `${(entry * -28).toFixed(2)}px`);
+      write("--terminal-opacity", (1 - smoothStep(entry / 0.85)).toFixed(4));
+      write("--terminal-shift", `${(entry * 18).toFixed(2)}px`);
+      write("--reel-exit", reelExit.toFixed(4));
+      write("--about-progress", progressWithin("about-me", screens).toFixed(4));
+      write("--contact-progress", progressWithin("contact", screens).toFixed(4));
     },
     onSectionChange: setActiveSection,
     // Don't snap out from under someone who is dragging the reel.

@@ -124,17 +124,27 @@ export const smoothStep = (value: number) => {
   return amount * amount * (3 - 2 * amount);
 };
 
+/**
+ * The table, indexed once.
+ *
+ * Both lookups below run on the scroll driver's frame callback — four linear scans of
+ * the table every frame between them, for a table that never changes after module load.
+ */
+const BY_ID = new Map(
+  SECTIONS.map((section, index) => [section.id, { section, index }] as const),
+);
+
 export function getSection(id: SectionId) {
-  return SECTIONS.find((section) => section.id === id) ?? SECTIONS[0];
+  return BY_ID.get(id)?.section ?? SECTIONS[0];
 }
 
 /** 0 at the section's position, 1 at the next one's. */
 export function progressWithin(id: SectionId, screens: number) {
-  const index = SECTIONS.findIndex((section) => section.id === id);
-  const section = SECTIONS[index];
-  const next = SECTIONS[index + 1];
-  const span = (next ? next.position : TOTAL_SCREENS) - section.position;
-  return clamp01((screens - section.position) / Math.max(0.0001, span));
+  const entry = BY_ID.get(id);
+  if (!entry) return 0;
+  const next = SECTIONS[entry.index + 1];
+  const span = (next ? next.position : TOTAL_SCREENS) - entry.section.position;
+  return clamp01((screens - entry.section.position) / Math.max(0.0001, span));
 }
 
 /** Which section the reader is in, given a position in screens. */

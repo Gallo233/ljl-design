@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
 import { CSS3DObject, CSS3DRenderer } from "three/examples/jsm/renderers/CSS3DRenderer.js";
 import { SCREEN_WIDTH, type GameButton } from "./games";
+import { detectQuality } from "../../joi-signal-lab/quality";
 
 /**
  * The handheld, as an actual object, modelled against the supplied design render.
@@ -139,19 +140,28 @@ function plate(width: number, height: number, depth: number, radius: number, fil
 export function createConsoleScene(options: ConsoleSceneOptions): ConsoleScene {
   const { container, screenElement, cartridges } = options;
   const interactive = options.isInteractive ?? (() => true);
-  const reducedMotion =
-    typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  /*
+   * The same device tiers the stage renderer uses.
+   *
+   * This scene was built asking for everything unconditionally — full MSAA, soft
+   * shadows, a 1024² shadow map, its own pixel-ratio ladder — while `quality.ts`
+   * sat next door deciding exactly these questions for the rest of the site. A
+   * phone that gets a downgraded hero was still being handed the most expensive
+   * version of the handheld.
+   */
+  const tier = detectQuality();
+  const reducedMotion = tier.reducedMotion;
 
   // CSS3DObject rewrites the screen element's inline style (position, pointer-events, a
   // per-frame matrix3d). Snapshot it now so dispose can hand the element back unchanged.
   const screenStyleSnapshot = screenElement.style.cssText;
 
-  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  const renderer = new THREE.WebGLRenderer({ antialias: tier.antialias, alpha: true });
   renderer.setClearColor(0x000000, 0);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 0.92;
-  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.enabled = tier.shadows;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.domElement.style.cssText = "position:absolute;inset:0;width:100%;height:100%;touch-action:none;";
   // The canvas is decoration to assistive tech — the live screen (boot status, game canvas,
@@ -206,8 +216,9 @@ export function createConsoleScene(options: ConsoleSceneOptions): ConsoleScene {
   scene.add(new THREE.HemisphereLight(0xffffff, 0xc9d2e0, 0.8));
   const key = new THREE.DirectionalLight(0xffffff, 1.2);
   key.position.set(-6, 13, 12);
-  key.castShadow = true;
-  key.shadow.mapSize.set(1024, 1024);
+  key.castShadow = tier.shadows;
+  // Half-resolution where memory is tight; the map is only ever cast by one small object.
+  key.shadow.mapSize.setScalar(tier.reducedMemory ? 512 : 1024);
   key.shadow.camera.near = 2;
   key.shadow.camera.far = 52;
   key.shadow.camera.left = -20;
@@ -215,7 +226,9 @@ export function createConsoleScene(options: ConsoleSceneOptions): ConsoleScene {
   key.shadow.camera.top = 15;
   key.shadow.camera.bottom = -15;
   key.shadow.bias = -0.0011;
-  key.shadow.radius = 4;
+  // No `shadow.radius` here: it is read only under SHADOWMAP_TYPE_PCF (see
+  // three/src/renderers/shaders/ShaderChunk/shadowmap_pars_fragment.glsl.js), and this
+  // renderer asks for PCF_SOFT. Setting it looked like a softness control and was not one.
   scene.add(key);
   const fill = new THREE.DirectionalLight(0xe6ecf7, 0.4);
   fill.position.set(10, 3, 7);
@@ -858,7 +871,9 @@ export function createConsoleScene(options: ConsoleSceneOptions): ConsoleScene {
     camera.lookAt(centreX * 0.72, -0.15, 0);
     camera.updateProjectionMatrix();
 
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, aspect < 1 ? 1.6 : 2));
+    renderer.setPixelRatio(
+      Math.min(window.devicePixelRatio || 1, tier.dprCap, aspect < 1 ? 1.6 : Infinity),
+    );
     renderer.setSize(w, h, false);
     css.setSize(w, h);
   };
@@ -1155,7 +1170,39 @@ export function createConsoleScene(options: ConsoleSceneOptions): ConsoleScene {
     css.render(cssScene, camera);
     frame = window.requestAnimationFrame(render);
   };
-  render();
+
+  /*
+   * The machine stops drawing when it is not on screen.
+   *
+   * The loop ran from mount to unmount regardless: scrolling past the game centre left
+   * a full-rate WebGL render, a CSS3D render and the whole cartridge simulation running
+   * behind the reader for the rest of the visit. On a phone that is the page's entire
+   * frame budget going to something nobody is looking at.
+   *
+   * `clock.getDelta()` is drained on resume so the paused time is not delivered as one
+   * enormous step — the loop clamps it anyway, but draining says why.
+   */
+  let onScreen = true;
+  const startLoop = () => {
+    if (frame) return;
+    clock.getDelta();
+    frame = window.requestAnimationFrame(render);
+  };
+  const stopLoop = () => {
+    if (!frame) return;
+    window.cancelAnimationFrame(frame);
+    frame = 0;
+  };
+  const visibility = new IntersectionObserver(
+    (entries) => {
+      onScreen = entries.some((entry) => entry.isIntersecting);
+      if (onScreen) startLoop();
+      else stopLoop();
+    },
+    { threshold: 0 },
+  );
+  visibility.observe(container);
+  startLoop();
 
   return {
     setPressed: (id, down) => { pressedState.set(id, down); },
@@ -1177,6 +1224,7 @@ export function createConsoleScene(options: ConsoleSceneOptions): ConsoleScene {
     },
     dispose: () => {
       window.cancelAnimationFrame(frame);
+      visibility.disconnect();
       resizeObserver.disconnect();
       renderer.domElement.removeEventListener("webglcontextlost", onContextLost);
       renderer.domElement.removeEventListener("pointerdown", onPointerDown);
