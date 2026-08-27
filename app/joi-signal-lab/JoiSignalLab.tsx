@@ -2178,15 +2178,30 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
   const roomPresenceRef = useRef(0);
   const dragActiveRef = useRef(false);
 
+  /*
+   * Left and right step the reel — the other half of the sentence `useScrollDriver`
+   * makes where it handles up and down.
+   *
+   * The guards are the same contract the pointer and the wheel sign. Stepping the reel
+   * from behind an open menu or an open deck is the bug the wheel had: both are modal,
+   * and the reader pressing an arrow inside one is not talking to the film. A modifier
+   * means the key belongs to the browser — ⌘← is Back — and a key pressed inside a
+   * field belongs to the field. `preventDefault` stops the page taking the same arrow
+   * as a horizontal scroll on top of the step.
+   */
   useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
-      if (!filmActiveRef.current) return;
-      if (event.key === "ArrowLeft") setStep((value) => value - 1);
-      if (event.key === "ArrowRight") setStep((value) => value + 1);
+      if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
+      if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+      if (!filmActiveRef.current || menuOpen || musicPlayerOpen) return;
+      const target = event.target as HTMLElement | null;
+      if (target?.closest?.("input, textarea, select, [contenteditable]")) return;
+      event.preventDefault();
+      setStep((value) => value + (event.key === "ArrowRight" ? 1 : -1));
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, []);
+  }, [menuOpen, musicPlayerOpen]);
 
   // Land on the section this route names, before the first paint. One scroll, four addresses.
   useLayoutEffect(() => {
@@ -2279,7 +2294,11 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
       <div className={styles.stage}>
         <div className={styles.heroField} aria-hidden="true" />
 
-        <section className={styles.heroCopy} aria-labelledby="joi9000-title">
+        <section
+          className={`${styles.heroCopy} ${activeSection === "hero" ? "" : styles.heroGone}`}
+          aria-labelledby="joi9000-title"
+          aria-hidden={activeSection === "hero" ? undefined : true}
+        >
           <p>PERSONAL AI SYSTEM · GUANGZHOU / 2026</p>
           <h1 id="joi9000-title">
             <span>I DESIGN</span>
@@ -2292,7 +2311,11 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
           </div>
         </section>
 
-        <aside className={styles.terminalHud} aria-label="JOI9000 screen controls">
+        <aside
+          className={`${styles.terminalHud} ${activeSection === "hero" ? "" : styles.heroGone}`}
+          aria-label="JOI9000 screen controls"
+          aria-hidden={activeSection === "hero" ? undefined : true}
+        >
           <div>
             <span>JOI9000 / OPTICAL CORE</span>
             <strong>{seaStateLabels[seaState]}</strong>

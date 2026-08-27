@@ -210,6 +210,22 @@
     0 0 22px rgba(255, 245, 232, .18);
 }
 
+/*
+ * Out of the accessibility tree once it is out of the picture.
+ *
+ * `opacity: 0` plus `pointer-events: none` hides these from someone looking at the
+ * screen and from nobody else. A screen reader still found "I DESIGN HOW AI ENTERS
+ * HUMAN LIFE", and a Sea-State HUD advertising controls that do nothing down there,
+ * sitting between the room and the call sheet six screens after they stopped existing.
+ *
+ * The cutoff keys off the section label rather than the opacity, because opacity here
+ * is a per-frame custom property and `visibility` cannot interpolate from a number.
+ * That is safe in both directions: `sectionAt` hands the label to Selected Work at 1.65
+ * screens and `--hero-opacity` has been zero since 1.4, so the switch always happens
+ * while there is nothing on screen to take away. Same shape the closing panels use.
+ */
+.heroGone { visibility: hidden; }
+
 .heroCopy > p {
   margin: 0 0 14px;
   font-family: var(--font-signal-mono), monospace;
