@@ -9,53 +9,53 @@
 
 ---
 
-## 执行状态（v3 · 2026-08-27 收工时）
+## 执行状态（v4 · 全部收工）
 
-**§A.0 已裁决：选 A（维持退役）。** ⛔ 段落就此解除，Phase 4 改为下方的 Phase 4'。
-**落地顺序已按批准的 1 → 3 → 2 执行。** 回滚点 `029e385`，之后 12 个提交。
+**§A.0 已裁决：A（维持退役）**，⛔ 段落解除，Phase 4 已改为 Phase 4'。
+按批准的 **1 → 3 → 2** 顺序执行完毕。回滚点 `029e385`，之后 20 个提交。
 
 | 阶段 | 状态 |
 |---|---|
-| **Phase 0** 地基 | ✅ **全部完成**（滚动自取消 / wheel 门槛 / reduced-motion / 死代码 / 菜单焦点） |
-| **Phase 1.1** 速度驱动后处理 | ✅ 新增 `scrollSignal.ts`，驱动 distortion + aberration + persistence 三个旋钮 |
-| **Phase 1.2** 消费进度钩子 | ⚠️ 部分：`--contact-progress` 已消费；`--about-progress` 见下 |
-| **Phase 1.3** DOM 字过玻璃 | ❌ 未做 |
-| **Phase 1.4** Boot loader 升级 | ❌ 未做（但 Phase 3 的回程跳过已改变了它的语境，建议重估） |
-| **Phase 3.1** veil 叙事化 | ✅ `EJECTING — {目的地}`（用了 §A.1 默认值） |
-| **Phase 3.2** 进场合流 | ❌ 未做 |
-| **Phase 3.3** 回程跳过 boot | ✅ **两条路径都实测过**：回程 0 个子节点、340ms；首次进入仍 3/3 SYSTEMS、760ms |
+| **Phase 0** 地基 | ✅ 全部 |
+| **Phase 1.1** 速度驱动后处理 | ✅ 新增 `scrollSignal.ts`，驱动 distortion / aberration / persistence |
+| **Phase 1.2** 消费进度钩子 | ✅ `--contact-progress` 填充 call sheet 横线（装饰非揭示，理由见下） |
+| **Phase 1.3** DOM 字过玻璃 | ✅ hero h1 + closing h2 色差随 `--velocity` 张开 + 极轻 skew |
+| **Phase 1.4** Boot loader 升级 | ✅ 三系统按名点亮（░→█）+ 块状光标 |
 | **Phase 2.1** 引入 GSAP | ❌ **主动没做**，见下 |
-| **Phase 2.2** 品牌字体进轻世界 | ✅ `/work` 三种字全部实测到位；`/lab` 本来就已经转好了 |
-| **Phase 2.3** h1 入场 | ✅ 用纯 CSS clip 揭开做的（§A.6 的「克制」档） |
-| **Phase 2.4** Interlude 节奏 | ✅ CSS counter 骨架，无短注（§A.2 默认值） |
+| **Phase 2.2** 品牌字体进轻世界 | ✅ `/work` 三种字实测到位；`/lab` 本来就已转好 |
+| **Phase 2.3** h1 入场 | ✅ 纯 CSS clip 揭开（§A.6 克制档） |
+| **Phase 2.4** Interlude 节奏 | ✅ CSS counter 骨架，无短注（§A.2 默认） |
 | **Phase 2.5** `data-reveal` clip 变体 | ✅ |
-| **Phase 2.6** CSS 债务收敛 | ❌ 未做 |
-| **Phase 4'** 低成本触觉替代 | ⚠️ 清理已做完；灯光色温见下 |
+| **Phase 2.6** CSS 债务收敛 | ✅ **137KB → 4.4KB**，计算样式逐元素比对为零 |
+| **Phase 3.1** veil 叙事化 | ✅ `EJECTING — {目的地}`（§A.1 默认） |
+| **Phase 3.2** 进场合流 | ✅ h1 wipe 延后 300ms，整段揭幕都在画面内 |
+| **Phase 3.3** 回程跳过 boot | ✅ 两条路径都实测 |
+| **Phase 4'** 低成本触觉替代 | ✅ 清理完成；灯光色温见下 |
+| **统一细节** 缓动 token | ⚠️ 未做（存量已在用 `cubic-bezier(.22,1,.36,1)` 字面量） |
 
-### 三个和方案原文不一致的地方，都是有理由的
+### 四个和方案原文不一致的地方
 
-1. **速度驱动后处理不含 grain。** 方案把 grain 列为四旋钮之一，但 `uNoiseIntensity` 恒为 0 是
-   **最近两个提交刻意做的**（`55aed23`「读起来像镜头上的脏东西而不是胶片颗粒」、
-   `b9c89bb`「关掉叠加层之后，它是最后一个挡在读者和画面之间的东西」）。
-   把 grain 挂到速度曲线上等于从后门推翻这个决定。旋钮留着，理由写在 `scrollSignal.ts` 里。
-2. **没有引入 GSAP。** 决定 1 授权了它，但 Phase 2 里真正要它做的只有 h1 入场——
-   §A.6 的默认档是「整块 clip 升起」，纯 CSS 十几行就够，还能在 JS 没跑起来时正常显示。
-   为一个入场动画加一个依赖不划算。**如果之后要逐字 stagger 或更复杂的编排，再引不迟**，
-   边界（只在轻世界、不用 ScrollTrigger）保持不变。
-3. **`--about-progress` 驱动房间灯光色温没做**——方案说「`room3d.ts` 灯光组微调」，
-   但 **room3d 里没有灯**：房间是完全烘焙的（lightmap + atlas），`grep` 灯光零结果。
-   要做只能给 baked shader 加 tint uniform，那是在一张 Blender 里已经定过调的图上再调色，
-   撞上 AGENTS.md 冻结的色彩管理。**建议改成别的 About 氛围手段，或明确授权动 baked 色调。**
+1. **速度驱动不含 grain。** `uNoiseIntensity` 恒为 0 是最近两个提交刻意做的
+   （`55aed23`「像镜头上的脏东西」、`b9c89bb`「最后一个挡在读者和画面之间的东西」）。
+   挂到速度曲线上等于从后门推翻。旋钮留着，理由写在 `scrollSignal.ts`。
+2. **没引 GSAP。** Phase 2 真正需要它的只有 h1 入场，§A.6 默认档纯 CSS 十几行就够，
+   还能在 JS 没跑起来时正常显示。要逐字 stagger 再引不迟，边界不变。
+3. **房间灯光色温做不了。** room3d 里**没有灯**——房间完全烘焙（lightmap + atlas）。
+   只能给 baked shader 加 tint，那是在 Blender 里定过调的图上再调色，撞色彩管理冻结。
+   **需要你换个 About 氛围手段，或明确授权动 baked 色调。**
+4. **`--about-progress` 因此仍无消费者。** 它每帧还在写，等一个不依赖灯光的用途。
 
-### 另外两个执行中才暴露的坑（已绕过，记下来）
+### 执行中才暴露的坑（已绕过，记下来）
 
-- **`--contact-progress` 不能用来 gate 内容。** 深链 `/contact` 落在 progress = 0，
-  下面还有整整一屏。任何「按进度逐行落位」都会把邮箱藏在读者没有理由做的滚动后面。
-  已实现为**装饰**（call sheet 的横线随进度填充），不是揭示。
-- **`/work` 换字体要在 `main.project-page` 上提specificity。** 两层拦路：
-  `redesign.css` 在 `body` 上解析 `--sans`（子元素继承的是算好的 Inter，不会重读变量）；
-  `styles.css:3166` 另有一条裸 `.project-page` 直接写死 Inter 栈，同权重靠顺序赢。
-  两个文件 `/classic` 都在用，不能改——已实测 `/classic` 完全没挂字体变量。
+- **`--contact-progress` 不能 gate 内容**：深链落在 progress = 0，下面还有一屏，
+  按进度落位会把邮箱藏起来。
+- **`/work` 换字体要在 `main.project-page` 提权**：`redesign.css` 在 `body` 解析 `--sans`
+  （子元素继承算好的 Inter），`styles.css:3166` 另有裸 `.project-page` 写死 Inter 靠顺序赢。
+- **CSS 收敛文件必须放仓库根目录**：打包器把路由内 CSS 排在根级 CSS **之前**，
+  从 `./` 引它会落在 `redesign.css` 前面，`--ink` 被换掉、整页文字颜色变了。
+  这个是靠逐元素计算样式比对抓到的——第一次就没对上。
+- **`:first-of-type` 在 section 上不管用**：hero 也是 `<section>`，所以第一个
+  `.project-detail-section` 不是同类型第一个，例外永远不匹配。改用相邻兄弟选择器。
 
 ---
 

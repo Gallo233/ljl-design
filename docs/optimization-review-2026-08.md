@@ -9,51 +9,48 @@
 
 ---
 
-## 执行状态（v3 · 2026-08-27 收工时）
+## 执行状态（v4 · 全部收工）
 
-**回滚点：`029e385`**（此前工作区全部改动已存档提交）。之后 12 个提交，每批独立可回滚。
+**回滚点 `029e385`**，之后 20 个提交，每批独立可回滚。收工时：`npx tsc --noEmit` 零源码错误、
+11 条路由全部 200、工作区干净。
 
-| 编号 | 状态 | 落在哪个提交 |
-|---|---|---|
-| P0-1 唱片死代码 | ✅ **按方案 A 退役** | `a0820eb` 删整套 rig，保留платter 自转与隐藏循环 |
-| P0-2 滚动自取消 | ✅ | `005df9c` `lastWrittenY` 标记，覆盖 bootLock 分支 |
-| P0-3 wheel 归属 | ✅ | `005df9c` `reelOwnsPointer()` |
-| P0-4 REEL_ANCHOR | ✅ | `005df9c` 按 id 查找后断言 |
-| P0-5 /classic 元数据 | ✅ 已实测 `noindex, nofollow` | `005df9c` 新增 `app/classic/layout.tsx` |
-| P0-6 上下文丢失 | ✅ 诚实档（删 `preventDefault`） | `20fc114`；完整档（重建 renderer）**未做**，单列 |
-| P0-7 postMessage | ✅ **用修正后的写法** | `d4ac88b` `new URL(url, location.href).origin` |
-| P0-8 GLB 纹理 | ✅ 只收 GLB 自带纹理，不碰外部 screenMap | `005df9c` |
-| P1-1/2/3 热路径 | ✅ | `f41c9ab` 写入缓存 + O(1) 查表 + rect 缓存 |
-| P1-4 badge 早退 | ✅ | `20fc114` |
-| P1-5 阴影 autoUpdate | ✅ 位移阈值失效 | `28af57f` |
-| P1-6 ocean | ⚠️ **部分，且 v2 的修法有错** | `28af57f`，见下 |
-| P1-7 nebula | ✅ `visible` 门控 | `28af57f` |
-| P1-8 updateWorldMatrix | ❌ **主动不做**，见下 |
-| P1-9 console3d 接 quality | ✅ + 离屏暂停 | `f41c9ab` |
-| P1-10 forceContextLoss | ✅ | `20fc114` |
-| P1-11 小对象分配 | ❌ 主动不做（原文即「有可感卡顿再动」） |
-| 死 CSS / 死导出 / 死变量 | ✅ 5 处全清 | `4d8c4fd` |
-| reduced-motion | ✅ 两块合一 + 补 3 个漏网动画 | `4d8c4fd` |
-| 菜单 dialog 焦点 | ✅ 焦点/trap/Escape/滚动锁全部实测 | `612f186` |
-| lang="zh-CN" ×2 | ✅ | `d4ac88b` |
-| 文档漂移 | ✅ AGENTS.md 模块表 + REEL_ANCHOR 段 + asset-requests | `d4ac88b` |
+### 已完成
 
-### 执行中发现的两个新问题（v2 也没抓到）
+P0 全部 8 条 · P1 的 9/11 条 · 死 CSS/死导出/死变量 · reduced-motion 合并补全 ·
+菜单 dialog 焦点管理 · 两处 `lang="zh-CN"` · 文档漂移三处 · **JSON-LD**（`/` Person、
+`/work` CreativeWork）· **sitemap `lastModified`**（取内容日期，不取构建时间）·
+**og:title 模板对齐** · **两条重定向补尾斜杠** · **游戏最高分持久化** ·
+**room-capture 体积上限** · **hero 文案退出无障碍树** · **postfx 13-tap kernel 去重** ·
+**`JoiSignalLab.tsx` 拆分**（2642 → 1892 行，拆出 4 个模块）。
 
-1. **P1-6 的修法会冻住海面。** v2 说「dirty-check `live` vs `target`」跳过 wave table 重写——
-   但 `oceanScene.ts:961` 每帧推进 `wavePhase[i]`，而相位正是写在同一张表里的（`waveData[i*4+2]`）。
-   照做海就不动了。已改为**拆表**：方向/波数/振幅/choppy 半张按收敛 dirty-check（省掉每波每帧两次
-   三角函数 + 一次 pow），相位半张照旧每帧写。`sampleWave` 的每帧对象分配也已复用。
-2. **P1-8 主动不做。** `heroScene` 里 `computer.rotation` 是在 `updateFinalCamera()` **之后**
-   才设置的，把矩阵更新提前到「动画后一次 `updateMatrixWorld`」需要重排帧内顺序，
-   在一个逐帧调过的场景里换来的是几次矩阵乘法。收益小、回归风险实在，留给「真出现掉帧再说」。
+### 主动不做（有理由，不是漏掉）
 
-### 审查里仍未做的（按价值排序）
+- **P1-8 `updateWorldMatrix`**：`heroScene` 里 `computer.rotation` 在 `updateFinalCamera()`
+  **之后**才设置，要把矩阵更新提前就得重排帧内顺序。换来几次矩阵乘法，在一个逐帧调过的
+  场景里不划算。真掉帧再说。
+- **P1-11 小对象分配**：原文即「有可感卡顿再动」。
+- **robots 的 AI 爬虫策略**：这是立场不是技术（§A.8），留给你。
+- **FilmCanvas 提取**：结构拆分做了 5 个缝里的 4 个。FilmCanvas 闭包了几十个上下文变量，
+  收益是可读性、风险是行为，单独立项更稳妥。
 
-JSON-LD（`/work` Article、`/` Person）· sitemap `lastModified` · 游戏最高分 localStorage ·
-`room-capture` 解码后体积上限 · hero 文案滚过后的 visibility cutoff（无障碍） ·
-reel 拖拽的键盘替代 · `og:title` 模板 · 两条重定向补尾斜杠 · robots 的 AI 爬虫策略（内容决定） ·
-`JoiSignalLab.tsx` 结构拆分（仍 2400+ 行） · `postfx.ts` 13-tap kernel 去重。
+### 执行中发现的、v2 也没抓到的四个问题
+
+1. **P1-6 的修法会冻住海面。** `oceanScene.ts:961` 每帧推进 `wavePhase[i]`，而相位就写在
+   要被 dirty-check 跳过的同一张表里（`waveData[i*4+2]`）。已改为拆表：三角函数那半张按
+   收敛跳过，相位半张每帧照写。
+2. **「reel 拖拽没有键盘替代」是错的。** reel 早就有 prev/next 按钮、每帧的 dot 按钮
+   （带 `aria-pressed` 和 "Show {title}" 标签），以及左右方向键步进（`JoiSignalLab` 里
+   一个 `useEffect`）。真正缺的是那个方向键处理器的护栏——它会在菜单/唱机开着时步进、
+   吞掉 ⌘←、在输入框里触发。已补齐。
+3. **「snake/tetris/pacman 的 best」只有 snake 真的显示 BEST。** 另外两个只记分不显示。
+   三个都做了持久化，tetris/pacman 在结算行显示。
+4. **`--contact-progress` 不能 gate 内容。** 深链 `/contact` 落在 progress = 0，下面还有
+   一整屏。已实现为装饰（横线随进度填充），不是揭示。
+
+### 数字校正（v2 已修，此处存档）
+
+`setProperty` 14 个非 17 · `public/` 148MB/136 文件 · title-roll 四组非五组 ·
+P0-7 的 `new URL(相对路径)` 会抛 `TypeError`（已用 node 实测，改为带 base 解析）。
 
 ---
 
