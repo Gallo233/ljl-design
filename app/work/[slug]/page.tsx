@@ -10,6 +10,7 @@ import { RevealRoot } from "../../../components/RevealRoot";
 import { SiteHUD } from "../../../components/SiteHUD";
 import { getProject, projects } from "../../../components/projectData";
 import { JoiWebEmbed } from "../../../components/JoiWebEmbed";
+import { JoiMobileIPhoneShowcase } from "../../../components/joi-mobile-iphone/JoiMobileIPhoneShowcase";
 import { PageScrollState } from "../../../components/PageScrollState";
 import { SHARE_CARD, canonicalPath } from "../../site";
 
@@ -178,6 +179,14 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
               <strong>{project.experience.action} <b aria-hidden="true">↗</b></strong>
             </Link>
           ) : null}
+
+          {project.interactiveShowcase?.kind === "joi-mobile-native" && (
+            <JoiMobileIPhoneShowcase
+              poster={sitePath(project.interactiveShowcase.poster)}
+              label={project.interactiveShowcase.label}
+              caption={project.interactiveShowcase.caption}
+            />
+          )}
 
           {project.motion && (
             <figure className="project-detail-motion" data-reveal>

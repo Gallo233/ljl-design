@@ -1,0 +1,55 @@
+{
+  "version": 1,
+  "lightingState": "light-day",
+  "source": "docs/pinchen-room-research/.web-shader-extractor/evidence/network",
+  "geometry": {
+    "url": "/models/about-room-base.glb",
+    "sha256": "34f19995636b1697a9b3e09e7fa642fd07ee3adf589fdba4239300af2e2cc319",
+    "bytes": 1269272,
+    "compression": "KHR_draco_mesh_compression"
+  },
+  "atlases": {
+    "env": {
+      "url": "/models/about-room-base/light-day-env.webp",
+      "size": 1024,
+      "sha256": "090fdf061990d83b70b829d58837efcbe1c62009a446e1361e4be82e4e1b668f",
+      "bytes": 14172
+    },
+    "group1": {
+      "url": "/models/about-room-base/light-day-group1.webp",
+      "size": 2048,
+      "sha256": "6ec6d714cb4aa15d1425150d60a43e753e5706e3b46bd21c733e330a0feee0f6",
+      "bytes": 240566
+    },
+    "group2": {
+      "url": "/models/about-room-base/light-day-group2.webp",
+      "size": 2048,
+      "sha256": "03edcb4d4ad8aa1fb6eabf7a440987b66c6fa2713f81662a20d29da7489edaa4",
+      "bytes": 266722
+    },
+    "group3": {
+      "url": "/models/about-room-base/light-day-group3.webp",
+      "size": 1024,
+      "sha256": "835ab5a6d17f874b0637705636074f4b7e575daee99224354f44ea16ff78bab4",
+      "bytes": 45984
+    },
+    "books": {
+      "url": "/models/about-room-base/light-day-books.webp",
+      "size": 1024,
+      "sha256": "ba0344a3a0bf0b14df424f9431a9c8c4db4f8c59c74ec14230cd0018b5d0351c",
+      "bytes": 36318
+    },
+    "camera": {
+      "url": "/models/about-room-base/light-day-camera.webp",
+      "size": 1024,
+      "sha256": "d1afc34151a72ffc4fb20fa4361a011fb16b76621ee702873485ace5a5b6d2e5",
+      "bytes": 258178
+    },
+    "vinyl": {
+      "url": "/models/about-room-base/light-day-vinyl.webp",
+      "size": 1024,
+      "sha256": "3ceb13d4de74212c15bce671061aed89cf28d6628bf1f3b30789cfc347bf1127",
+      "bytes": 82096
+    }
+  }
+}

@@ -1,22 +1,30 @@
 import * as THREE from "three";
-import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
-import type { RoomObjectId } from "./roomObjects";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { DRACOLoader } from "three/examples/jsm/loaders/DRACOLoader.js";
+import { ROOM_OBJECTS, type RoomObjectId } from "./roomObjects";
+import { createRecordRig, type RecordId, type RecordRig } from "./roomRecords";
+import {
+  BASE_ATLAS_EXPOSURE,
+  BASE_ATLAS_IDS,
+  BASE_HOTSPOT_NODES,
+  BASE_NODE_ATLAS,
+  BASE_NODE_UV,
+  BASE_TRANSFORM,
+  type BaseAtlasId,
+  sanitizeNodeName,
+} from "./roomBase";
 
 /**
- * The room — a cartoon night-time desk corner, built the way `console3d.ts` builds the
- * handheld: primitives, canvas-drawn textures, no external assets except the two wall
- * prints (real photos already in `public/media/`).
+ * The About room is the desk study, and nothing else.
  *
- * One build, two consumers:
- * - the film reel renders it into frame 05's 768×576 target with `frameCamera`;
- * - the About panel mounts an interactive instance with `fullCamera`, raycasting
- *   against the objects registered in `roomObjects.ts`.
+ * One Draco-compressed GLB plus the seven baked colour atlases that go with it. The
+ * capture carries no materials of its own — the original assigns them at runtime — so
+ * the only thing this module adds is the mesh→atlas table from `roomBase.ts`, a camera,
+ * and pointer routing. No shell, no props, no second bake, no grade: what renders is
+ * what was baked.
  *
- * No renderer lives here. Consumers bring their own (`renderer.render(scene, camera)`),
- * which is what lets the future single-renderer merge absorb this scene unchanged.
- *
- * The face rule: nothing in this scene depicts the author. The room is the field;
- * the person is on the About panel next to it.
+ * The scene is renderer-free because `FilmCanvas` draws it twice, into frame 05's 4:3
+ * render target and across the full About stage.
  */
 
 export type RoomScene = {
@@ -24,481 +32,494 @@ export type RoomScene = {
   frameCamera: any;
   fullCamera: any;
   setFullAspect: (aspect: number) => void;
-  /** Advance idle motion (cat tail, cursor blink, lamp breath, camera drift). */
   update: (timeMs: number, pointer?: { x: number; y: number }) => void;
-  /** Which object sits under this NDC point, seen through `fullCamera`. */
   raycastAt: (ndc: { x: number; y: number }) => RoomObjectId | null;
   setHover: (id: RoomObjectId | null) => void;
-  /** Dolly the full camera's attention toward one object (null to release). */
   focus: (id: RoomObjectId | null) => void;
+  /**
+   * Player mode: the camera leaves its seat at the desk and composes on the turntable,
+   * close enough that the platter and the tonearm are the picture. Everything else in
+   * the room keeps running behind it.
+   */
+  setPlayerMode: (on: boolean) => void;
+  /** Drag the deck around while in player mode. Deltas are in normalised screen units. */
+  orbitPlayer: (dx: number, dy: number) => void;
+  resetPlayerOrbit: () => void;
+  /**
+   * Where the stylus sits. `null` parks the arm off the record; 0 is the outer groove
+   * and 1 the run-out next to the label.
+   */
+  setTonearm: (progress: number | null) => void;
+  /** 33⅓ or 45. The platter and the pitch of the music follow it together. */
+  setPlatterRpm: (rpm: number) => void;
+  /** Start carrying the record under the pointer, if there is one. */
+  grabRecordAt: (ndc: { x: number; y: number }) => RecordId | null;
+  /** Carry the held record to where the pointer is now. */
+  moveRecordTo: (ndc: { x: number; y: number }) => void;
+  /** Let go. Returns the record and whether it landed on the turntable. */
+  releaseRecord: () => { id: RecordId; docked: boolean } | null;
+  /** Turn the platter, or stop it. */
+  setRecordSpinning: (spinning: boolean) => void;
   dispose: () => void;
 };
 
-const PALETTE = {
-  wallBack: "#262638",
-  wallSide: "#211f31",
-  floor: "#1d1a2b",
-  rug: "#322a4a",
-  wood: "#8a6a52",
-  woodDark: "#6d523f",
-  plastic: "#e8e2d6",
-  coral: "#ee795c",
-  blue: "#5b8ebe",
-  sage: "#9fbf9a",
-  cream: "#f1dfda",
-  dark: "#33323f",
-  cat: "#4d4c5c",
+const ASSET_VERSION = "desk-base-20260825-1";
+const MODEL_URL = `/models/about-room-base.glb?v=${ASSET_VERSION}`;
+const DRACO_DECODER_PATH = "/draco/";
+
+const atlasUrl = (id: BaseAtlasId) =>
+  `/models/about-room-base/light-day-${id}.webp?v=${ASSET_VERSION}`;
+
+/**
+ * Two vertex shaders, because the capture does not agree with itself about which UV set
+ * carries the bake: most meshes use TEXCOORD_0, but the chair came in from another
+ * source with its own texture UVs there and its atlas layout in TEXCOORD_1. `USE_UV1`
+ * is what makes three declare that attribute for a ShaderMaterial.
+ */
+const BAKED_VERTEX_SHADER: Record<0 | 1, string> = {
+  0: /* glsl */ `
+    varying vec2 vBakeUv;
+    void main() {
+      vBakeUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  1: /* glsl */ `
+    varying vec2 vBakeUv;
+    void main() {
+      vBakeUv = uv1;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
 };
+
+/**
+ * The display transform, and only that.
+ *
+ * The atlases are finished bakes: lighting, bounce and contact shadow are already in
+ * the pixels. All that is left is decoding them to scene-linear, an exposure trim per
+ * atlas, and a small toe lift so the darkest furniture keeps its form instead of
+ * collapsing into silhouette once the page's post chain has had its turn.
+ */
+const BAKED_FRAGMENT_SHADER = /* glsl */ `
+  precision highp float;
+  uniform sampler2D uBake;
+  uniform float uExposure;
+  uniform float uLift;
+  varying vec2 vBakeUv;
+  void main() {
+    vec3 baked = max(texture2D(uBake, vBakeUv).rgb, vec3(0.0));
+    gl_FragColor = vec4(baked * uExposure + uLift, 1.0);
+  }
+`;
+
+/** A restrained toe lift, shared by every atlas. */
+const BAKE_LIFT = 0.006;
+
+/**
+ * Framing.
+ *
+ * The desk runs along its wall from Z −13 to +3 with the chair pulled out at +X, so the
+ * camera stands off that open corner at roughly seated eye height and looks back down
+ * the desk. `FRAME_HOME` is the same view pulled in for the reel's 4:3 window.
+ */
+const FRAME_HOME = new THREE.Vector3(30.0, 15.0, 20.0);
+const FULL_HOME = new THREE.Vector3(36.0, 17.5, 26.0);
+const HOME_LOOK = new THREE.Vector3(4.2, 5.6, -4.4);
+/** How close the camera pulls in when a chip focuses one object. */
+const FOCUS_DISTANCE = 11.0;
+
+/*
+ * Player mode, all measured off the capture rather than eyeballed.
+ *
+ * The platter's centre is (4.98, 5.49, -9.40) and the tonearm's bearing is at
+ * (3.97, 5.91, -11.35) with a 2.28-long arm. Those three numbers are what set the two
+ * stylus angles below: with the bearing 2.20 from the platter centre, the law of
+ * cosines puts the outer groove (1.35 from centre) at 19.2 degrees off the parked
+ * angle and the run-out (0.50 from centre) at 41.6. The mesh's own origin happens to
+ * sit on the bearing, within 0.017, so the arm swings correctly on its own Y axis and
+ * needs no reparenting.
+ */
+const PLAYER_LOOK = new THREE.Vector3(4.92, 5.48, -9.55);
+const PLAYER_RADIUS = 6.15;
+const PLAYER_AZIMUTH = THREE.MathUtils.degToRad(50.7);
+const PLAYER_ELEVATION = THREE.MathUtils.degToRad(41.9);
+const PLAYER_FOV = 36;
+/** How far a drag can swing the deck before it stops. */
+const ORBIT_AZIMUTH_LIMIT = THREE.MathUtils.degToRad(62);
+const ORBIT_ELEVATION_MIN = THREE.MathUtils.degToRad(14);
+const ORBIT_ELEVATION_MAX = THREE.MathUtils.degToRad(72);
+const TONEARM_OUTER = -0.335;
+const TONEARM_INNER = -0.726;
 
 export function createRoomScene(): RoomScene {
   const reducedMotion =
     typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color("#141225");
+  scene.background = new THREE.Color("#020810");
 
-  // Three-step toon ramp: the whole room shades in flat pools, which is what reads
-  // "cartoon" against the CRT world's continuous gradients.
-  const ramp = new THREE.DataTexture(
-    new Uint8Array([90, 90, 90, 255, 180, 180, 180, 255, 255, 255, 255, 255]),
-    3,
-    1,
-  );
-  ramp.needsUpdate = true;
-  ramp.minFilter = THREE.NearestFilter;
-  ramp.magFilter = THREE.NearestFilter;
+  // No lights: direct light, indirect bounce and contact shadow are all in the bake.
+  // That keeps the reel target and the full About stage identical and costs no shadow
+  // map on a phone.
 
-  const materials: any[] = [];
-  const geometries: any[] = [];
-  const textures: any[] = [ramp];
+  const frameCamera = new THREE.PerspectiveCamera(30, 4 / 3, 0.1, 400);
+  frameCamera.position.copy(FRAME_HOME);
+  frameCamera.lookAt(HOME_LOOK);
 
-  const toon = (color: string) => {
-    const material = new THREE.MeshToonMaterial({ color, gradientMap: ramp });
-    materials.push(material);
-    return material;
-  };
-  const keep = <T,>(geometry: T): T => {
-    geometries.push(geometry);
-    return geometry;
-  };
-
-  // ── lights: one warm pool (lamp), one cool wash (window), a floor of ambient ──
-  scene.add(new THREE.AmbientLight(0x8d95c9, 0.55));
-  const moon = new THREE.DirectionalLight(0x9fb8e8, 0.75);
-  moon.position.set(3.2, 4.6, 2.4);
-  scene.add(moon);
-  const lampLight = new THREE.PointLight(0xffb45e, 14, 7.5, 2);
-  lampLight.position.set(-1.62, 2.35, -0.95);
-  scene.add(lampLight);
-  const screenLight = new THREE.PointLight(0x6fd8e0, 3.2, 3.4, 2);
-  screenLight.position.set(-1.05, 1.95, -0.7);
-  scene.add(screenLight);
-
-  // ── shell: floor, two walls, rug ──────────────────────────────────────────
-  const shell = new THREE.Group();
-  scene.add(shell);
-
-  const floor = new THREE.Mesh(keep(new THREE.BoxGeometry(7.4, 0.18, 5.4)), toon(PALETTE.floor));
-  floor.position.set(0.6, -0.09, 0.1);
-  shell.add(floor);
-
-  const backWall = new THREE.Mesh(keep(new THREE.BoxGeometry(7.4, 4.4, 0.16)), toon(PALETTE.wallBack));
-  backWall.position.set(0.6, 2.2, -2.28);
-  shell.add(backWall);
-
-  const sideWall = new THREE.Mesh(keep(new THREE.BoxGeometry(0.16, 4.4, 5.4)), toon(PALETTE.wallSide));
-  sideWall.position.set(-3.08, 2.2, 0.1);
-  shell.add(sideWall);
-
-  const rug = new THREE.Mesh(keep(new THREE.CylinderGeometry(1.7, 1.7, 0.04, 40)), toon(PALETTE.rug));
-  rug.position.set(0.7, 0.02, 0.35);
-  shell.add(rug);
-
-  // ── desk ──────────────────────────────────────────────────────────────────
-  const desk = new THREE.Group();
-  scene.add(desk);
-  const deskTop = new THREE.Mesh(keep(new RoundedBoxGeometry(3.8, 0.14, 1.5, 3, 0.05)), toon(PALETTE.wood));
-  deskTop.position.set(-0.6, 1.46, -1.32);
-  desk.add(deskTop);
-  for (const [lx, lz] of [[-2.3, -0.78], [-2.3, -1.86], [1.1, -0.78], [1.1, -1.86]] as const) {
-    const leg = new THREE.Mesh(keep(new THREE.CylinderGeometry(0.06, 0.05, 1.4, 14)), toon(PALETTE.woodDark));
-    leg.position.set(lx, 0.7, lz);
-    desk.add(leg);
-  }
-
-  // ── chair, back to the reader — somebody just stepped away ────────────────
-  const chair = new THREE.Group();
-  const chairSeat = new THREE.Mesh(keep(new RoundedBoxGeometry(0.8, 0.12, 0.74, 3, 0.06)), toon(PALETTE.coral));
-  chairSeat.position.y = 0.82;
-  const chairBack = new THREE.Mesh(keep(new RoundedBoxGeometry(0.74, 0.9, 0.1, 3, 0.05)), toon(PALETTE.coral));
-  chairBack.position.set(0, 1.34, 0.35);
-  chairBack.rotation.x = 0.1;
-  const chairPole = new THREE.Mesh(keep(new THREE.CylinderGeometry(0.05, 0.05, 0.5, 12)), toon(PALETTE.dark));
-  chairPole.position.y = 0.55;
-  const chairFoot = new THREE.Mesh(keep(new THREE.CylinderGeometry(0.34, 0.38, 0.07, 20)), toon(PALETTE.dark));
-  chairFoot.position.y = 0.28;
-  chair.add(chairSeat, chairBack, chairPole, chairFoot);
-  chair.position.set(0.05, 0, -0.35);
-  chair.rotation.y = -0.4;
-  scene.add(chair);
-
-  /* ── pickable objects ──────────────────────────────────────────────────────
-   * Each object is one Group tagged with its id; the registry in roomObjects.ts is
-   * the contract. Hover lifts the group; focus dollies the full camera toward it.
-   */
-  const pickables = new Map<RoomObjectId, { group: any; home: any; lift: number }>();
-  const registerPick = (id: RoomObjectId, group: any, lift = 0.07) => {
-    group.traverse((node: any) => { node.userData.roomObject = id; });
-    pickables.set(id, { group, home: group.position.clone(), lift });
-    scene.add(group);
-  };
-
-  // CRT monitor — the JOI9000's little cousin, screen drawn on canvas.
-  const crt = new THREE.Group();
-  const crtBody = new THREE.Mesh(keep(new RoundedBoxGeometry(1.06, 0.84, 0.72, 4, 0.08)), toon(PALETTE.plastic));
-  crtBody.position.y = 0.52;
-  const crtFoot = new THREE.Mesh(keep(new THREE.CylinderGeometry(0.2, 0.26, 0.12, 20)), toon(PALETTE.plastic));
-  crtFoot.position.y = 0.06;
-  const screenCanvas = document.createElement("canvas");
-  screenCanvas.width = 128;
-  screenCanvas.height = 96;
-  const screenContext = screenCanvas.getContext("2d")!;
-  const screenTexture = new THREE.CanvasTexture(screenCanvas);
-  screenTexture.magFilter = THREE.NearestFilter;
-  textures.push(screenTexture);
-  const drawScreen = (cursorOn: boolean) => {
-    screenContext.fillStyle = "#0b2430";
-    screenContext.fillRect(0, 0, 128, 96);
-    screenContext.fillStyle = "#134a54";
-    for (let y = 0; y < 96; y += 4) screenContext.fillRect(0, y, 128, 1);
-    screenContext.fillStyle = "#6fd8e0";
-    screenContext.font = "600 13px monospace";
-    screenContext.fillText("JOI9000", 10, 22);
-    screenContext.fillStyle = "#3f8f9a";
-    screenContext.fillRect(10, 34, 74, 5);
-    screenContext.fillRect(10, 46, 52, 5);
-    screenContext.fillRect(10, 58, 88, 5);
-    if (cursorOn) {
-      screenContext.fillStyle = "#ee795c";
-      screenContext.fillRect(10, 72, 12, 9);
-    }
-    screenTexture.needsUpdate = true;
-  };
-  drawScreen(true);
-  const screenMaterial = new THREE.MeshBasicMaterial({ map: screenTexture });
-  materials.push(screenMaterial);
-  const crtScreen = new THREE.Mesh(keep(new THREE.PlaneGeometry(0.8, 0.6)), screenMaterial);
-  crtScreen.position.set(0, 0.54, 0.37);
-  crt.add(crtBody, crtFoot, crtScreen);
-  crt.position.set(-1.06, 1.53, -1.5);
-  crt.rotation.y = 0.16;
-  registerPick("crt-monitor", crt);
-
-  // Tablet + pen, flat on the desk where a hand left them.
-  const tablet = new THREE.Group();
-  const tabletBody = new THREE.Mesh(keep(new RoundedBoxGeometry(0.74, 0.035, 0.52, 3, 0.015)), toon(PALETTE.dark));
-  const tabletFace = new THREE.Mesh(keep(new THREE.PlaneGeometry(0.64, 0.42)), toon("#cfd8e8"));
-  tabletFace.rotation.x = -Math.PI / 2;
-  tabletFace.position.y = 0.022;
-  const pen = new THREE.Mesh(keep(new THREE.CylinderGeometry(0.016, 0.016, 0.36, 10)), toon(PALETTE.cream));
-  pen.rotation.z = Math.PI / 2;
-  pen.rotation.y = 0.5;
-  pen.position.set(0.24, 0.03, 0.32);
-  tablet.add(tabletBody, tabletFace, pen);
-  tablet.position.set(0.16, 1.55, -1.14);
-  tablet.rotation.y = -0.22;
-  registerPick("tablet-pen", tablet, 0.05);
-
-  // The handheld's cameo — a toy-scale echo of /play/night-tide.
-  const handheld = new THREE.Group();
-  const handheldBody = new THREE.Mesh(keep(new RoundedBoxGeometry(0.5, 0.24, 0.06, 3, 0.03)), toon(PALETTE.plastic));
-  const handheldScreen = new THREE.Mesh(keep(new THREE.PlaneGeometry(0.26, 0.16)), toon("#0f3c46"));
-  handheldScreen.position.z = 0.035;
-  const handheldKeyA = new THREE.Mesh(keep(new THREE.CylinderGeometry(0.022, 0.022, 0.03, 10)), toon(PALETTE.coral));
-  handheldKeyA.rotation.x = Math.PI / 2;
-  handheldKeyA.position.set(0.18, 0.03, 0.035);
-  const handheldKeyB = new THREE.Mesh(keep(new THREE.CylinderGeometry(0.022, 0.022, 0.03, 10)), toon(PALETTE.sage));
-  handheldKeyB.rotation.x = Math.PI / 2;
-  handheldKeyB.position.set(0.13, -0.04, 0.035);
-  handheld.add(handheldBody, handheldScreen, handheldKeyA, handheldKeyB);
-  handheld.position.set(0.98, 1.58, -1.35);
-  handheld.rotation.set(-1.1, 0.35, 0.1);
-  registerPick("handheld", handheld, 0.05);
-
-  // Headphones on a stand at the desk's end.
-  const phones = new THREE.Group();
-  const phonesPole = new THREE.Mesh(keep(new THREE.CylinderGeometry(0.03, 0.04, 0.6, 12)), toon(PALETTE.dark));
-  phonesPole.position.y = 0.3;
-  const phonesFoot = new THREE.Mesh(keep(new THREE.CylinderGeometry(0.16, 0.18, 0.05, 18)), toon(PALETTE.dark));
-  phonesFoot.position.y = 0.025;
-  const band = new THREE.Mesh(keep(new THREE.TorusGeometry(0.21, 0.035, 12, 28, Math.PI)), toon(PALETTE.coral));
-  band.position.y = 0.62;
-  const cupLeft = new THREE.Mesh(keep(new THREE.SphereGeometry(0.085, 18, 14)), toon(PALETTE.coral));
-  cupLeft.scale.set(1, 1.2, 0.7);
-  cupLeft.position.set(-0.21, 0.6, 0);
-  const cupRight = cupLeft.clone();
-  cupRight.position.x = 0.21;
-  phones.add(phonesPole, phonesFoot, band, cupLeft, cupRight);
-  phones.position.set(-2.06, 1.53, -1.12);
-  phones.rotation.y = 0.5;
-  registerPick("headphones", phones);
-
-  // Camera on the wall shelf.
-  const shelf = new THREE.Mesh(keep(new RoundedBoxGeometry(1.7, 0.08, 0.5, 3, 0.03)), toon(PALETTE.woodDark));
-  shelf.position.set(1.55, 2.86, -2.0);
-  scene.add(shelf);
-  const cameraBody = new THREE.Group();
-  const camBox = new THREE.Mesh(keep(new RoundedBoxGeometry(0.36, 0.24, 0.2, 3, 0.04)), toon(PALETTE.dark));
-  const camLens = new THREE.Mesh(keep(new THREE.CylinderGeometry(0.085, 0.095, 0.14, 20)), toon(PALETTE.cream));
-  camLens.rotation.x = Math.PI / 2;
-  camLens.position.z = 0.16;
-  const camDial = new THREE.Mesh(keep(new THREE.CylinderGeometry(0.045, 0.045, 0.05, 12)), toon(PALETTE.coral));
-  camDial.position.set(0.12, 0.145, 0);
-  cameraBody.add(camBox, camLens, camDial);
-  cameraBody.position.set(1.32, 3.02, -1.98);
-  cameraBody.rotation.y = -0.5;
-  registerPick("camera", cameraBody, 0.05);
-
-  // The cat, on the rug, tail live.
-  const cat = new THREE.Group();
-  const catBody = new THREE.Mesh(keep(new THREE.SphereGeometry(0.34, 20, 16)), toon(PALETTE.cat));
-  catBody.scale.set(1, 0.82, 0.78);
-  catBody.position.y = 0.28;
-  const catHead = new THREE.Mesh(keep(new THREE.SphereGeometry(0.19, 18, 14)), toon(PALETTE.cat));
-  catHead.position.set(0, 0.62, 0.14);
-  const earGeometry = keep(new THREE.ConeGeometry(0.07, 0.12, 4));
-  const earLeft = new THREE.Mesh(earGeometry, toon(PALETTE.cat));
-  earLeft.position.set(-0.1, 0.78, 0.12);
-  earLeft.rotation.z = 0.2;
-  const earRight = new THREE.Mesh(earGeometry, toon(PALETTE.cat));
-  earRight.position.set(0.1, 0.78, 0.12);
-  earRight.rotation.z = -0.2;
-  const chest = new THREE.Mesh(keep(new THREE.SphereGeometry(0.15, 14, 12)), toon(PALETTE.cream));
-  chest.scale.set(0.8, 1, 0.6);
-  chest.position.set(0, 0.34, 0.2);
-  const tail = new THREE.Mesh(keep(new THREE.TorusGeometry(0.22, 0.045, 10, 20, Math.PI * 0.85)), toon(PALETTE.cat));
-  tail.position.set(0.26, 0.26, -0.16);
-  tail.rotation.set(0.4, 0.6, 1.2);
-  cat.add(catBody, catHead, earLeft, earRight, chest, tail);
-  cat.position.set(1.65, 0.04, 0.45);
-  cat.rotation.y = -0.7;
-  registerPick("cat-figure", cat, 0.06);
-
-  // Books, stacked with the casual misalignment of actually-read books.
-  const books = new THREE.Group();
-  const spines = [PALETTE.coral, PALETTE.blue, PALETTE.cream, PALETTE.sage];
-  spines.forEach((spine, index) => {
-    const book = new THREE.Mesh(keep(new RoundedBoxGeometry(0.52 - index * 0.03, 0.075, 0.38, 2, 0.02)), toon(spine));
-    book.position.y = 0.04 + index * 0.078;
-    book.rotation.y = (index % 2 === 0 ? 1 : -1) * (0.1 + index * 0.06);
-    books.add(book);
-  });
-  books.position.set(-2.62, 1.53, -1.62);
-  registerPick("bookstack", books, 0.05);
-
-  // The window — Guangzhou at night, tower and all, drawn once.
-  const nightCanvas = document.createElement("canvas");
-  nightCanvas.width = 256;
-  nightCanvas.height = 320;
-  {
-    const c = nightCanvas.getContext("2d")!;
-    const sky = c.createLinearGradient(0, 0, 0, 320);
-    sky.addColorStop(0, "#0c1230");
-    sky.addColorStop(0.7, "#1b2248");
-    sky.addColorStop(1, "#33254e");
-    c.fillStyle = sky;
-    c.fillRect(0, 0, 256, 320);
-    // moon
-    c.fillStyle = "#e8ecf8";
-    c.beginPath();
-    c.arc(200, 52, 17, 0, Math.PI * 2);
-    c.fill();
-    // skyline blocks
-    for (let i = 0; i < 12; i += 1) {
-      const bw = 18 + ((i * 37) % 22);
-      const bh = 50 + ((i * 53) % 90);
-      const bx = i * 21;
-      c.fillStyle = "#121a38";
-      c.fillRect(bx, 320 - bh, bw, bh);
-      c.fillStyle = "rgba(255, 196, 120, 0.85)";
-      for (let w = 0; w < 6; w += 1) {
-        if ((i * 7 + w * 3) % 4 === 0) c.fillRect(bx + 4 + (w % 3) * 6, 320 - bh + 8 + Math.floor(w / 3) * 14, 3, 5);
-      }
-    }
-    // 小蛮腰 — the Canton Tower silhouette with its waist.
-    c.strokeStyle = "#ee795c";
-    c.lineWidth = 3;
-    c.beginPath();
-    c.moveTo(74, 320);
-    c.quadraticCurveTo(88, 200, 79, 150);
-    c.moveTo(94, 320);
-    c.quadraticCurveTo(80, 200, 87, 150);
-    c.stroke();
-    c.lineWidth = 2;
-    c.beginPath();
-    c.moveTo(83, 150);
-    c.lineTo(83, 116);
-    c.stroke();
-    c.fillStyle = "rgba(238, 121, 92, 0.5)";
-    c.beginPath();
-    c.ellipse(83, 152, 8, 4, 0, 0, Math.PI * 2);
-    c.fill();
-  }
-  const nightTexture = new THREE.CanvasTexture(nightCanvas);
-  nightTexture.colorSpace = THREE.SRGBColorSpace;
-  textures.push(nightTexture);
-  const windowGroup = new THREE.Group();
-  const nightMaterial = new THREE.MeshBasicMaterial({ map: nightTexture });
-  materials.push(nightMaterial);
-  const windowGlass = new THREE.Mesh(keep(new THREE.PlaneGeometry(1.5, 1.9)), nightMaterial);
-  const windowFrame = new THREE.Mesh(keep(new RoundedBoxGeometry(1.7, 2.1, 0.1, 2, 0.03)), toon(PALETTE.plastic));
-  windowFrame.position.z = -0.04;
-  const mullionV = new THREE.Mesh(keep(new THREE.BoxGeometry(0.05, 1.9, 0.05)), toon(PALETTE.plastic));
-  mullionV.position.z = 0.02;
-  const mullionH = new THREE.Mesh(keep(new THREE.BoxGeometry(1.5, 0.05, 0.05)), toon(PALETTE.plastic));
-  mullionH.position.set(0, 0.32, 0.02);
-  windowGroup.add(windowFrame, windowGlass, mullionV, mullionH);
-  windowGroup.position.set(2.6, 2.6, -2.17);
-  registerPick("window", windowGroup, 0);
-
-  // ── wall prints: the two real photos, framed ──────────────────────────────
-  const printLoader = new THREE.TextureLoader();
-  const addPrint = (src: string, x: number, y: number, w: number, h: number, tilt: number) => {
-    const frameMesh = new THREE.Mesh(keep(new RoundedBoxGeometry(w + 0.1, h + 0.1, 0.05, 2, 0.02)), toon(PALETTE.cream));
-    frameMesh.position.set(x, y, -2.17);
-    frameMesh.rotation.z = tilt;
-    scene.add(frameMesh);
-    const printTexture = printLoader.load(src);
-    printTexture.colorSpace = THREE.SRGBColorSpace;
-    textures.push(printTexture);
-    const printMaterial = new THREE.MeshBasicMaterial({ map: printTexture });
-    materials.push(printMaterial);
-    const photo = new THREE.Mesh(keep(new THREE.PlaneGeometry(w, h)), printMaterial);
-    photo.position.set(x, y, -2.135);
-    photo.rotation.z = tilt;
-    scene.add(photo);
-  };
-  addPrint("/media/gallo-mountain.jpg", -1.3, 3.15, 0.72, 0.5, 0.02);
-  addPrint("/media/cat-observation.jpg", -0.42, 3.05, 0.5, 0.62, -0.03);
-
-  // ── desk lamp (not pickable — it is lighting, not an interest) ────────────
-  const lamp = new THREE.Group();
-  const lampBase = new THREE.Mesh(keep(new THREE.CylinderGeometry(0.14, 0.17, 0.06, 18)), toon(PALETTE.dark));
-  const lampArmA = new THREE.Mesh(keep(new THREE.CylinderGeometry(0.025, 0.025, 0.62, 10)), toon(PALETTE.dark));
-  lampArmA.position.set(0.08, 0.3, 0);
-  lampArmA.rotation.z = -0.3;
-  const lampArmB = new THREE.Mesh(keep(new THREE.CylinderGeometry(0.022, 0.022, 0.5, 10)), toon(PALETTE.dark));
-  lampArmB.position.set(0.34, 0.68, 0);
-  lampArmB.rotation.z = 0.85;
-  const lampShade = new THREE.Mesh(keep(new THREE.ConeGeometry(0.17, 0.22, 20, 1, true)), toon(PALETTE.coral));
-  lampShade.position.set(0.56, 0.78, 0);
-  lampShade.rotation.z = 0.6;
-  lamp.add(lampBase, lampArmA, lampArmB, lampShade);
-  lamp.position.set(-2.25, 1.53, -1.7);
-  scene.add(lamp);
-
-  // ── cameras ───────────────────────────────────────────────────────────────
-  const frameCamera = new THREE.PerspectiveCamera(30, 4 / 3, 0.1, 40);
-  frameCamera.position.set(2.7, 3.1, 4.9);
-  frameCamera.lookAt(-0.3, 1.35, -1.0);
-
-  const fullCamera = new THREE.PerspectiveCamera(32, 4 / 3, 0.1, 40);
-  const FULL_HOME = new THREE.Vector3(2.35, 2.75, 4.45);
-  const FULL_LOOK = new THREE.Vector3(-0.25, 1.3, -0.9);
+  const fullCamera = new THREE.PerspectiveCamera(30, 16 / 9, 0.1, 400);
   fullCamera.position.copy(FULL_HOME);
-  fullCamera.lookAt(FULL_LOOK);
+  fullCamera.lookAt(HOME_LOOK);
 
-  // ── interaction state ─────────────────────────────────────────────────────
-  const raycaster = new THREE.Raycaster();
-  const ndcVector = new THREE.Vector2();
+  const modelHost = new THREE.Group();
+  scene.add(modelHost);
+
+  const baseRoot = new THREE.Group();
+  baseRoot.name = "about-room-base";
+  baseRoot.rotation.y = BASE_TRANSFORM.rotationY;
+  baseRoot.scale.setScalar(BASE_TRANSFORM.scale);
+  baseRoot.position.set(...BASE_TRANSFORM.position);
+  modelHost.add(baseRoot);
+
+  let disposed = false;
+  let loaded = false;
   let hovered: RoomObjectId | null = null;
   let focused: RoomObjectId | null = null;
-  const focusPoint = new THREE.Vector3();
-  let focusAmount = 0;
-  const lookCurrent = FULL_LOOK.clone();
-  const worldCenter = new THREE.Vector3();
+  let fullAspect = 16 / 9;
 
-  let lastBlink = 0;
-  let cursorOn = true;
+  /** One node that lifts on hover, and the parent-space axis that is world "up" for it. */
+  type PickableNode = { node: any; home: any; up: any };
+  const pickables = new Map<RoomObjectId, { nodes: PickableNode[]; focus: any }>();
+  const interactiveMeshes: any[] = [];
+  const ownedTextures: any[] = [];
+  let model: any = null;
+  let records: RecordRig | null = null;
+
+  const disposeObject = (root: any) => {
+    const geometries = new Set<any>();
+    const materials = new Set<any>();
+    root.traverse((node: any) => {
+      if (node.geometry) geometries.add(node.geometry);
+      const nodeMaterials = Array.isArray(node.material) ? node.material : [node.material];
+      nodeMaterials.filter(Boolean).forEach((material: any) => materials.add(material));
+    });
+    materials.forEach((material) => material.dispose());
+    geometries.forEach((geometry) => geometry.dispose());
+  };
+
+  const textureLoader = new THREE.TextureLoader();
+  const loadAtlas = async (id: BaseAtlasId) => {
+    const texture = await textureLoader.loadAsync(atlasUrl(id));
+    texture.name = `about-room-${id}`;
+    // Display-referred WebP in, scene-linear out; the page's post chain owns the one and
+    // only encode back to sRGB.
+    texture.colorSpace = THREE.SRGBColorSpace;
+    // GLB UVs use glTF's texture orientation, the opposite of TextureLoader's default.
+    texture.flipY = false;
+    texture.wrapS = THREE.ClampToEdgeWrapping;
+    texture.wrapT = THREE.ClampToEdgeWrapping;
+    texture.minFilter = THREE.LinearMipmapLinearFilter;
+    texture.magFilter = THREE.LinearFilter;
+    texture.generateMipmaps = true;
+    ownedTextures.push(texture);
+    return [id, texture] as const;
+  };
+
+  const dracoLoader = new DRACOLoader();
+  dracoLoader.setDecoderPath(DRACO_DECODER_PATH);
+  const loader = new GLTFLoader();
+  loader.setDRACOLoader(dracoLoader);
+
+  Promise.all([loader.loadAsync(MODEL_URL), Promise.all(BASE_ATLAS_IDS.map(loadAtlas))])
+    .then(([gltf, atlasEntries]: any[]) => {
+      if (disposed) {
+        disposeObject(gltf.scene);
+        ownedTextures.forEach((texture) => texture.dispose());
+        return;
+      }
+      const atlases = new Map<BaseAtlasId, any>(atlasEntries);
+
+      // One material per atlas *and* UV set actually used, built on demand.
+      const materials = new Map<string, any>();
+      const materialFor = (id: BaseAtlasId, uvChannel: 0 | 1) => {
+        const key = `${id}:${uvChannel}`;
+        let material = materials.get(key);
+        if (!material) {
+          material = new THREE.ShaderMaterial({
+            name: `About room · ${id}${uvChannel ? " · uv1" : ""}`,
+            defines: uvChannel === 1 ? { USE_UV1: "" } : {},
+            uniforms: {
+              uBake: { value: atlases.get(id) },
+              uExposure: { value: BASE_ATLAS_EXPOSURE[id] },
+              uLift: { value: BAKE_LIFT },
+            },
+            vertexShader: BAKED_VERTEX_SHADER[uvChannel],
+            fragmentShader: BAKED_FRAGMENT_SHADER,
+          });
+          material.toneMapped = false;
+          materials.set(key, material);
+        }
+        return material;
+      };
+
+      model = gltf.scene;
+      model.name = "about-room-desk";
+      const placeholders = new Set<any>();
+      const unmapped = new Set<string>();
+      model.traverse((node: any) => {
+        if (!node.isMesh) return;
+        node.frustumCulled = true;
+        node.castShadow = false;
+        node.receiveShadow = false;
+        const previous = Array.isArray(node.material) ? node.material : [node.material];
+        previous.filter(Boolean).forEach((material: any) => placeholders.add(material));
+        const atlas = BASE_NODE_ATLAS[node.name];
+        if (!atlas) unmapped.add(node.name);
+        node.material = materialFor(atlas ?? "group1", BASE_NODE_UV[node.name] ?? 0);
+      });
+      placeholders.forEach((material) => material.dispose());
+      if (unmapped.size > 0 && process.env.NODE_ENV !== "production") {
+        console.warn(`[about-room] meshes with no atlas mapping: ${[...unmapped].join(", ")}`);
+      }
+
+      baseRoot.add(model);
+      baseRoot.updateMatrixWorld(true);
+
+      const worldUp = new THREE.Vector3(0, 1, 0);
+      Object.entries(BASE_HOTSPOT_NODES).forEach(([id, names]) => {
+        const nodes = (names ?? []).map((name) => model.getObjectByName(name)).filter(Boolean);
+        if (nodes.length === 0) {
+          if (process.env.NODE_ENV !== "production") {
+            console.warn(`[about-room] hotspot "${id}" matched no nodes`);
+          }
+          return;
+        }
+        const bounds = new THREE.Box3();
+        nodes.forEach((node: any) => bounds.expandByObject(node));
+        pickables.set(id as RoomObjectId, {
+          nodes: nodes.map((node: any) => {
+            const up = worldUp.clone();
+            if (node.parent) {
+              node.parent.worldToLocal(up.add(node.parent.getWorldPosition(new THREE.Vector3())));
+            }
+            return { node, home: node.position.clone(), up: up.normalize() };
+          }),
+          focus: bounds.getCenter(new THREE.Vector3()),
+        });
+        nodes.forEach((node: any) =>
+          node.traverse((child: any) => {
+            child.userData.roomObject = id;
+            if (child.isMesh) interactiveMeshes.push(child);
+          }),
+        );
+      });
+
+      for (const object of ROOM_OBJECTS) {
+        if (!pickables.has(object.id) && process.env.NODE_ENV !== "production") {
+          console.warn(`[about-room] no geometry bound to hotspot: ${object.id}`);
+        }
+      }
+
+      records = createRecordRig(model);
+      if (!records && process.env.NODE_ENV !== "production") {
+        console.warn("[about-room] no turntable found; records are not draggable");
+      }
+
+      tonearm = model.getObjectByName(sanitizeNodeName("turntable_needle")) ?? null;
+      if (!tonearm && process.env.NODE_ENV !== "production") {
+        console.warn("[about-room] no tonearm found; the arm will not drop");
+      }
+
+      loaded = true;
+    })
+    .catch((error: unknown) => {
+      ownedTextures.forEach((texture) => texture.dispose());
+      console.error("[about-room] GLB or atlas load failed.", error);
+    })
+    .finally(() => dracoLoader.dispose());
+
+  const raycaster = new THREE.Raycaster();
+  const pointerNdc = new THREE.Vector2();
+  const lookCurrent = HOME_LOOK.clone();
+  const focusPoint = HOME_LOOK.clone();
+  const responsiveHome = FULL_HOME.clone();
+  const cameraTarget = new THREE.Vector3();
+  const cameraHome = new THREE.Vector3();
+  const focusHome = new THREE.Vector3();
+  const cameraDirection = new THREE.Vector3();
+  const liftStep = new THREE.Vector3();
+  let focusAmount = 0;
+  let lastFrameMs = 0;
+  let playerMode = false;
+  let playerAmount = 0;
+  let orbitAzimuth = PLAYER_AZIMUTH;
+  let orbitElevation = PLAYER_ELEVATION;
+  let tonearmTarget: number | null = null;
+  let tonearmAngle = 0;
+  let tonearm: any = null;
+  const playerHome = new THREE.Vector3();
+  const baseHome = new THREE.Vector3();
+
+  const updateResponsiveHome = () => {
+    const portraitPullback = fullAspect < 1 ? THREE.MathUtils.lerp(1.42, 1.14, fullAspect) : 1;
+    responsiveHome.copy(HOME_LOOK).add(
+      FULL_HOME.clone().sub(HOME_LOOK).multiplyScalar(portraitPullback),
+    );
+  };
+  updateResponsiveHome();
 
   const update = (timeMs: number, pointer?: { x: number; y: number }) => {
     const t = timeMs * 0.001;
+    // The scene is driven from a timestamp rather than its own clock, so the record rig
+    // gets its delta from the gap between calls — clamped, because a backgrounded tab
+    // comes back with a gap long enough to spin a record through several turns at once.
+    // Clamped at both ends. The ceiling is for a backgrounded tab coming back with a
+    // gap long enough to spin the platter through several turns at once; the floor is
+    // because a timestamp that goes backwards makes this negative, and a negative delta
+    // runs the platter's rpm easing the wrong way until it diverges to NaN — at which
+    // point the record's quaternion is NaN and the record simply stops being drawn.
+    const delta = lastFrameMs
+      ? Math.max(0, Math.min((timeMs - lastFrameMs) * 0.001, 0.05))
+      : 0;
+    lastFrameMs = timeMs;
+    records?.update(delta);
 
-    if (!reducedMotion) {
-      // The frame camera breathes — the establishing shot is alive, not a still.
-      frameCamera.position.x = 2.7 + Math.sin(t * 0.24) * 0.16;
-      frameCamera.position.y = 3.1 + Math.sin(t * 0.31) * 0.08;
-      frameCamera.lookAt(-0.3, 1.35, -1.0);
-      // Cat tail; lamp breath.
-      tail.rotation.y = 0.6 + Math.sin(t * 1.8) * 0.35;
-      lampLight.intensity = 14 + Math.sin(t * 2.3) * 0.7;
-    }
-
-    // Cursor blink is state, not decoration — it runs under reduced motion too,
-    // just slower.
-    const blinkPeriod = reducedMotion ? 1600 : 640;
-    if (timeMs - lastBlink > blinkPeriod) {
-      lastBlink = timeMs;
-      cursorOn = !cursorOn;
-      drawScreen(cursorOn);
-    }
-
-    // Hover lift.
     pickables.forEach((entry, id) => {
-      const targetY = entry.home.y + (hovered === id ? entry.lift : 0);
-      entry.group.position.y += (targetY - entry.group.position.y) * 0.18;
-      const targetScale = hovered === id ? 1.05 : 1;
-      entry.group.scale.x += (targetScale - entry.group.scale.x) * 0.18;
-      entry.group.scale.y += (targetScale - entry.group.scale.y) * 0.18;
-      entry.group.scale.z += (targetScale - entry.group.scale.z) * 0.18;
+      const lift = hovered === id && !records?.held() ? 0.28 : 0;
+      entry.nodes.forEach(({ node, home, up }) => {
+        liftStep.copy(home).addScaledVector(up, lift).sub(node.position);
+        node.position.addScaledVector(liftStep, reducedMotion ? 1 : 0.14);
+      });
     });
 
-    // Full camera: pointer parallax + focus dolly.
+    const nextFocus = focused ? pickables.get(focused)?.focus : null;
+    if (nextFocus) focusPoint.copy(nextFocus);
+    focusAmount += ((nextFocus ? 1 : 0) - focusAmount) * (reducedMotion ? 1 : 0.075);
+    cameraTarget.copy(nextFocus ?? HOME_LOOK);
+    lookCurrent.lerp(cameraTarget, reducedMotion ? 1 : 0.075);
+
+    cameraDirection.copy(responsiveHome).sub(HOME_LOOK).normalize();
+    focusHome.copy(focusPoint).addScaledVector(cameraDirection, FOCUS_DISTANCE);
+    cameraHome.copy(responsiveHome).lerp(focusHome, focusAmount * 0.58);
     const px = pointer?.x ?? 0;
     const py = pointer?.y ?? 0;
-    const focusTargetAmount = focused ? 1 : 0;
-    focusAmount += (focusTargetAmount - focusAmount) * (reducedMotion ? 1 : 0.08);
-    const lookTarget = focused ? focusPoint : FULL_LOOK;
-    lookCurrent.lerp(lookTarget, reducedMotion ? 1 : 0.09);
-    fullCamera.position.x = FULL_HOME.x + px * 0.28 - focusAmount * (FULL_HOME.x - lookCurrent.x) * 0.22;
-    fullCamera.position.y = FULL_HOME.y + py * 0.18 - focusAmount * (FULL_HOME.y - lookCurrent.y) * 0.22;
-    fullCamera.position.z = FULL_HOME.z - focusAmount * (FULL_HOME.z - lookCurrent.z) * 0.22;
+    baseHome.set(
+      cameraHome.x + px * 1.4,
+      cameraHome.y + py * 0.8,
+      cameraHome.z - px * 1.1,
+    );
+
+    // Player mode rides on top of the ordinary room camera rather than replacing it, so
+    // entering and leaving is one blend and the room never cuts.
+    playerAmount += ((playerMode ? 1 : 0) - playerAmount) * (reducedMotion ? 1 : 0.09);
+    if (playerAmount > 0.001) {
+      const cosE = Math.cos(orbitElevation);
+      playerHome.set(
+        PLAYER_LOOK.x + Math.cos(orbitAzimuth) * cosE * PLAYER_RADIUS,
+        PLAYER_LOOK.y + Math.sin(orbitElevation) * PLAYER_RADIUS,
+        PLAYER_LOOK.z + Math.sin(orbitAzimuth) * cosE * PLAYER_RADIUS,
+      );
+      baseHome.lerp(playerHome, playerAmount);
+      lookCurrent.lerp(PLAYER_LOOK, playerAmount);
+      const fov = THREE.MathUtils.lerp(fullAspect < 1 ? 38 : 30, PLAYER_FOV, playerAmount);
+      if (Math.abs(fullCamera.fov - fov) > 0.01) {
+        fullCamera.fov = fov;
+        fullCamera.updateProjectionMatrix();
+      }
+    }
+
+    fullCamera.position.copy(baseHome);
     fullCamera.lookAt(lookCurrent);
+
+    // The arm parks itself when nothing is playing and tracks inward while it is. The
+    // ease is the same everywhere else in this room: a fixed fraction per frame, or an
+    // instant snap when the reader has asked for less motion.
+    const armTarget = tonearmTarget === null
+      ? 0
+      : THREE.MathUtils.lerp(TONEARM_OUTER, TONEARM_INNER, THREE.MathUtils.clamp(tonearmTarget, 0, 1));
+    tonearmAngle += (armTarget - tonearmAngle) * (reducedMotion ? 1 : 0.06);
+    if (tonearm) tonearm.rotation.y = tonearmAngle;
+
+    if (!reducedMotion) {
+      frameCamera.position.set(
+        FRAME_HOME.x + Math.sin(t * 0.18) * 0.4,
+        FRAME_HOME.y + Math.sin(t * 0.14) * 0.18,
+        FRAME_HOME.z + Math.cos(t * 0.18) * 0.4,
+      );
+      frameCamera.lookAt(HOME_LOOK);
+    }
   };
 
   return {
     scene,
     frameCamera,
     fullCamera,
-    setFullAspect: (aspect: number) => {
-      fullCamera.aspect = aspect;
+    setFullAspect: (aspect) => {
+      fullAspect = Math.max(0.45, aspect);
+      fullCamera.aspect = fullAspect;
+      fullCamera.fov = fullAspect < 1 ? 38 : 30;
       fullCamera.updateProjectionMatrix();
+      updateResponsiveHome();
     },
     update,
     raycastAt: (ndc) => {
-      ndcVector.set(ndc.x, ndc.y);
-      raycaster.setFromCamera(ndcVector, fullCamera);
-      const hits = raycaster.intersectObjects(
-        [...pickables.values()].map((entry) => entry.group),
-        true,
-      );
-      return (hits[0]?.object?.userData?.roomObject as RoomObjectId) ?? null;
+      if (!loaded || interactiveMeshes.length === 0) return null;
+      // `update` moves the camera with `lookAt`, which leaves `matrixWorld` stale until
+      // something renders. Picking must not depend on having been rendered first.
+      fullCamera.updateMatrixWorld();
+      pointerNdc.set(ndc.x, ndc.y);
+      raycaster.setFromCamera(pointerNdc, fullCamera);
+      const hit = raycaster.intersectObjects(interactiveMeshes, false)[0]?.object;
+      return (hit?.userData.roomObject as RoomObjectId | undefined) ?? null;
     },
     setHover: (id) => { hovered = id; },
-    focus: (id) => {
-      focused = id;
-      if (id) {
-        const entry = pickables.get(id);
-        if (entry) {
-          entry.group.getWorldPosition(worldCenter);
-          focusPoint.copy(worldCenter);
-        }
-      }
+    focus: (id) => { focused = id; },
+    setPlayerMode: (on) => { playerMode = on; },
+    orbitPlayer: (dx, dy) => {
+      orbitAzimuth = THREE.MathUtils.clamp(
+        orbitAzimuth + dx * 2.4,
+        PLAYER_AZIMUTH - ORBIT_AZIMUTH_LIMIT,
+        PLAYER_AZIMUTH + ORBIT_AZIMUTH_LIMIT,
+      );
+      orbitElevation = THREE.MathUtils.clamp(
+        orbitElevation + dy * 1.6,
+        ORBIT_ELEVATION_MIN,
+        ORBIT_ELEVATION_MAX,
+      );
     },
+    resetPlayerOrbit: () => {
+      orbitAzimuth = PLAYER_AZIMUTH;
+      orbitElevation = PLAYER_ELEVATION;
+    },
+    setTonearm: (progress) => { tonearmTarget = progress; },
+    setPlatterRpm: (rpm) => records?.setRpm(rpm),
+
+    grabRecordAt: (ndc) => {
+      if (!loaded || !records) return null;
+      fullCamera.updateMatrixWorld();
+      pointerNdc.set(ndc.x, ndc.y);
+      raycaster.setFromCamera(pointerNdc, fullCamera);
+      const hit = raycaster.intersectObjects(records.pickables, false)[0]?.object;
+      const id = hit ? records.recordFor(hit) : null;
+      if (id) records.grab(id, fullCamera);
+      return id;
+    },
+    moveRecordTo: (ndc) => {
+      if (!records?.held()) return;
+      fullCamera.updateMatrixWorld();
+      pointerNdc.set(ndc.x, ndc.y);
+      raycaster.setFromCamera(pointerNdc, fullCamera);
+      records.moveTo(raycaster.ray, fullCamera);
+    },
+    releaseRecord: () => records?.release() ?? null,
+    setRecordSpinning: (spinning) => records?.setSpinning(spinning),
     dispose: () => {
-      geometries.forEach((geometry) => geometry.dispose());
-      new Set(materials).forEach((material: any) => material.dispose?.());
-      textures.forEach((texture) => texture.dispose?.());
+      disposed = true;
+      if (model) disposeObject(model);
+      ownedTextures.forEach((texture) => texture.dispose());
+      scene.clear();
+      pickables.clear();
+      interactiveMeshes.length = 0;
     },
   };
 }

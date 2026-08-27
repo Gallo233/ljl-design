@@ -110,16 +110,18 @@ export const pacman: ArcadeGame = {
     let chainMultiplier = 1;
 
     const isWall = (x: number, y: number) => {
-      const column = ((x % COLUMNS) + COLUMNS) % COLUMNS;
-      if (y < 0 || y >= ROWS) return true;
-      const cell = tiles[y][column];
+      const column = ((Math.round(x) % COLUMNS) + COLUMNS) % COLUMNS;
+      const row = Math.round(y);
+      if (row < 0 || row >= ROWS) return true;
+      const cell = tiles[row][column];
       return cell === "#" || cell === "-";
     };
     /** Ghosts may pass their own door; the player may not. */
     const isWallForGhost = (x: number, y: number) => {
-      const column = ((x % COLUMNS) + COLUMNS) % COLUMNS;
-      if (y < 0 || y >= ROWS) return true;
-      return tiles[y][column] === "#";
+      const column = ((Math.round(x) % COLUMNS) + COLUMNS) % COLUMNS;
+      const row = Math.round(y);
+      if (row < 0 || row >= ROWS) return true;
+      return tiles[row][column] === "#";
     };
 
     const wrap = (value: number) => ((value % COLUMNS) + COLUMNS) % COLUMNS;
@@ -198,11 +200,13 @@ export const pacman: ArcadeGame = {
           : ghost.target(player, ghost === blinky ? ghost : blinky);
       let best: Vector | null = null;
       let bestDistance = Infinity;
+      const originX = Math.round(ghost.x);
+      const originY = Math.round(ghost.y);
       for (const direction of DIRECTIONS) {
         // Reversing is forbidden — it is what stops ghosts oscillating in a corridor.
         if (direction.x === -ghost.dir.x && direction.y === -ghost.dir.y) continue;
-        const nx = ghost.x + direction.x;
-        const ny = ghost.y + direction.y;
+        const nx = originX + direction.x;
+        const ny = originY + direction.y;
         if (isWallForGhost(nx, ny)) continue;
         const distance = Math.hypot(wrap(nx) - target.x, ny - target.y);
         if (distance < bestDistance) { bestDistance = distance; best = direction; }
@@ -224,10 +228,12 @@ export const pacman: ArcadeGame = {
         return;
       }
 
-      if (input.isDown("up")) player.next = { x: 0, y: -1 };
-      else if (input.isDown("down")) player.next = { x: 0, y: 1 };
-      else if (input.isDown("left")) player.next = { x: -1, y: 0 };
-      else if (input.isDown("right")) player.next = { x: 1, y: 0 };
+      // Keep both held and edge-triggered input: a quick physical-button tap between
+      // animation frames must still queue the next turn.
+      if (input.pressed("up") || input.isDown("up")) player.next = { x: 0, y: -1 };
+      else if (input.pressed("down") || input.isDown("down")) player.next = { x: 0, y: 1 };
+      else if (input.pressed("left") || input.isDown("left")) player.next = { x: -1, y: 0 };
+      else if (input.pressed("right") || input.isDown("right")) player.next = { x: 1, y: 0 };
 
       moveActor(player, PLAYER_SPEED, delta, isWall);
       mouth += delta * 9;

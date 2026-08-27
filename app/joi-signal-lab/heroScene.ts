@@ -1,6 +1,8 @@
 import * as THREE from "three";
 import { DRACOLoader } from "three/examples/jsm/loaders/DRACOLoader.js";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { OCCLUDER_LAYER, createHeroLightOrb } from "./heroLightOrb";
+import { createSolarSystem } from "./solarSystem";
 
 /**
  * The JOI9000 terminal, as a scene rather than a component.
@@ -22,8 +24,8 @@ export type HeroSceneOptions = {
   isMobile: boolean;
   reducedMotion: boolean;
   shadows: boolean;
-  /** Fired when the particle form changes, for the HUD readout. */
-  onFormChange: (index: number) => void;
+  /** The sea, already drawn into a target by the host. Sampled by the screen glass. */
+  screenMap: any;
   /** Fired once the GLB is in the scene and the first frame is worth showing. */
   onModelReady: () => void;
 };
@@ -31,8 +33,8 @@ export type HeroSceneOptions = {
 export type HeroScene = {
   scene: any;
   camera: any;
-  /** Canvas size in CSS pixels, and the pixel ratio the host settled on. */
-  setSize: (width: number, height: number, pixelRatio: number) => void;
+  /** Canvas size in CSS pixels. */
+  setSize: (width: number, height: number) => void;
   /**
    * Advance one frame. `progress` is 0 at the top of the page to 1 when the reel has
    * arrived — the same value the CSS variables are derived from.
@@ -40,29 +42,30 @@ export type HeroScene = {
   update: (delta: number, progress: number) => void;
   /** Pointer in normalised device coordinates; drives parallax, look and ripples. */
   setPointer: (x: number, y: number) => void;
-  /** Advance the particle system to its next form. */
-  cycleForm: () => void;
+  /**
+   * Draw everything the beauty pass will sample but cannot produce itself — today the
+   * orb's scattering buffer. Must run before the host renders this scene.
+   */
+  prepare: (renderer: any) => void;
+  /** True when the pointer is over the orb. The host turns this into a cursor. */
+  orbHitTest: (ndc: { x: number; y: number }) => boolean;
+  /** Take hold of the orb. False when the pointer was not on it. */
+  grabOrb: (ndc: { x: number; y: number }) => boolean;
+  /** Carry the orb. No-op unless it is held. */
+  moveOrb: (ndc: { x: number; y: number }) => void;
+  /** Let the orb go. True if it actually moved, so the host can swallow the click. */
+  releaseOrb: () => boolean;
+  isOrbHeld: () => boolean;
+  /** Carry the host's sea state through to the screen's spill light. */
+  setSeaState: (index: number) => void;
+  /** Width of the CRT screen in device pixels, as it currently sits on the stage. */
+  screenPixelWidth: () => number;
   /** True once the model has landed — the host's boot gate reads this. */
   isReady: () => boolean;
   dispose: () => void;
 };
 
-type ParticleShape = {
-  positions: Float32Array;
-  colors: Float32Array;
-  eyes: Float32Array;
-  mode: number;
-};
 
-const FORM_COUNT = 4;
-const JOI_PALETTE = [
-  [0.96, 0.89, 0.83],
-  [0.88, 0.45, 0.35],
-  [0.35, 0.23, 0.2],
-  [0.47, 0.58, 0.64],
-  [0.84, 0.56, 0.28],
-  [0.72, 0.5, 0.42],
-] as const;
 
 const clamp01 = (value: number) => Math.max(0, Math.min(1, value));
 const smooth = (value: number) => {
@@ -114,251 +117,28 @@ function createRoundedBox(width: number, height: number, depth: number, radius: 
   return geometry;
 }
 
-function createTextCanvas(text: string) {
-  const surface = document.createElement("canvas");
-  surface.width = 960;
-  surface.height = 360;
-  const context = surface.getContext("2d");
-  if (!context) return surface;
-  context.clearRect(0, 0, surface.width, surface.height);
-  context.fillStyle = "#fff";
-  context.font = `800 ${text === "Joi" ? 284 : 224}px Arial, Helvetica, sans-serif`;
-  context.textAlign = "center";
-  context.textBaseline = "middle";
-  context.fillText(text, surface.width / 2, surface.height * 0.52);
-  return surface;
-}
 
-function createJoiFaceCanvas() {
-  const surface = document.createElement("canvas");
-  surface.width = 520;
-  surface.height = 520;
-  const context = surface.getContext("2d");
-  if (!context) return surface;
-  const ellipse = (x: number, y: number, rx: number, ry: number, color: string) => {
-    context.beginPath();
-    context.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2);
-    context.fillStyle = color;
-    context.fill();
-  };
 
-  context.clearRect(0, 0, 520, 520);
-  context.fillStyle = "#61453c";
-  context.beginPath();
-  context.moveTo(94, 254);
-  context.quadraticCurveTo(84, 60, 260, 45);
-  context.quadraticCurveTo(438, 62, 428, 254);
-  context.quadraticCurveTo(417, 394, 345, 411);
-  context.lineTo(175, 410);
-  context.quadraticCurveTo(104, 388, 94, 254);
-  context.closePath();
-  context.fill();
-  ellipse(260, 245, 132, 152, "#f3c9b0");
-  context.fillStyle = "#68493e";
-  context.beginPath();
-  context.moveTo(131, 188);
-  context.quadraticCurveTo(164, 67, 262, 67);
-  context.quadraticCurveTo(367, 67, 401, 184);
-  context.quadraticCurveTo(348, 141, 318, 132);
-  context.quadraticCurveTo(298, 180, 277, 190);
-  context.quadraticCurveTo(254, 140, 229, 130);
-  context.quadraticCurveTo(207, 181, 180, 190);
-  context.quadraticCurveTo(164, 154, 131, 188);
-  context.closePath();
-  context.fill();
-  context.strokeStyle = "#563a32";
-  context.lineWidth = 9;
-  context.lineCap = "round";
-  context.beginPath();
-  context.moveTo(180, 216);
-  context.quadraticCurveTo(215, 197, 239, 217);
-  context.moveTo(283, 217);
-  context.quadraticCurveTo(314, 197, 341, 217);
-  context.stroke();
-  ellipse(209, 258, 35, 42, "#fff9f3");
-  ellipse(311, 258, 35, 42, "#fff9f3");
-  ellipse(211, 264, 21, 29, "#ba762e");
-  ellipse(309, 264, 21, 29, "#ba762e");
-  ellipse(212, 267, 12, 20, "#30221f");
-  ellipse(308, 267, 12, 20, "#30221f");
-  ellipse(204, 254, 6, 8, "#fff");
-  ellipse(300, 254, 6, 8, "#fff");
-  ellipse(166, 310, 25, 10, "rgba(220,111,91,.42)");
-  ellipse(354, 310, 25, 10, "rgba(220,111,91,.42)");
-  context.fillStyle = "#a45143";
-  context.beginPath();
-  context.moveTo(217, 325);
-  context.quadraticCurveTo(260, 361, 303, 325);
-  context.quadraticCurveTo(286, 386, 260, 387);
-  context.quadraticCurveTo(233, 386, 217, 325);
-  context.closePath();
-  context.fill();
-  ellipse(260, 365, 24, 10, "#e58b83");
-  context.fillStyle = "#df765d";
-  context.beginPath();
-  context.moveTo(397, 244);
-  context.lineTo(461, 218);
-  context.lineTo(441, 275);
-  context.lineTo(467, 314);
-  context.lineTo(402, 299);
-  context.closePath();
-  context.fill();
-  context.fillStyle = "#f4e7db";
-  context.beginPath();
-  context.moveTo(145, 520);
-  context.quadraticCurveTo(166, 409, 220, 388);
-  context.lineTo(302, 388);
-  context.quadraticCurveTo(361, 414, 379, 520);
-  context.closePath();
-  context.fill();
-  context.fillStyle = "#fff";
-  context.beginPath();
-  context.moveTo(206, 399);
-  context.lineTo(260, 453);
-  context.lineTo(314, 399);
-  context.lineTo(298, 520);
-  context.lineTo(222, 520);
-  context.closePath();
-  context.fill();
-  context.fillStyle = "#6f8795";
-  context.beginPath();
-  context.moveTo(260, 430);
-  context.lineTo(287, 459);
-  context.lineTo(266, 480);
-  context.lineTo(260, 520);
-  context.lineTo(254, 480);
-  context.lineTo(233, 459);
-  context.closePath();
-  context.fill();
-  return surface;
-}
 
-function colorFor(index: number, randomValue: number) {
-  return JOI_PALETTE[(index * 3 + Math.floor(randomValue * 13)) % JOI_PALETTE.length];
-}
 
-function createNebulaShape(count: number): ParticleShape {
-  const positions = new Float32Array(count * 3);
-  const colors = new Float32Array(count * 3);
-  const eyes = new Float32Array(count);
-  const random = seededRandom(1907);
-  for (let index = 0; index < count; index += 1) {
-    const offset = index * 3;
-    const ratio = index / count;
-    let x = 0;
-    let y = 0;
-    let z = 0;
-    if (ratio < 0.82) {
-      const theta = Math.acos(1 - 2 * random());
-      const phi = Math.PI * 2 * random() + theta * 1.65;
-      const shell = 0.62 + Math.pow(random(), 1.8) * 0.28;
-      x = Math.sin(theta) * Math.cos(phi) * shell * 1.25;
-      y = Math.cos(theta) * shell * 0.95;
-      z = Math.sin(theta) * Math.sin(phi) * shell * 0.45;
-    } else {
-      const angle = random() * Math.PI * 2;
-      const radius = 0.86 + random() * 0.56;
-      x = Math.cos(angle) * radius * 1.12;
-      y = Math.sin(angle) * radius * 0.24;
-      z = Math.sin(angle) * 0.18 + (random() - 0.5) * 0.08;
-    }
-    positions[offset] = x;
-    positions[offset + 1] = y;
-    positions[offset + 2] = z;
-    const color = colorFor(index, random());
-    const brightness = 0.72 + random() * 0.35;
-    colors[offset] = color[0] * brightness;
-    colors[offset + 1] = color[1] * brightness;
-    colors[offset + 2] = color[2] * brightness;
-  }
-  return { positions, colors, eyes, mode: 0 };
-}
 
-function createCanvasShape(
-  surface: HTMLCanvasElement,
-  count: number,
-  options: {
-    seed: number;
-    width: number;
-    height: number;
-    mode: number;
-    pixelColor?: boolean;
-    eyes?: Array<{ x: number; y: number; rx: number; ry: number; side: number }>;
-  },
-): ParticleShape {
-  const context = surface.getContext("2d", { willReadFrequently: true });
-  const image = context?.getImageData(0, 0, surface.width, surface.height);
-  const pixels: Array<{ x: number; y: number; r: number; g: number; b: number }> = [];
-  const step = 4;
-  let minX = surface.width;
-  let minY = surface.height;
-  let maxX = 0;
-  let maxY = 0;
-  if (image) {
-    for (let y = 2; y < surface.height; y += step) {
-      for (let x = 2; x < surface.width; x += step) {
-        const pixelIndex = (y * surface.width + x) * 4;
-        if (image.data[pixelIndex + 3] < 36) continue;
-        pixels.push({
-          x,
-          y,
-          r: image.data[pixelIndex] / 255,
-          g: image.data[pixelIndex + 1] / 255,
-          b: image.data[pixelIndex + 2] / 255,
-        });
-        minX = Math.min(minX, x);
-        minY = Math.min(minY, y);
-        maxX = Math.max(maxX, x);
-        maxY = Math.max(maxY, y);
-      }
-    }
-  }
-  if (pixels.length === 0) pixels.push({ x: surface.width / 2, y: surface.height / 2, r: 1, g: 1, b: 1 });
-  const contentWidth = Math.max(1, maxX - minX);
-  const contentHeight = Math.max(1, maxY - minY);
-  const contentCenterX = (minX + maxX) / 2;
-  const contentCenterY = (minY + maxY) / 2;
-  const scale = Math.min(options.width / contentWidth, options.height / contentHeight);
-  const positions = new Float32Array(count * 3);
-  const colors = new Float32Array(count * 3);
-  const eyes = new Float32Array(count);
-  const random = seededRandom(options.seed);
-  for (let index = 0; index < count; index += 1) {
-    const offset = index * 3;
-    const pixel = pixels[Math.floor(random() * pixels.length)];
-    const pixelX = pixel.x + (random() - 0.5) * step * 0.72;
-    const pixelY = pixel.y + (random() - 0.5) * step * 0.72;
-    positions[offset] = (pixelX - contentCenterX) * scale;
-    positions[offset + 1] = (contentCenterY - pixelY) * scale;
-    positions[offset + 2] = (random() - 0.5) * 0.06;
-    if (options.pixelColor) {
-      colors[offset] = pixel.r;
-      colors[offset + 1] = pixel.g;
-      colors[offset + 2] = pixel.b;
-    } else {
-      const color = colorFor(index, random());
-      const variation = 0.82 + random() * 0.22;
-      colors[offset] = color[0] * variation;
-      colors[offset + 1] = color[1] * variation;
-      colors[offset + 2] = color[2] * variation;
-    }
-    for (const eye of options.eyes ?? []) {
-      const x = (pixel.x - eye.x) / eye.rx;
-      const y = (pixel.y - eye.y) / eye.ry;
-      if (x * x + y * y <= 1) {
-        eyes[index] = eye.side;
-        break;
-      }
-    }
-  }
-  return { positions, colors, eyes, mode: options.mode };
-}
-
-function createCrtMaterial() {
+/**
+ * The glass of the JOI9000. It is handed a picture — the sea, drawn into a target by
+ * `oceanScene` — and its whole job is to make that picture look like it is arriving
+ * through a tube: rounded corners, a vignette, scanlines, and the bulge of the screen
+ * toward the viewer. Whatever is sampled here inherits all of it for free, which is why
+ * the sea is a texture and not geometry sitting in this scene.
+ */
+function createCrtMaterial(screenMap: any) {
   return new THREE.ShaderMaterial({
     transparent: true,
     depthWrite: false,
-    uniforms: { uTime: { value: 0 } },
+    uniforms: {
+      uTime: { value: 0 },
+      uScreenMap: { value: screenMap },
+      /** Fades the picture out as the reel takes the frame. */
+      uScreenAmount: { value: 1 },
+    },
     vertexShader: `
       varying vec2 vUv;
       void main() {
@@ -371,6 +151,8 @@ function createCrtMaterial() {
     `,
     fragmentShader: `
       uniform float uTime;
+      uniform sampler2D uScreenMap;
+      uniform float uScreenAmount;
       varying vec2 vUv;
       float rnd(vec2 value) {
         return fract(sin(dot(value, vec2(12.9898, 78.233))) * 43758.5453);
@@ -384,176 +166,11 @@ function createCrtMaterial() {
         float vignette = smoothstep(0.78, 0.18, length(centered * vec2(1.05, 1.3)));
         float scan = 0.88 + 0.12 * sin(vUv.y * 1050.0 + uTime * 4.0);
         float noise = (rnd(gl_FragCoord.xy + floor(uTime * 20.0)) - 0.5) * 0.045;
+        // The target is tagged linear-sRGB, so this is the light the sea wrote, not a
+        // decoded copy of it. The post chain still owns the only encode.
+        vec3 picture = texture2D(uScreenMap, vUv).rgb * uScreenAmount;
         vec3 base = mix(vec3(0.006, 0.012, 0.019), vec3(0.035, 0.073, 0.085), vignette);
-        gl_FragColor = vec4((base + noise) * scan, mask);
-      }
-    `,
-  });
-}
-
-function createFogMaterial() {
-  return new THREE.ShaderMaterial({
-    transparent: true,
-    depthWrite: false,
-    depthTest: false,
-    blending: THREE.NormalBlending,
-    uniforms: { uTime: { value: 0 }, uOpacity: { value: 1 } },
-    vertexShader: `
-      varying vec2 vUv;
-      void main() {
-        vUv = uv;
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-      }
-    `,
-    fragmentShader: `
-      uniform float uTime;
-      uniform float uOpacity;
-      varying vec2 vUv;
-
-      float hash(vec2 p) {
-        p = fract(p * vec2(123.34, 456.21));
-        p += dot(p, p + 45.32);
-        return fract(p.x * p.y);
-      }
-      float noise(vec2 p) {
-        vec2 i = floor(p);
-        vec2 f = fract(p);
-        f = f * f * (3.0 - 2.0 * f);
-        return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x),
-          mix(hash(i + vec2(0.0, 1.0)), hash(i + 1.0), f.x), f.y);
-      }
-      float fbm(vec2 p) {
-        float value = 0.0;
-        float amplitude = 0.56;
-        for (int i = 0; i < 5; i++) {
-          value += amplitude * noise(p);
-          p = p * 2.03 + 17.1;
-          amplitude *= 0.48;
-        }
-        return value;
-      }
-      void main() {
-        vec2 uv = vUv;
-        float drift = uTime * 0.012;
-        float cloud = fbm(uv * vec2(3.4, 2.1) + vec2(drift, -drift * 0.36));
-        cloud += fbm(uv * vec2(7.1, 4.2) - vec2(drift * 0.42, 0.0)) * 0.3;
-        cloud = smoothstep(0.42, 1.05, cloud);
-        float edge = smoothstep(0.0, 0.2, uv.x) * smoothstep(0.0, 0.2, 1.0 - uv.x);
-        edge *= smoothstep(0.0, 0.16, uv.y) * smoothstep(0.0, 0.22, 1.0 - uv.y);
-        vec3 cold = vec3(0.19, 0.22, 0.29);
-        vec3 warm = vec3(0.36, 0.29, 0.28);
-        vec3 color = mix(cold, warm, smoothstep(0.22, 0.88, uv.y));
-        gl_FragColor = vec4(color, cloud * edge * 0.58 * uOpacity);
-      }
-    `,
-  });
-}
-
-function createBeamMaterial() {
-  return new THREE.ShaderMaterial({
-    transparent: true,
-    depthWrite: false,
-    side: THREE.DoubleSide,
-    blending: THREE.AdditiveBlending,
-    uniforms: {
-      uTime: { value: 0 },
-      uOpacity: { value: 1 },
-      uColor: { value: new THREE.Color(0xf0cda7) },
-    },
-    vertexShader: `
-      varying vec2 vUv;
-      void main() {
-        vUv = uv;
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-      }
-    `,
-    fragmentShader: `
-      uniform float uTime;
-      uniform float uOpacity;
-      uniform vec3 uColor;
-      varying vec2 vUv;
-      float hash(vec2 p) {
-        return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
-      }
-      void main() {
-        float longitudinal = smoothstep(0.0, 0.16, vUv.y) * smoothstep(0.0, 0.46, 1.0 - vUv.y);
-        float shimmer = 0.82 + hash(floor(vUv * 80.0 + uTime * vec2(1.7, -2.1))) * 0.18;
-        float alpha = longitudinal * shimmer * uOpacity * 0.045;
-        gl_FragColor = vec4(uColor, alpha);
-      }
-    `,
-  });
-}
-
-function createParticleMaterial() {
-  return new THREE.ShaderMaterial({
-    transparent: true,
-    depthWrite: false,
-    depthTest: false,
-    blending: THREE.AdditiveBlending,
-    vertexColors: true,
-    uniforms: {
-      uTime: { value: 0 },
-      uMorph: { value: 1 },
-      uMode: { value: 0 },
-      uLook: { value: new THREE.Vector2() },
-      uPointScale: { value: 1 },
-      uRipple: { value: new THREE.Vector3(0, 0, -20) },
-      uOpacity: { value: 1 },
-    },
-    vertexShader: `
-      attribute vec3 aTarget;
-      attribute vec3 aTargetColor;
-      attribute float aSize;
-      attribute float aSeed;
-      attribute float aEye;
-      uniform float uTime;
-      uniform float uMorph;
-      uniform float uMode;
-      uniform vec2 uLook;
-      uniform float uPointScale;
-      uniform vec3 uRipple;
-      uniform float uOpacity;
-      varying vec3 vColor;
-      varying float vAlpha;
-      varying float vPixel;
-
-      void main() {
-        float amount = uMorph * uMorph * (3.0 - 2.0 * uMorph);
-        vec3 point = mix(position, aTarget, amount);
-        vColor = mix(color, aTargetColor, amount);
-        float planetary = 1.0 - step(0.5, uMode);
-        point += normalize(point + vec3(0.001))
-          * sin(uTime * 0.74 + aSeed * 5.7) * 0.008 * planetary;
-        float rippleAge = uTime - uRipple.z;
-        if (rippleAge > 0.0 && rippleAge < 1.7) {
-          vec2 delta = point.xy - uRipple.xy;
-          float distanceToPointer = max(length(delta), 0.001);
-          float radius = rippleAge * 1.12;
-          float ring = exp(-abs(distanceToPointer - radius) * 11.0) * exp(-rippleAge * 1.2);
-          point.xy += delta / distanceToPointer * ring * 0.08;
-          point.z += ring * 0.14;
-        }
-        float face = step(2.5, uMode);
-        point.xy += uLook * vec2(0.035, 0.025) * abs(aEye) * face;
-        vec4 mvPosition = modelViewMatrix * vec4(point, 1.0);
-        gl_Position = projectionMatrix * mvPosition;
-        gl_PointSize = max(1.0, aSize * uPointScale * mix(0.78, 1.22, face));
-        vAlpha = uOpacity * mix(0.52, 1.0, fract(aSeed * 7.13));
-        vPixel = face;
-      }
-    `,
-    fragmentShader: `
-      varying vec3 vColor;
-      varying float vAlpha;
-      varying float vPixel;
-      void main() {
-        vec2 centered = gl_PointCoord - 0.5;
-        float circle = 1.0 - smoothstep(0.22, 0.5, length(centered));
-        float square = 1.0 - smoothstep(0.4, 0.5, max(abs(centered.x), abs(centered.y)));
-        float alpha = mix(circle, square, vPixel) * vAlpha;
-        if (alpha < 0.012) discard;
-        gl_FragColor = vec4(vColor * (1.05 + circle * 0.18), alpha);
+        gl_FragColor = vec4((base + picture * vignette + noise) * scan, mask);
       }
     `,
   });
@@ -563,18 +180,48 @@ export function createHeroScene(options: HeroSceneOptions): HeroScene {
 const { isMobile, reducedMotion, shadows } = options;
 
 const scene = new THREE.Scene();
-  scene.fog = new THREE.FogExp2(0x07090e, 0.062);
+  /*
+   * A trace of fog, not a room's worth. The old value hid a back wall that no longer
+   * exists; at this density it only keeps the furthest orbits from reading as hard as the
+   * nearest ones, which is the one depth cue a starfield cannot give on its own.
+   */
+  scene.fog = new THREE.FogExp2(0x05070d, 0.016);
   const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 100);
   const initialCamera = new THREE.Vector3(0, 0.2, 4.5);
-  const initialLookAt = new THREE.Vector3(0, 0, 0);
+  // Between the terminal at lower right and the system at upper left, not at either.
+  const initialLookAt = new THREE.Vector3(-0.2, 0.15, -1.2);
   camera.position.copy(initialCamera);
 
   // Rebuild Shader's actual scene hierarchy so the model, screen and camera
   // share the same coordinate system as the reference.
+  /*
+   * The terminal sits low and right, turned three-quarters, with the sun and the system
+   * away to the upper left. It used to sit left of centre facing straight out, which was
+   * the right arrangement when a wall was behind it and nothing else was in shot.
+   */
   const computer = new THREE.Group();
-  computer.position.set(isMobile ? -1 : -1.55, isMobile ? -1 : -0.35, 0);
-  computer.scale.setScalar(isMobile ? 0.8 : 0.88);
-  computer.rotation.y = isMobile ? 0.71 : 0;
+  /*
+   * These look further left than the terminal ends up, and they have to: the model hangs
+   * about two units to the +X side of this group's origin (`modelRoot` is offset, then
+   * the whole thing is yawed), so positioning the group where you want the screen puts
+   * the screen off the right edge of the frame. This is the group position that lands the
+   * *screen* at roughly three-quarters across and a third down.
+   */
+  /*
+   * Sits higher than "lower right" sounds, on purpose. The page lays a dark scrim over
+   * the bottom of the canvas so the footer stays legible, and the terminal is tall — the
+   * case and keyboard hang well below the screen. Placed by eye against the screen alone
+   * it lands with its whole body under that scrim, which reads as the case having failed
+   * to render at all.
+   */
+  computer.position.set(isMobile ? -0.62 : -0.42, isMobile ? 0.12 : 0.4, isMobile ? 0.3 : -0.05);
+  computer.scale.setScalar(isMobile ? 0.6 : 0.72);
+  // Just off square to the lens. Enough of a turn to keep one side panel in shot so the
+  // case reads as a solid object rather than a flat front, and no more than that — at the
+  // larger angle it was showing more flank than screen and looked knocked askew.
+  computer.rotation.y = isMobile ? 0.16 : -0.15;
+  /** Where the drift returns to, so the float is an offset and never accumulates. */
+  const computerHomeY = computer.position.y;
   scene.add(computer);
 
   const modelRoot = new THREE.Group();
@@ -613,7 +260,18 @@ const scene = new THREE.Scene();
         if (object.name === "computer" && object.material) {
           object.material = object.material.clone();
           object.material.roughness = 0.8;
-          object.material.metalness = 0.83;
+          /*
+           * The case is moulded plastic, and it is now lit like it.
+           *
+           * It used to be set to 0.83 metalness, which only held together because the room
+           * had five lights in it. A metal has no diffuse response — it shows the
+           * environment or it shows nothing — and there is no environment map here, so in
+           * an empty starfield the case went completely black and the terminal became a
+           * screen hanging on its own. Dropping metalness lets the sky light it as the
+           * dielectric it actually is, which costs nothing and needs no invented lamp on
+           * the camera side to make up for the sun being behind the case.
+           */
+          object.material.metalness = 0.18;
           object.material.side = THREE.DoubleSide;
         }
         if (object.name === "keyboard") {
@@ -623,9 +281,27 @@ const scene = new THREE.Scene();
             metalness: 0,
           });
         }
+        /*
+         * The GLB ships a `background` mesh: a fifty-unit backdrop that stood behind the
+         * terminal when this was a room. In space there is nothing for it to be, and it
+         * is actively in the way — it is large enough that the camera sits inside its
+         * bounds, so once the terminal was turned and moved to the lower right the
+         * backdrop swung between the lens and the case and hid it completely. That is
+         * what a black rectangle with a glowing screen cut into it turned out to be.
+         */
+        if (object.name === "background") {
+          object.visible = false;
+          return;
+        }
+        // The case is what the sun's light breaks against. `enable`, not `set`: the mesh
+        // still has to draw in the beauty pass on layer 0.
+        object.layers.enable(OCCLUDER_LAYER);
       });
       modelRoot.add(model);
       modelLoaded = true;
+      // Six cube faces of shadow were rendered against an empty room. Ask for them again
+      // now that there is something in it.
+      orb.invalidateShadow();
     },
     undefined,
     (error: unknown) => {
@@ -637,119 +313,145 @@ const scene = new THREE.Scene();
   screenRig.position.set(-22, 11, 2);
   screenRig.rotation.y = Math.PI - 0.735;
   modelRoot.add(screenRig);
-  const screenMaterial = createCrtMaterial();
+  const screenMaterial = createCrtMaterial(options.screenMap);
   const screen = new THREE.Mesh(new THREE.PlaneGeometry(1, 1, 28, 20), screenMaterial);
   screen.scale.set(10.15, 7.875, 1);
   screen.position.set(-0.2, -0.55, 0.1);
   screen.rotation.x = -0.07;
   screenRig.add(screen);
 
-  const particleCount = reducedMotion ? 1700 : (isMobile ? 3000 : 5200);
-  const particleGeometry = new THREE.BufferGeometry();
-  const fromPositions = new Float32Array(particleCount * 3);
-  const targetPositions = new Float32Array(particleCount * 3);
-  const fromColors = new Float32Array(particleCount * 3);
-  const targetColors = new Float32Array(particleCount * 3);
-  const eyes = new Float32Array(particleCount);
-  const sizes = new Float32Array(particleCount);
-  const seeds = new Float32Array(particleCount);
-  const sizeRandom = seededRandom(233);
-  for (let index = 0; index < particleCount; index += 1) {
-    sizes[index] = 0.48 + sizeRandom() * 1.22;
-    seeds[index] = sizeRandom() * 1000;
-  }
-  particleGeometry.setAttribute("position", new THREE.BufferAttribute(fromPositions, 3));
-  particleGeometry.setAttribute("aTarget", new THREE.BufferAttribute(targetPositions, 3));
-  particleGeometry.setAttribute("color", new THREE.BufferAttribute(fromColors, 3));
-  particleGeometry.setAttribute("aTargetColor", new THREE.BufferAttribute(targetColors, 3));
-  particleGeometry.setAttribute("aEye", new THREE.BufferAttribute(eyes, 1));
-  particleGeometry.setAttribute("aSize", new THREE.BufferAttribute(sizes, 1));
-  particleGeometry.setAttribute("aSeed", new THREE.BufferAttribute(seeds, 1));
-
-  const faceSurface = createJoiFaceCanvas();
-  const shapes: ParticleShape[] = [
-    createNebulaShape(particleCount),
-    createCanvasShape(createTextCanvas("Joi"), particleCount, {
-      seed: 414,
-      width: 2.75,
-      height: 1.25,
-      mode: 1,
-    }),
-    createCanvasShape(createTextCanvas("Gallo"), particleCount, {
-      seed: 815,
-      width: 2.85,
-      height: 1.2,
-      mode: 2,
-    }),
-    createCanvasShape(faceSurface, particleCount, {
-      seed: 992,
-      width: 1.58,
-      height: 1.82,
-      mode: 3,
-      pixelColor: true,
-      eyes: [
-        { x: 209, y: 258, rx: 38, ry: 46, side: -1 },
-        { x: 311, y: 258, rx: 38, ry: 46, side: 1 },
-      ],
-    }),
-  ];
-  fromPositions.set(shapes[0].positions);
-  targetPositions.set(shapes[0].positions);
-  fromColors.set(shapes[0].colors);
-  targetColors.set(shapes[0].colors);
-  eyes.set(shapes[0].eyes);
-
-  const particleMaterial = createParticleMaterial();
-  const particlePoints = new THREE.Points(particleGeometry, particleMaterial);
-  particlePoints.position.set(-0.2, -0.55, 0.16);
-  particlePoints.rotation.x = -0.07;
-  particlePoints.scale.setScalar(3.18);
-  screenRig.add(particlePoints);
-
-  const fogMaterial = createFogMaterial();
-  const fogBackdrop = new THREE.Mesh(new THREE.PlaneGeometry(18, 10), fogMaterial);
-  fogBackdrop.position.set(0, 0.2, -5.4);
-  fogBackdrop.renderOrder = -10;
-  scene.add(fogBackdrop);
 
   const screenLight = new THREE.PointLight(0xf2c79d, 4.6, 7.5, 1.4);
   scene.add(screenLight);
-  const screenLightTarget = new THREE.Object3D();
-  scene.add(screenLightTarget);
-  const screenSpotLight = new THREE.SpotLight(0xf3cda8, 9.5, 10, 0.52, 0.72, 1.1);
-  screenSpotLight.castShadow = shadows;
-  screenSpotLight.shadow.mapSize.set(1024, 1024);
-  screenSpotLight.shadow.bias = -0.0003;
-  screenSpotLight.target = screenLightTarget;
-  scene.add(screenSpotLight);
 
-  const beamMaterial = createBeamMaterial();
-  const screenBeam = new THREE.Mesh(
-    new THREE.ConeGeometry(1.72, 2.55, 42, 1, true),
-    beamMaterial,
-  );
-  screenBeam.renderOrder = 3;
-  scene.add(screenBeam);
-
-  const floor = new THREE.Mesh(
-    new THREE.PlaneGeometry(24, 18),
-    new THREE.MeshStandardMaterial({ color: 0x080a10, roughness: 0.9, metalness: 0.04, transparent: true, opacity: 0.74 }),
-  );
-  floor.rotation.x = -Math.PI / 2;
-  floor.position.y = -1.42;
-  floor.receiveShadow = true;
-  scene.add(floor);
-
-  const ambient = new THREE.HemisphereLight(0xd7e6ff, 0x16131b, 1.35);
+  /*
+   * Room lighting, cut down to what a terminal floating in space is entitled to.
+   *
+   * The bodies do not read these at all — they run their own shader off the sun's
+   * position, because terminator hardness is an identity feature and no roughness value
+   * expresses it. What is left here exists only so the terminal's case does not fall to
+   * a pure silhouette against the starfield: the sun sits behind it, so without a little
+   * fill the whole model would be a black rectangle.
+   */
+  const ambient = new THREE.HemisphereLight(0x8ea6cc, 0x0a0d16, 0.62);
   scene.add(ambient);
-  const keyLight = new THREE.DirectionalLight(0xffeee1, 3.1);
-  keyLight.position.set(-3.5, 5.5, 5.5);
+  /*
+   * A warm key on the camera side of the terminal.
+   *
+   * There is nothing in space to justify it, and it is here anyway, because the
+   * alternative is a black rectangle. The sun sits far behind and to the left, so the
+   * only face it can reach is the one turned away from us — light the scene honestly and
+   * the terminal is a silhouette with a glowing screen cut into it. The reference image
+   * solves this the same way every product shot does, with a key the lighting setup does
+   * not otherwise explain. It is tinted to the sun's own colour so it reads as bounce
+   * rather than as a second, whiter source.
+   */
+  const keyLight = new THREE.DirectionalLight(0xffd2a0, 2.6);
+  keyLight.position.set(4.5, 3.2, 6.0);
   keyLight.castShadow = shadows;
   keyLight.shadow.mapSize.set(1024, 1024);
+  // This key rakes the case at a much lower angle than the old one did, and a grazing
+  // directional light is exactly where shadow acne shows up — without a normal bias the
+  // case self-shadows into a uniform dark grey.
+  keyLight.shadow.normalBias = 0.03;
+  keyLight.shadow.bias = -0.0008;
   scene.add(keyLight);
-  const rimLight = new THREE.PointLight(0x5f82ff, 3.2, 14, 2);
-  rimLight.position.set(3.5, 1.8, -1);
+  /*
+   * A tight warm spot on the terminal itself.
+   *
+   * The room this came from lit the case with a 9.5-intensity spot aimed at the desk, and
+   * removing it along with the desk is what turned the case black — a directional key
+   * spread over the whole scene does not put nearly as much light on one object as a spot
+   * aimed at it. It is aimed by `terminalKeyTarget` every frame, because the terminal
+   * drifts and a spot that stays pointed at where it used to be is worse than none.
+   */
+  /*
+   * The intensity looks extreme and is not. The stage renders linear into a HalfFloat
+   * target and the post chain owns the only tone map, so what matters is this case's
+   * linear value against a sun and eight lit bodies — not how it looks rendered straight
+   * to an sRGB buffer, where it reads fine at a third of this and then vanishes in the
+   * composite. That discrepancy is exactly how the case appeared not to be rendering.
+   */
+  const terminalKey = new THREE.SpotLight(0xffd2a0, 18, 16, 0.7, 0.7, 1.0);
+  terminalKey.castShadow = shadows;
+  terminalKey.shadow.mapSize.set(1024, 1024);
+  terminalKey.shadow.bias = -0.0006;
+  terminalKey.shadow.normalBias = 0.02;
+  const terminalKeyTarget = new THREE.Object3D();
+  scene.add(terminalKeyTarget);
+  terminalKey.target = terminalKeyTarget;
+  scene.add(terminalKey);
+  // Cold, from behind, separating the case from the starfield along its far edge.
+  const rimLight = new THREE.DirectionalLight(0x6f8ee0, 1.15);
+  rimLight.position.set(-4.0, 1.6, -5.0);
   scene.add(rimLight);
+
+  /*
+   * The one light in this room that is not on rails. It sits beside the terminal,
+   * roughly where a desk lamp would, and the visitor can pick it up and carry it
+   * anywhere in the frame — the shadows the case throws and the shafts it cuts out of
+   * the fog are both recomputed from wherever they leave it.
+   *
+   * Its home is offset by tier because the terminal is: on a phone the whole computer
+   * group is turned and pushed back, so the space "beside the CRT" is somewhere else.
+   */
+  const orb = createHeroLightOrb({
+    // Behind the terminal and up to the left. Two things decided this: the sun has to be
+    // far enough back that the outermost orbit still fits the frame, and it has to sit
+    // behind the case rather than beside it, because the case is the only occluder left
+    // and the shafts are worth more broken than clean.
+    home: isMobile
+      ? new THREE.Vector3(-1.5, 1.5, -5.0)
+      : new THREE.Vector3(-3.4, 2.1, -6.0),
+    reducedMotion,
+    shadows,
+    /*
+     * No volumetric scattering. The march threw a broad soft fan of light across a third
+     * of the frame, which is what a lamp does through dust in a room — but this is a sun
+     * seen across the solar system, and a sun does not do that. It makes a tight
+     * starburst, which the orb now draws on one billboard for a fraction of the cost.
+     */
+    scattering: false,
+    // A lamp this far from the camera is a speck; a sun is not.
+    scale: isMobile ? 1.9 : 2.2,
+    // Far enough to still be lighting the terminal from five units behind it.
+    lightRange: 18,
+    lightDecay: 1.1,
+    // Strong enough that carrying it to the terminal visibly takes over from the static
+    // key. At the terminal's depth it sits a unit or two away, where inverse-square puts
+    // it well above everything else lighting the case — which is the point of being able
+    // to bring it there.
+    lightIntensity: 10.5,
+    // There is no floor in space, so nothing to stop the sun being carried downward.
+    floorClearance: -1e6,
+    // Long enough to look at what you just did, short enough that the composition puts
+    // itself back together before the next visitor sees it.
+    returnDelay: 3,
+  });
+  scene.add(orb.group);
+  scene.add(orb.composite);
+
+  /*
+   * The solar system the terminal is floating in.
+   *
+   * The orb tells it where the light is, and nothing else. The orbits stay anchored, so
+   * dragging the sun re-lights the system instead of dragging it around.
+   */
+  const solar = createSolarSystem({
+    isMobile,
+    reducedMotion,
+    // Anchored, and deliberately not where the sun starts: the sun is draggable and the
+    // system is not, so the two cannot share a position.
+    origin: isMobile
+      ? new THREE.Vector3(-0.9, 0.9, -4.4)
+      : new THREE.Vector3(-2.3, 1.2, -5.2),
+  });
+  scene.add(solar.group);
+  scene.add(solar.sky);
+  // A body crossing in front of the sun should cut the shafts, the same way the case
+  // does. That is a transit, and it costs nothing here because the scattering pass draws
+  // occluders with an override material.
+  solar.bodies.forEach((body: any) => body.layers.enable(OCCLUDER_LAYER));
 
   const dustGeometry = new THREE.BufferGeometry();
   const dustCount = isMobile ? 220 : 520;
@@ -762,12 +464,59 @@ const scene = new THREE.Scene();
     dustPositions[offset + 2] = -1 - dustRandom() * 8;
   }
   dustGeometry.setAttribute("position", new THREE.BufferAttribute(dustPositions, 3));
-  const dustMaterial = new THREE.PointsMaterial({
-    color: 0xd7c4ae,
-    size: 0.012,
+  /*
+   * The motes are the effect the visitor is actually looking at.
+   *
+   * Shafts drawn in screen space are the *shape* of scattered light, but a beam is only
+   * visible because there is something suspended in it — so each mote is lit here by its
+   * own distance to the orb, inverse-square, and swells a little as it brightens. Carry
+   * the orb through the dust and the dust answers, which is what sells the shafts as
+   * volume rather than as a gradient laid over the frame.
+   *
+   * A `PointsMaterial` cannot do this: it has one colour for every point. The cost of
+   * replacing it is one uniform update a frame.
+   */
+  const dustMaterial = new THREE.ShaderMaterial({
     transparent: true,
-    opacity: 0.34,
     depthWrite: false,
+    blending: THREE.NormalBlending,
+    uniforms: {
+      // Interplanetary dust rather than a room's motes: cooler, and much fainter until
+      // the sun is near enough to light it.
+      uBase: { value: new THREE.Color(0x5a6478) },
+      uOrb: { value: new THREE.Vector3() },
+      uOrbColor: { value: new THREE.Color(0xffcf9a) },
+      uOrbEnergy: { value: 0 },
+      uSize: { value: 0.012 },
+      /** Half the drawing buffer height, the way three's own size attenuation reads it. */
+      uScale: { value: 300 },
+    },
+    vertexShader: `
+      uniform vec3 uOrb;
+      uniform float uOrbEnergy;
+      uniform float uSize;
+      uniform float uScale;
+      varying float vLit;
+      void main() {
+        vec4 world = modelMatrix * vec4(position, 1.0);
+        vec4 mv = viewMatrix * world;
+        float distance = length(world.xyz - uOrb);
+        vLit = uOrbEnergy / (1.0 + distance * distance * 0.62);
+        gl_PointSize = uSize * (1.0 + vLit * 1.9) * (uScale / max(0.001, -mv.z));
+        gl_Position = projectionMatrix * mv;
+      }
+    `,
+    fragmentShader: `
+      uniform vec3 uBase;
+      uniform vec3 uOrbColor;
+      varying float vLit;
+      void main() {
+        float falloff = smoothstep(0.5, 0.06, length(gl_PointCoord - 0.5));
+        if (falloff <= 0.001) discard;
+        vec3 color = uBase + uOrbColor * vLit * 2.4;
+        gl_FragColor = vec4(color, falloff * (0.16 + vLit * 0.6));
+      }
+    `,
   });
   const dust = new THREE.Points(dustGeometry, dustMaterial);
   scene.add(dust);
@@ -782,18 +531,22 @@ const scene = new THREE.Scene();
   const lookAt = new THREE.Vector3();
   const pointer = new THREE.Vector2();
   const targetPointer = new THREE.Vector2();
+  const edgeLeft = new THREE.Vector3();
+  const edgeRight = new THREE.Vector3();
   const lightOrigin = new THREE.Vector3();
-  const beamOrigin = new THREE.Vector3();
-  const lightTarget = new THREE.Vector3();
-  const lightDirection = new THREE.Vector3();
-  const beamUp = new THREE.Vector3(0, 1, 0);
-  const formLightColors = [
-    new THREE.Color(0xf2c9a6),
-    new THREE.Color(0xf07861),
-    new THREE.Color(0x8ab6cc),
-    new THREE.Color(0xefb47b),
+  const orbWorld = new THREE.Vector3();
+  const drawingBuffer = new THREE.Vector2();
+  // One per sea state, in the same order. The terminal is the room's key light, so the
+  // desk warms and cools with the weather in the screen.
+  const seaLightColors = [
+    new THREE.Color(0x9fb4c6),
+    new THREE.Color(0x8ea8bd),
+    new THREE.Color(0x7d95ab),
+    new THREE.Color(0xe0a071),
   ];
-  let currentForm = 0;
+  let currentSeaState = 0;
+  /** The hero's own clock, which four materials and the pointer gate read. */
+  let time = 0;
   /** Last progress the host reported — pointer and click gating still need it. */
   let lastProgress = 0;
   let transitionStartedAt = 0;
@@ -816,107 +569,82 @@ const scene = new THREE.Scene();
     finalCamera.copy(screenWorldPosition).addScaledVector(screenNormal, fitDistance);
   };
 
-  const setSize = (nextWidth: number, nextHeight: number, pixelRatio: number) => {
+  const setSize = (nextWidth: number, nextHeight: number) => {
     width = Math.max(1, nextWidth);
     height = Math.max(1, nextHeight);
     camera.aspect = width / height;
     camera.updateProjectionMatrix();
-    // Point size is in device pixels, so it has to track whatever ratio the host settled
-    // on. Reading it back off the renderer is exactly what this used to do.
-    particleMaterial.uniforms.uPointScale.value = pixelRatio * (isMobile ? 1.15 : 1);
     updateFinalCamera();
   };
 
-  const snapshotMorph = () => {
-    const amount = smooth(particleMaterial.uniforms.uMorph.value);
-    for (let index = 0; index < fromPositions.length; index += 1) {
-      fromPositions[index] += (targetPositions[index] - fromPositions[index]) * amount;
-      fromColors[index] += (targetColors[index] - fromColors[index]) * amount;
-    }
-  };
-
-  const morphTo = (nextForm: number) => {
-    snapshotMorph();
-    const shape = shapes[nextForm];
-    targetPositions.set(shape.positions);
-    targetColors.set(shape.colors);
-    eyes.set(shape.eyes);
-    particleGeometry.attributes.position.needsUpdate = true;
-    particleGeometry.attributes.aTarget.needsUpdate = true;
-    particleGeometry.attributes.color.needsUpdate = true;
-    particleGeometry.attributes.aTargetColor.needsUpdate = true;
-    particleGeometry.attributes.aEye.needsUpdate = true;
-    particleMaterial.uniforms.uMorph.value = 0;
-    particleMaterial.uniforms.uMode.value = shape.mode;
-    transitionStartedAt = particleMaterial.uniforms.uTime.value;
-    transitionDuration = reducedMotion ? 0.01 : (nextForm === 3 ? 1.35 : 1.16);
-    transitionActive = true;
-    currentForm = nextForm;
-    options.onFormChange(nextForm);
+  const setPointer = (x: number, y: number) => {
+    targetPointer.set(x, y);
   };
 
   /**
-   * The host owns the canvas, so it owns the pointer too and hands the position over
-   * already normalised. Leaving the surface is the same call with (0, 0).
+   * The sea itself lives in its own scene and the host owns the switch; all this has to
+   * do is carry the new state through to the light, so the terminal's glow on the desk
+   * changes with the weather on the screen.
    */
-  const setPointer = (x: number, y: number) => {
-    targetPointer.set(x, y);
-    if (reducedMotion || lastProgress > 0.72) return;
-    const now = particleMaterial.uniforms.uTime.value;
-    if (now - particleMaterial.uniforms.uRipple.value.z > 0.12) {
-      particleMaterial.uniforms.uRipple.value.set(targetPointer.x * 1.55, targetPointer.y * 0.98, now);
-    }
+  const setSeaState = (index: number) => {
+    currentSeaState = index % seaLightColors.length;
   };
-
-  const cycleForm = () => {
-    if (lastProgress > 0.7) return;
-    morphTo((currentForm + 1) % FORM_COUNT);
-  };
-
-  options.onFormChange(0);
 
   const update = (delta: number, progress: number) => {
     lastProgress = progress;
-    const time = particleMaterial.uniforms.uTime.value + delta;
-    particleMaterial.uniforms.uTime.value = time;
+    time += delta;
     screenMaterial.uniforms.uTime.value = time;
-    fogMaterial.uniforms.uTime.value = time;
-    beamMaterial.uniforms.uTime.value = time;
-    if (transitionActive) {
-      const amount = clamp01((time - transitionStartedAt) / transitionDuration);
-      particleMaterial.uniforms.uMorph.value = amount;
-      if (amount >= 1) transitionActive = false;
-    }
     pointer.lerp(targetPointer, reducedMotion ? 1 : 1 - Math.exp(-5.4 * delta));
-    particleMaterial.uniforms.uLook.value.copy(pointer);
     const journey = clamp01(progress);
     const cameraProgressBase = Math.min(journey / 0.8, 1);
     const cameraProgress = 1 - Math.pow(1 - cameraProgressBase, 1.4);
     const parallaxStrength = 1 - cameraProgress;
     const filmHandoff = smooth((journey - 0.66) / 0.22);
-    particleMaterial.uniforms.uOpacity.value = 1 - filmHandoff;
+    screenMaterial.uniforms.uScreenAmount.value = 1 - filmHandoff;
     updateFinalCamera();
     lightOrigin.copy(screenWorldPosition).addScaledVector(screenNormal, 0.26);
-    beamOrigin
-      .set(screenWorldPosition.x, screenWorldPosition.y - screenWorldScale.y * 0.44, screenWorldPosition.z)
-      .addScaledVector(screenNormal, 0.18);
-    lightTarget.set(screenWorldPosition.x, screenWorldPosition.y - 2.15, screenWorldPosition.z + 0.72);
     screenLight.position.copy(lightOrigin);
-    screenSpotLight.position.copy(lightOrigin);
-    screenLightTarget.position.copy(lightTarget);
-    screenLight.color.lerp(formLightColors[currentForm], 1 - Math.exp(-2.4 * delta));
-    screenSpotLight.color.copy(screenLight.color);
-    beamMaterial.uniforms.uColor.value.copy(screenLight.color);
-    screenBeam.position.copy(beamOrigin).add(lightTarget).multiplyScalar(0.5);
-    lightDirection.subVectors(beamOrigin, lightTarget);
-    const beamLength = Math.max(0.01, lightDirection.length());
-    screenBeam.quaternion.setFromUnitVectors(beamUp, lightDirection.normalize());
-    screenBeam.scale.set(1, beamLength / 2.55, 1);
+    screenLight.color.lerp(seaLightColors[currentSeaState], 1 - Math.exp(-2.4 * delta));
+    // Follow the terminal as it drifts, from a little above and to the camera's right.
+    terminalKeyTarget.position.copy(screenWorldPosition);
+    // The sun is carried in a plane through the terminal, so it can be brought round to
+    // the front and light the face the camera sees instead of only passing behind it.
+    orb.setCarryAnchor(screenWorldPosition);
+    terminalKey.position.set(
+      screenWorldPosition.x + 2.6,
+      screenWorldPosition.y + 2.4,
+      screenWorldPosition.z + 3.4,
+    );
+    /*
+     * How much of the room is still in shot. The terminal used to draw a cone of light
+     * down onto the desk on this curve — a mesh pretending to be a shaft, from before
+     * anything here scattered for real. The orb's shafts are marched out of an occlusion
+     * buffer, so the two read as different kinds of light in the same frame and the fake
+     * one lost. The curve stays; it is now what carries the room out as the camera
+     * arrives at the glass.
+     */
     const outsideScreen = 1 - smooth((journey - 0.56) / 0.22);
-    beamMaterial.uniforms.uOpacity.value = outsideScreen;
-    fogMaterial.uniforms.uOpacity.value = (0.92 - cameraProgress * 0.62) * (1 - filmHandoff);
+    const orbEnergy = orb.update(delta, time, outsideScreen);
+    orb.group.getWorldPosition(orbWorld);
+    dustMaterial.uniforms.uOrb.value.copy(orbWorld);
+    dustMaterial.uniforms.uOrbEnergy.value = orbEnergy;
+    // Order matters: the sun has already moved this frame, and every orbit is evaluated
+    // about where it is now.
+    solar.setSunPosition(orbWorld);
+    // The terminal is what the frame is focused on, so its distance is the focal plane.
+    solar.update(delta, time, orbEnergy, camera, camera.position.distanceTo(screenWorldPosition));
+
+    /*
+     * The terminal floats. It had a desk under it and now it does not, so it needs its
+     * own small motion or it reads as pinned to the camera rather than adrift — a long
+     * slow tumble on three different periods, so the loop never lines back up.
+     */
+    if (!reducedMotion) {
+      computer.rotation.x = Math.sin(time * 0.13) * 0.045;
+      computer.rotation.z = Math.cos(time * 0.09) * 0.035;
+      computer.position.y = computerHomeY + Math.sin(time * 0.21) * 0.075;
+    }
     screenLight.intensity = 3.7 + Math.sin(time * 1.2) * 0.24;
-    screenSpotLight.intensity = 8.7 + Math.sin(time * 1.2) * 0.42;
     camera.position.lerpVectors(initialCamera, finalCamera, cameraProgress);
     camera.position.x += pointer.x * 0.3 * parallaxStrength;
     camera.position.y += pointer.y * 0.3 * parallaxStrength;
@@ -929,16 +657,44 @@ const scene = new THREE.Scene();
     }
   };
 
+  /**
+   * Width of the screen mesh in device pixels, as it currently sits on the stage. The
+   * ocean target is a fixed size, so the ratio between the two is how many octaves of
+   * minification the picture is taking — which the sea folds into its own filtering
+   * rather than leaving to crawl.
+   */
+  const screenPixelWidth = () => {
+    screen.updateWorldMatrix(true, false);
+    edgeLeft.set(-0.5, 0, 0).applyMatrix4(screen.matrixWorld).project(camera);
+    edgeRight.set(0.5, 0, 0).applyMatrix4(screen.matrixWorld).project(camera);
+    return Math.abs(edgeRight.x - edgeLeft.x) * 0.5 * width;
+  };
+
   return {
     scene,
     camera,
     setSize,
+    screenPixelWidth,
     update,
     setPointer,
-    cycleForm,
+    setSeaState,
+    prepare: (renderer: any) => {
+      // Point size attenuation is in device pixels, and the stage's DPR is the host's
+      // business — so read it off the renderer rather than guessing from the CSS size.
+      renderer.getDrawingBufferSize(drawingBuffer);
+      dustMaterial.uniforms.uScale.value = drawingBuffer.y * 0.5;
+      orb.prepare(renderer, scene, camera);
+    },
+    orbHitTest: (ndc) => orb.hitTest(ndc, camera),
+    grabOrb: (ndc) => orb.grab(ndc, camera),
+    moveOrb: (ndc) => orb.moveTo(ndc, camera),
+    releaseOrb: () => orb.release(),
+    isOrbHeld: () => orb.isHeld(),
     isReady: () => readySent,
     dispose: () => {
       disposed = true;
+      orb.dispose();
+      solar.dispose();
       scene.traverse((object: any) => {
         object.geometry?.dispose?.();
         if (Array.isArray(object.material)) object.material.forEach((material: any) => material.dispose?.());

@@ -1,0 +1,131 @@
+{
+  "suitability": "pass",
+  "scores": {
+    "object_isolation": 0.9,
+    "silhouette_readability": 0.95,
+    "depth_inference": 0.95,
+    "primitive_decomposition": 0.95,
+    "material_procedurality": 0.9,
+    "occlusion_risk": 0.15,
+    "interaction_fit": 0.9
+  },
+  "coordinateFrame": {
+    "front": "the panel facing the reference camera",
+    "up": "world +Y; the ball rests tangent to the floor plane at -Y",
+    "scaleReference": "0.24 m regulation diameter, authored as radius 0.12 in metres"
+  },
+  "silhouette": {
+    "boundingShape": "sphere",
+    "aspectRatios": [1.0, 1.0, 1.0],
+    "symmetry": "radial about the centre; the seam layout is bilateral about the seam plane",
+    "dominantCurves": ["single constant-curvature outline, no flat spots"],
+    "negativeSpaces": [],
+    "landmarks": ["seam crossing point", "floor tangent point"]
+  },
+  "performanceBudget": {
+    "qualityPriority": "reference-fidelity",
+    "targetTriangles": 3200,
+    "maxDrawCalls": 3,
+    "textureSize": 512,
+    "fpsTarget": 60,
+    "optimizationPolicy": "Prop reads at roughly 60 px on the About stage. Spend triangles on the sphere's outline and the seam grooves; everything else is shading."
+  },
+  "lightingFromPhoto": [
+    { "id": "key", "type": "directional", "direction": [-0.55, 0.72, 0.42], "colorTemperatureK": 3200, "relativeIntensity": 1.0, "evidence": "warm highlight across the upper-front-left of the shell" },
+    { "id": "bounce", "type": "hemisphere", "direction": [0, -1, 0], "colorTemperatureK": 5200, "relativeIntensity": 0.18, "evidence": "faint cool return along the lower shell from the floor" }
+  ],
+  "componentTree": [
+    {
+      "id": "ball-shell",
+      "name": "Inflated shell",
+      "level": "macro",
+      "role": "body",
+      "importance": 1.0,
+      "confidence": 0.95,
+      "primitive": "sphere",
+      "topologyClass": "continuous-sculpt",
+      "topologyRationale": "One closed constant-curvature surface. Every feature on it is relief, so nothing is assembled and nothing is cut.",
+      "geometryDescriptor": {
+        "topologyIntent": "uv-sphere, 32x24 segments — enough that the outline stays circular at prop scale",
+        "radius": 0.12,
+        "edgeTreatment": { "type": "none", "bevelRadius": 0.0, "segments": 1 },
+        "deformationStack": [],
+        "uvStrategy": "spherical, driven from the vertex normal so the seam field is view-stable",
+        "normalStrategy": "smooth vertex normals"
+      },
+      "localFeatures": [
+        {
+          "id": "seam-grooves",
+          "kind": "seam",
+          "description": "Eight-panel layout: two orthogonal great circles plus four curved panel seams, each a recessed groove ~2 mm deep and ~6 mm wide.",
+          "realization": "signed-distance field over the sphere normal, darkening albedo and cutting a shallow groove into the displaced radius"
+        },
+        {
+          "id": "pebble-grain",
+          "kind": "ridge",
+          "description": "Dense pebble bumps across every panel, ~1.5 mm pitch.",
+          "realization": "high-frequency procedural noise on the normal only; never geometry"
+        }
+      ],
+      "colorMaterialRecipe": "Burnt-orange composite, satin. Albedo #a9522c with the lighting removed; seam channels drop to #17100d. Roughness 0.82 on the panels, 0.75 in the channels, falling to 0.28 across the upper-front sheen.",
+      "parent": null,
+      "attachment": null,
+      "dimensions": { "width": 0.24, "height": 0.24, "depth": 0.24, "units": "m", "confidence": 0.95 },
+      "transform": { "position": [0, 0, 0], "rotation": [0.35, 0.6, 0.1], "scale": [1, 1, 1] },
+      "material": "leather"
+    }
+  ],
+  "repetitionSystems": [
+    {
+      "id": "panel-seams",
+      "name": "Eight-panel seam layout",
+      "count": 6,
+      "distribution": "two orthogonal great circles plus four curved panel seams",
+      "realization": "shader-field",
+      "buildsGeometry": true,
+      "geometry": "grooves displaced into the shell radius, not separate meshes",
+      "note": "Instancing six ring meshes would cost draw calls and z-fight the shell; a distance field over the sphere normal gives the same read for free."
+    }
+  ],
+  "materials": [
+    {
+      "id": "leather",
+      "name": "Composite basketball leather",
+      "type": "standard",
+      "shaderModel": "MeshStandardMaterial",
+      "baseColor": "#a9522c",
+      "color": "#a9522c",
+      "albedo": {
+        "dominant": "#a9522c",
+        "secondary": ["#8a4526", "#c46a3a"],
+        "samplingNotes": "De-lit estimate: the reference's #3e1f14 shadow side and #c46a3a key side are the same albedo under a warm key with deep falloff."
+      },
+      "colorVariation": { "palette": ["#a9522c", "#8a4526", "#b85f33"], "pattern": "mottled", "amplitude": 0.08, "heightCorrelation": 0.45 },
+      "metalness": 0.0,
+      "roughness": { "base": 0.82, "variation": 0.06 },
+      "localOverrides": [
+        { "id": "seam-darkening", "region": "seam grooves", "baseColor": "#17100d", "roughness": 0.75, "note": "Channel albedo, from the near-black seam pixels in the reference." },
+        { "id": "upper-sheen", "region": "upper-front hemisphere facing the key", "roughness": 0.28, "note": "Broad satin lobe; the only place the reference shows specular." }
+      ],
+      "textureResolution": 512,
+      "referencePbr": {
+        "source": "docs/design-references/room-props/basketball.png",
+        "method": "agent-observed de-lit estimate, not inverse rendering",
+        "confidence": 0.72,
+        "albedoHex": "#a9522c",
+        "roughnessEstimate": 0.82,
+        "metalnessEstimate": 0.0
+      }
+    }
+  ],
+  "preSpecAssessment": {
+    "detailInventory": {
+      "details": [
+        { "id": "seam-channels", "kind": "seam", "region": [0.12, 0.08, 0.78, 0.72], "affects": ["geometry", "albedo"], "scale": 0.02, "evidenceRef": "docs/design-references/room-props/basketball.png", "confidence": 0.95, "mapsTo": { "ref": "ball-shell/seam-grooves" } },
+        { "id": "pebble-grain", "kind": "ridge", "region": [0.1, 0.06, 0.8, 0.76], "affects": ["normal", "roughness"], "scale": 0.004, "evidenceRef": "docs/design-references/room-props/basketball.png", "confidence": 0.85, "mapsTo": { "ref": "ball-shell/pebble-grain" } },
+        { "id": "upper-sheen", "kind": "gloss", "region": [0.24, 0.06, 0.48, 0.3], "affects": ["roughness"], "scale": 0.3, "evidenceRef": "docs/design-references/room-props/basketball.png", "confidence": 0.7, "mapsTo": { "ref": "leather/upper-sheen" } }
+      ]
+    },
+    "unknownsToResolveBeforeImplementation": []
+  }
+}

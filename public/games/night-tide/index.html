@@ -110,14 +110,38 @@ body {
 		</div>
 
 		<script>
-// The portfolio shell owns the handheld controls. Forward those controls into
-// Godot's focused canvas so the physical buttons and keyboard drive the game.
+// The portfolio shell owns the handheld controls. Forward those controls directly to
+// Godot without focusing the iframe canvas: focus() blurs the parent, whose safety cleanup
+// would release the held key before this synthetic keydown was even dispatched.
+const forwardedShellKeys = new Map();
+const forwardedKeyId = (data) => data.code || data.key;
+
+const releaseForwardedShellKeys = () => {
+	const canvas = document.getElementById('canvas');
+	if (!canvas) {
+		forwardedShellKeys.clear();
+		return;
+	}
+	forwardedShellKeys.forEach((data) => {
+		canvas.dispatchEvent(new KeyboardEvent('keyup', {
+			bubbles: true,
+			cancelable: true,
+			key: data.key || '',
+			code: data.code || '',
+			view: window,
+		}));
+	});
+	forwardedShellKeys.clear();
+};
+
 window.addEventListener('message', (event) => {
 		const data = event.data;
 		if (!data || data.type !== 'joi-key' || (data.action !== 'keydown' && data.action !== 'keyup')) return;
 		const canvas = document.getElementById('canvas');
 		if (!canvas) return;
-		canvas.focus();
+		const keyId = forwardedKeyId(data);
+		if (data.action === 'keydown') forwardedShellKeys.set(keyId, data);
+		else forwardedShellKeys.delete(keyId);
 		canvas.dispatchEvent(new KeyboardEvent(data.action, {
 			bubbles: true,
 			cancelable: true,
@@ -127,9 +151,16 @@ window.addEventListener('message', (event) => {
 		}));
 });
 
+window.addEventListener('blur', releaseForwardedShellKeys);
+window.addEventListener('pagehide', releaseForwardedShellKeys);
+document.addEventListener('visibilitychange', () => {
+	if (document.hidden) releaseForwardedShellKeys();
+});
+
 // Once Godot focuses the canvas, real keyboard input stays inside this iframe.
 // Mirror it to the portfolio shell so its physical controls depress in sync.
 window.addEventListener('keydown', (event) => {
+		if (!event.isTrusted) return;
 		window.parent.postMessage({
 			type: 'joi-game-key',
 			action: 'keydown',
@@ -139,6 +170,7 @@ window.addEventListener('keydown', (event) => {
 }, true);
 
 window.addEventListener('keyup', (event) => {
+		if (!event.isTrusted) return;
 		window.parent.postMessage({
 			type: 'joi-game-key',
 			action: 'keyup',

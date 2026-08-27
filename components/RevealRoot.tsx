@@ -36,12 +36,10 @@ export function RevealRoot() {
     });
     if (armed.length === 0) return;
 
-    let observerFired = false;
     const observer = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
           if (!entry.isIntersecting) return;
-          observerFired = true;
           reveal(entry.target);
           observer.unobserve(entry.target);
         });
@@ -50,13 +48,10 @@ export function RevealRoot() {
     );
     armed.forEach((target) => observer.observe(target));
 
-    // Fallback for browsers where the observer exists but never reports. It sweeps by
-    // hand until the observer proves itself, then removes itself from the scroll path.
+    // Fallback for browsers where the observer reports some targets but silently
+    // misses a later one. Keep sweeping until every armed target is visible; a
+    // single early observer callback is not proof that every future callback lands.
     const sweep = () => {
-      if (observerFired) {
-        window.removeEventListener("scroll", sweep);
-        return;
-      }
       let remaining = 0;
       armed.forEach((target) => {
         if (!target.classList.contains("reveal-armed")) return;

@@ -1,23 +1,17 @@
 /**
- * The room's object registry — the single source of truth binding three surfaces:
+ * One hotspot per entry. The same ids bind the capture's node names (`roomBase.ts`), the
+ * About interest chips, the pointer label and the focus camera.
  *
- * 1. `room3d.ts` builds one pickable object per entry and tags its meshes with the id.
- * 2. The About panel's interest chips carry `data-interest={id}`.
- * 3. Hover/click in the room highlights the matching chip; interest copy (when the
- *    author supplies it) will file under the same ids.
- *
- * Change an id here and both the scene and the panel follow.
+ * The room is the desk study and nothing else, so this list is only what is actually in
+ * it. Interests with no object in the room — the ball games, the cat, the handheld —
+ * have no chip rather than a chip that points at nothing.
  */
 
 export type RoomObjectId =
   | "crt-monitor"
-  | "tablet-pen"
-  | "handheld"
-  | "headphones"
+  | "joi-music-box"
   | "camera"
-  | "cat-figure"
-  | "bookstack"
-  | "window";
+  | "bookshelf";
 
 export type RoomObjectDef = {
   id: RoomObjectId;
@@ -26,12 +20,8 @@ export type RoomObjectDef = {
 };
 
 export const ROOM_OBJECTS: RoomObjectDef[] = [
-  { id: "crt-monitor", label: "GRAPHICS & RENDERING", labelZh: "图形与渲染" },
-  { id: "tablet-pen", label: "PRODUCT DESIGN", labelZh: "产品设计" },
-  { id: "handheld", label: "GAMES", labelZh: "游戏" },
-  { id: "headphones", label: "MUSIC", labelZh: "音乐" },
+  { id: "crt-monitor", label: "AI PRODUCT & DESIGN", labelZh: "AI 产品与设计" },
+  { id: "joi-music-box", label: "JOI RECORDS", labelZh: "JOI 唱片" },
   { id: "camera", label: "PHOTOGRAPHY", labelZh: "摄影" },
-  { id: "cat-figure", label: "CATS", labelZh: "猫" },
-  { id: "bookstack", label: "READING", labelZh: "阅读" },
-  { id: "window", label: "GUANGZHOU", labelZh: "广州" },
+  { id: "bookshelf", label: "READING", labelZh: "阅读" },
 ];

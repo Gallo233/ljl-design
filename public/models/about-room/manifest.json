@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "lightingState": "blue-hour",
+  "atlasSize": 1024,
+  "bakeSamples": 4,
+  "bakeLightMultiplier": 5.5,
+  "bakeWorldMultiplier": 12.0,
+  "bakeExposure": 1.7,
+  "geometry": {
+    "url": "/models/about-room.glb",
+    "sha256": "cb1dd412f6dbb95e6580da9a15ce840ae57bbacad59bac18998788f2324a2063",
+    "objects": 14,
+    "triangles": 51410,
+    "materialsEmbedded": false
+  },
+  "atlases": {
+    "architecture": {
+      "url": "/models/about-room/baked-blue-hour-architecture.webp",
+      "sha256": "afd5549823267c81508a618dfacc9b0f12989f152a63263fe2dff4fa0e70dd96",
+      "objects": 18
+    },
+    "furniture": {
+      "url": "/models/about-room/baked-blue-hour-furniture.webp",
+      "sha256": "f3397bc5eeb14667444accb04cb8d6af649ec340b83175ec2122c81e51f337ef",
+      "objects": 106
+    },
+    "props": {
+      "url": "/models/about-room/baked-blue-hour-props.webp",
+      "sha256": "e680d216cb23aebe5a05a4d0715470477f23cb3d5692a80ac987bf9ff7f55286",
+      "objects": 64
+    }
+  }
+}

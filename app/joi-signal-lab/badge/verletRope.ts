@@ -27,8 +27,8 @@ export type Rope = {
 const SUBSTEP = 1 / 120;
 const MAX_SUBSTEPS = 4;
 const GRAVITY = 2400;
-const DAMPING = 0.985;
-const ITERATIONS = 3;
+const DAMPING = 0.982;
+const ITERATIONS = 5;
 /** Below this per-substep movement (px) the rope counts as still. */
 const SLEEP_EPSILON = 0.045;
 
@@ -103,10 +103,16 @@ export function createRope(anchorX: number, anchorY: number, segments = 14, segm
     },
     release: (vx, vy) => {
       grabbed = false;
-      const tail = points[points.length - 1];
-      // Writing velocity into the previous position is how verlet throws things.
-      tail.px = tail.x - vx * SUBSTEP;
-      tail.py = tail.y - vy * SUBSTEP;
+      // Carry the throw through the lower half of the lanyard rather than injecting
+      // all of it into one particle. The old tail-only impulse made a sharp kink that
+      // snapped through the rope before the rest of the chain could follow.
+      const last = points.length - 1;
+      for (let index = 1; index <= last; index += 1) {
+        const weight = Math.pow(index / last, 2.4);
+        const point = points[index];
+        point.px = point.x - vx * SUBSTEP * weight;
+        point.py = point.y - vy * SUBSTEP * weight;
+      }
     },
     step: (dtMs) => {
       accumulator = Math.min(accumulator + dtMs / 1000, SUBSTEP * MAX_SUBSTEPS);

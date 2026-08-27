@@ -1,0 +1,119 @@
+{
+  "scores": {
+    "object_isolation": 3,
+    "silhouette_readability": 3,
+    "depth_inference": 3,
+    "primitive_decomposition": 3,
+    "material_procedurality": 3,
+    "occlusion_risk": 1,
+    "interaction_fit": 3
+  },
+  "lightingFromPhoto": [
+    { "id": "key", "type": "directional", "direction": [-0.55, 0.72, 0.42], "colorTemperatureK": 3200, "relativeIntensity": 1.0, "evidence": "warm highlight across the upper-front-left of the shell" },
+    { "id": "bounce", "type": "hemisphere", "direction": [0, -1, 0], "colorTemperatureK": 5200, "relativeIntensity": 0.18, "evidence": "faint cool return along the lower shell from the floor" },
+    { "id": "grade", "type": "exposure", "note": "Scene-linear out, no per-object tone mapping: the About stage renders into a linear target and its post chain owns the single linear-to-sRGB encode. Exposure is carried by the room, not by this prop." },
+    { "id": "ground", "type": "contact shadow", "note": "Contact shadow is the room's, baked into the floor pass; the prop contributes ambient occlusion in its own crevices only and casts no runtime shadow." }
+  ],
+  "materials": [
+    {
+      "id": "leather",
+      "name": "Composite basketball leather",
+      "type": "standard",
+      "shaderModel": "MeshStandardMaterial",
+      "finish": "satin",
+      "baseColor": "#a9522c",
+      "color": "#a9522c",
+      "albedo": {
+        "dominant": "#a9522c",
+        "secondary": ["#8a4526", "#c46a3a"],
+        "samplingNotes": "De-lit estimate: the reference's #3e1f14 shadow side and #c46a3a key side are one albedo under a warm key with deep falloff."
+      },
+      "colorVariation": { "palette": ["#a9522c", "#8a4526", "#b85f33"], "pattern": "mottled", "amplitude": 0.08, "heightCorrelation": 0.45 },
+      "metalness": { "base": 0.0, "variation": 0.0 },
+      "roughness": { "base": 0.82, "variation": 0.06, "map": "pbr/leather_roughness.png" },
+      "clearcoat": { "base": 0.0, "variation": 0.0 },
+      "ambientOcclusion": { "map": "pbr/leather_ao.png", "intensity": 0.75, "note": "Cavity darkening in the seam channels and between pebbles." },
+      "normal": { "map": "pbr/leather_normal.png", "scale": 0.6 },
+      "height": { "map": "pbr/leather_height.png", "scale": 0.004 },
+      "textureResolution": 1024,
+      "textureProjection": {
+        "mode": "triplanar",
+        "repeat": [4.0, 4.0],
+        "anisotropy": 4,
+        "texelDensityIntent": "Pebble pitch stays ~1.5 mm in world space regardless of the ball's transform; a spherical UV would pinch the grain at the poles."
+      },
+      "surfaceFrequencyBands": [
+        { "id": "macro", "frequency": 1.0, "amplitude": 0.5, "role": "the eight-panel seam layout — the only feature that survives at prop scale" },
+        { "id": "meso", "frequency": 12.0, "amplitude": 0.12, "role": "broad albedo mottling across each panel from wear and dust" },
+        { "id": "micro", "frequency": 90.0, "amplitude": 0.04, "role": "pebble grain, normal-only" }
+      ],
+      "localOverrides": [
+        { "id": "seam-darkening", "region": "seam grooves", "baseColor": "#17100d", "roughness": 0.75, "note": "Channel albedo, from the near-black seam pixels in the reference." },
+        { "id": "upper-sheen", "region": "upper-front hemisphere facing the key", "roughness": 0.28, "note": "Broad satin lobe; the only place the reference shows specular." }
+      ],
+      "referencePbr": {
+        "source": "docs/design-references/room-props/basketball.png",
+        "method": "extract_pbr_evidence.py over a 200 px panel crop, with the finish classification overridden by inspection",
+        "usable": true,
+        "confidence": 0.72,
+        "albedoHex": "#a9522c",
+        "roughnessEstimate": 0.82,
+        "metalnessEstimate": 0.0,
+        "note": "analyze_texture.py classified this crop as painted-metal and set clearcoat 1.0. It is composite rubber: no clearcoat, roughness 0.82. The extracted maps are kept, the finish call is not.",
+        "maps": {
+          "albedo": { "path": "pbr/leather_albedo.png", "channel": "rgb" },
+          "roughness": { "path": "pbr/leather_roughness.png", "channel": "r" },
+          "height": { "path": "pbr/leather_height.png", "channel": "r" },
+          "normal": { "path": "pbr/leather_normal.png", "channel": "rgb" },
+          "ao": { "path": "pbr/leather_ao.png", "channel": "r" }
+        }
+      }
+    }
+  ],
+  "componentTree": [
+    {
+      "id": "ball-shell",
+      "name": "Inflated shell",
+      "level": "macro",
+      "role": "body",
+      "importance": 1.0,
+      "confidence": 0.95,
+      "primitive": "sphere",
+      "topologyClass": "continuous-sculpt",
+      "topologyRationale": "One closed constant-curvature surface. Every feature on it is relief, so nothing is assembled and nothing is cut.",
+      "geometryDescriptor": {
+        "topologyIntent": "uv-sphere, 32x24 segments — enough that the outline stays circular at prop scale",
+        "radius": 0.12,
+        "widthSegments": 32,
+        "heightSegments": 24,
+        "edgeTreatment": { "type": "none", "bevelRadius": 0.0, "segments": 1 },
+        "deformationStack": [],
+        "uvStrategy": "spherical, driven from the vertex normal so the seam field is view-stable",
+        "normalStrategy": "smooth vertex normals"
+      },
+      "localFeatures": [
+        { "id": "seam-grooves", "kind": "seam", "description": "Eight-panel layout: two orthogonal great circles plus four curved panel seams, each a groove ~2 mm deep, ~6 mm wide.", "realization": "distance field over the sphere normal, darkening albedo and cutting a shallow groove into the displaced radius" },
+        { "id": "pebble-grain", "kind": "ridge", "description": "Dense pebble bumps across every panel, ~1.5 mm pitch.", "realization": "high-frequency procedural noise on the normal only; never geometry" }
+      ],
+      "colorMaterialRecipe": {
+        "dominantAlbedo": "rgba(169, 82, 44, 1.0)",
+        "secondaryAlbedo": "rgba(23, 16, 13, 1.0)",
+        "materialClass": "rubber",
+        "materialClassConfidence": 0.9,
+        "evidenceRef": "docs/design-references/room-props/basketball.png",
+        "note": "Burnt-orange composite, satin. Seam channels carry the secondary albedo. Roughness 0.82 on the panels, 0.75 in the channels, 0.28 across the upper-front sheen."
+      },
+      "actionProfile": {
+        "pivot": "shell centre",
+        "motions": ["roll", "bounce", "spin"],
+        "collider": { "type": "sphere", "radius": 0.12 },
+        "note": "Pivot at the volumetric centre so a roll never wobbles; the About stage only ever hover-lifts it, but the anchor costs nothing."
+      },
+      "parent": null,
+      "attachment": null,
+      "dimensions": { "width": 0.24, "height": 0.24, "depth": 0.24, "units": "m", "confidence": 0.95 },
+      "transform": { "position": [0, 0, 0], "rotation": [0.35, 0.6, 0.1], "scale": [1, 1, 1] },
+      "material": "leather"
+    }
+  ]
+}

@@ -6,10 +6,13 @@ import * as THREE from "three";
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
 import { createRoomScene } from "./room3d";
 import { createHeroScene } from "./heroScene";
+import { createOceanScene, SEA_STATES } from "./oceanScene";
 import { createPostChain } from "./postfx";
 import { detectQuality } from "./quality";
 import { LanyardBadge } from "./badge/LanyardBadge";
+import { JoiMusicPlayer, MIX_ORDER } from "./JoiMusicPlayer";
 import { ROOM_OBJECTS, type RoomObjectId } from "./roomObjects";
+import { RECORD_IDS } from "./roomRecords";
 import { SiteHUD } from "../../components/SiteHUD";
 import {
   REEL_ANCHOR,
@@ -52,6 +55,11 @@ const BORDER_X = 0.03;
 const BORDER_Y = 0.07;
 const ATLAS_FRAME_WIDTH = 1024;
 const ATLAS_FRAME_HEIGHT = 768;
+// The live procedural frames used to stop at 768×576, below their projected size on
+// a Retina display. 1280×960 keeps the handheld and room legible at the front of the
+// reel without turning either into a full-viewport render target.
+const LIVE_FRAME_WIDTH = 1280;
+const LIVE_FRAME_HEIGHT = 960;
 /**
  * The reel's two moving frames, and the three ways they can be delivered.
  *
@@ -97,12 +105,7 @@ const SHEET_FPS = 10;
  * Long enough to cover a slow first segment, short enough that nobody watches a dead frame.
  */
 const VIDEO_GIVE_UP_MS = 2600;
-const particleForms = [
-  "FORM 00 / NEBULA",
-  "FORM 01 / JOI",
-  "FORM 02 / GALLO",
-  "FORM 03 / JOI.PXL",
-];
+const seaStateLabels = SEA_STATES.map((state) => state.label);
 
 function modulo(value: number, divisor: number) {
   return ((value % divisor) + divisor) % divisor;
@@ -899,13 +902,20 @@ function FilmCanvas({
   revealRef,
   entryRef,
   exitRef,
+  roomPresenceRef,
   onStepChange,
   onProjectOpen,
   onReady,
   onHeroReady,
-  onFormChange,
+  deckOpen,
+  deckRpm,
+  deckProgress,
+  resetDeckViewRef,
+  onSeaStateChange,
   onRoomHover,
   onRoomPick,
+  onRecordDocked,
+  recordPlaying,
   onDragStateChange,
 }: {
   step: number;
@@ -915,13 +925,28 @@ function FilmCanvas({
   entryRef: { current: number };
   /** How far the reel has handed over to the closing panels, 0 to 1. */
   exitRef: { current: number };
+  /** The room belongs to About only and fades before Contact takes ownership. */
+  roomPresenceRef: { current: number };
+  /** True while the reader is at the deck, which is what puts the camera on it. */
+  deckOpen: boolean;
+  /** 33⅓ or 45; the platter follows it. */
+  deckRpm: number;
+  /** How far through the side the music is, for the tonearm. Null when stopped. */
+  deckProgress: number | null;
+  /** Filled in here so the deck's ROTATE button can reach the camera. */
+  resetDeckViewRef: { current: () => void };
   onStepChange: (step: number) => void;
   onProjectOpen: (href: string) => void;
   onReady: () => void;
   onHeroReady: () => void;
-  onFormChange: (index: number) => void;
+  /** Fired when the sea moves to a new state, for the HUD readout. */
+  onSeaStateChange: (index: number) => void;
   onRoomHover: (id: RoomObjectId | null) => void;
   onRoomPick: (id: RoomObjectId | null) => void;
+  /** A record was carried onto the turntable. */
+  onRecordDocked: (id: string) => void;
+  /** True while a mix is playing, so the platter turns. */
+  recordPlaying: boolean;
   /** Lets the scroll driver suspend snapping while the reader is dragging the reel. */
   onDragStateChange: (active: boolean) => void;
 }) {
@@ -933,14 +958,24 @@ function FilmCanvas({
   const onReadyRef = useRef(onReady);
   const onDragStateChangeRef = useRef(onDragStateChange);
   const onHeroReadyRef = useRef(onHeroReady);
-  const onFormChangeRef = useRef(onFormChange);
+  const deckOpenRef = useRef(deckOpen);
+  const deckRpmRef = useRef(deckRpm);
+  const deckProgressRef = useRef(deckProgress);
+  useEffect(() => { deckOpenRef.current = deckOpen; }, [deckOpen]);
+  useEffect(() => { deckRpmRef.current = deckRpm; }, [deckRpm]);
+  useEffect(() => { deckProgressRef.current = deckProgress; }, [deckProgress]);
+  const onSeaStateChangeRef = useRef(onSeaStateChange);
   const onRoomHoverRef = useRef(onRoomHover);
   const onRoomPickRef = useRef(onRoomPick);
+  const onRecordDockedRef = useRef(onRecordDocked);
+  const recordPlayingRef = useRef(recordPlaying);
   useEffect(() => { onRoomHoverRef.current = onRoomHover; }, [onRoomHover]);
   useEffect(() => { onRoomPickRef.current = onRoomPick; }, [onRoomPick]);
+  useEffect(() => { onRecordDockedRef.current = onRecordDocked; }, [onRecordDocked]);
+  useEffect(() => { recordPlayingRef.current = recordPlaying; }, [recordPlaying]);
   useEffect(() => { onDragStateChangeRef.current = onDragStateChange; }, [onDragStateChange]);
   useEffect(() => { onHeroReadyRef.current = onHeroReady; }, [onHeroReady]);
-  useEffect(() => { onFormChangeRef.current = onFormChange; }, [onFormChange]);
+  useEffect(() => { onSeaStateChangeRef.current = onSeaStateChange; }, [onSeaStateChange]);
   useEffect(() => { stepRef.current = step; }, [step]);
   useEffect(() => { onStepChangeRef.current = onStepChange; }, [onStepChange]);
   useEffect(() => { onProjectOpenRef.current = onProjectOpen; }, [onProjectOpen]);
@@ -967,11 +1002,52 @@ function FilmCanvas({
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
     const post = createPostChain(renderer, tier);
+
+    /*
+     * The sea, drawn into its own target and handed to the terminal's glass as a
+     * picture. Two things make this a target rather than geometry in the hero scene:
+     * the screen's rounded mask, vignette and scanlines then apply to it for free, and
+     * the hero camera is busy flying into the screen while the sea's camera has to hold
+     * still on the horizon.
+     *
+     * HalfFloat is not a nicety here. Sun glitter runs well above 1.0, and a byte target
+     * would clip it flat *before* the chain tone maps — the glitter would neither
+     * sparkle nor register with the bloom, which is where most of the expensive read
+     * lives. Same capability probe the post chain uses.
+     */
+    const oceanCanHalfFloat =
+      renderer.capabilities.isWebGL2 || renderer.extensions.has("EXT_color_buffer_half_float");
+    const oceanWidth = tier.isMobile ? 768 : 1280;
+    // The screen mesh is scaled 10.15 x 7.875; match it or the horizon arrives stretched.
+    const oceanHeight = Math.round(oceanWidth / (10.15 / 7.875));
+    const oceanTarget = new THREE.WebGLRenderTarget(oceanWidth, oceanHeight, {
+      type: oceanCanHalfFloat ? THREE.HalfFloatType : THREE.UnsignedByteType,
+      format: THREE.RGBAFormat,
+      minFilter: THREE.LinearFilter,
+      magFilter: THREE.LinearFilter,
+      // Keep the depth buffer. It looks droppable — one opaque mesh and a sky that
+      // does not depth-test — but the sea's grid is indexed near row first, so without
+      // depth testing a far row would paint straight over the near crest that occludes
+      // it. The waves would quietly render inside out.
+      depthBuffer: true,
+      stencilBuffer: false,
+      generateMipmaps: false,
+    });
+    // Linear, not sRGB: tagging it sRGB would make three decode on sample and the chain
+    // would lose a transfer function it needs. Same reasoning as `postfx.ts`.
+    oceanTarget.texture.colorSpace = THREE.LinearSRGBColorSpace;
+    const ocean = createOceanScene({
+      isMobile: tier.isMobile,
+      reducedMemory: tier.reducedMemory,
+      reducedMotion: tier.reducedMotion,
+      aspect: oceanWidth / oceanHeight,
+    });
+
     const hero = createHeroScene({
       isMobile: tier.isMobile,
       reducedMotion: tier.reducedMotion,
       shadows: tier.shadows,
-      onFormChange: (index) => onFormChangeRef.current(index),
+      screenMap: oceanTarget.texture,
       onModelReady: () => onHeroReadyRef.current(),
     });
 
@@ -984,8 +1060,11 @@ function FilmCanvas({
     const atlas = buildAtlas(posterRefs.current);
     const texture = new THREE.CanvasTexture(atlas);
     texture.colorSpace = THREE.SRGBColorSpace;
-    texture.generateMipmaps = false;
-    texture.minFilter = THREE.LinearFilter;
+    // The drawn frames spend most of their time receding around the curve. A static
+    // atlas can afford a mip pyramid, which lets the existing anisotropic filter follow
+    // that long oblique footprint instead of aliasing or smearing across it.
+    texture.generateMipmaps = !isMobile;
+    texture.minFilter = isMobile ? THREE.LinearFilter : THREE.LinearMipmapLinearFilter;
     texture.magFilter = THREE.LinearFilter;
     texture.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
     const posterListeners: Array<{ image: HTMLImageElement; draw: () => void }> = [];
@@ -1012,7 +1091,7 @@ function FilmCanvas({
     const reelMotions = reelMotionSources.map((source) => createReelMotion(source, isMobile));
     let activeMotionProject = -1;
 
-    const nightTideTarget = new THREE.WebGLRenderTarget(768, 576, {
+    const nightTideTarget = new THREE.WebGLRenderTarget(LIVE_FRAME_WIDTH, LIVE_FRAME_HEIGHT, {
       minFilter: THREE.LinearFilter,
       magFilter: THREE.LinearFilter,
       depthBuffer: true,
@@ -1059,7 +1138,12 @@ function FilmCanvas({
     studioTexture.magFilter = THREE.LinearFilter;
     studioTexture.generateMipmaps = false;
     nightTideScene.background = studioTexture;
-    const nightTideCamera = new THREE.PerspectiveCamera(34, 768 / 576, 0.1, 100);
+    const nightTideCamera = new THREE.PerspectiveCamera(
+      34,
+      LIVE_FRAME_WIDTH / LIVE_FRAME_HEIGHT,
+      0.1,
+      100,
+    );
     nightTideCamera.position.set(0, 0.16, 9.25);
     nightTideCamera.lookAt(0, 0.05, 0);
     nightTideScene.add(new THREE.AmbientLight(0xb8deea, 2.25));
@@ -1078,8 +1162,8 @@ function FilmCanvas({
     nightTideScene.add(nightTideModel.group);
 
     // Frame 05's live scene: the room, rendered the same way the handheld is — into a
-    // 768×576 target, only while the reader is near enough to be sampling it.
-    const roomTarget = new THREE.WebGLRenderTarget(768, 576, {
+    // high-density target, only while the reader is near enough to be sampling it.
+    const roomTarget = new THREE.WebGLRenderTarget(LIVE_FRAME_WIDTH, LIVE_FRAME_HEIGHT, {
       minFilter: THREE.LinearFilter,
       magFilter: THREE.LinearFilter,
       depthBuffer: true,
@@ -1202,8 +1286,8 @@ function FilmCanvas({
           float luminance = dot(image, vec3(0.299, 0.587, 0.114));
           // A uniform whisper of desaturation — the film stock's own voice. No frame is a
           // placeholder any more, so no frame gets washed harder than the rest.
-          image = mix(image, vec3(luminance), 0.08);
-          image = (image - 0.5) * 1.075 + 0.5;
+          image = mix(image, vec3(luminance), 0.045);
+          image = (image - 0.5) * 1.015 + 0.5;
 
           bool sideBorder = localX < uBorderX || localX > 1.0 - uBorderX;
           bool topBottom = filmUv.y < uBorderY || filmUv.y > 1.0 - uBorderY;
@@ -1231,9 +1315,12 @@ function FilmCanvas({
 
           vec3 viewDirection = normalize(cameraPosition - vWorldPosition);
           float facing = abs(dot(normalize(vWorldNormal), viewDirection));
-          float diffuse = 0.25 + 0.86 * pow(facing, 0.72);
+          // These frames are already display-authored pictures, not matte cards that
+          // need relighting. Keep enough falloff to describe the curve, but never push
+          // a front-facing white above display white before bloom even begins.
+          float diffuse = 0.30 + 0.62 * pow(facing, 0.72);
           vec3 lightDirection = normalize(vec3(14.0, 7.0, 0.0) - vWorldPosition);
-          float sideLight = pow(max(dot(lightDirection, normalize(vWorldNormal)), 0.0), 28.0) * 0.38;
+          float sideLight = pow(max(dot(lightDirection, normalize(vWorldNormal)), 0.0), 28.0) * 0.08;
           color = color * diffuse + vec3(0.42, 0.61, 0.78) * sideLight;
 
           float viewDistance = distance(cameraPosition, vWorldPosition);
@@ -1281,7 +1368,7 @@ function FilmCanvas({
       renderer.setSize(width, height, false);
       camera.aspect = aspect;
       camera.updateProjectionMatrix();
-      hero.setSize(width, height, pixelRatio);
+      hero.setSize(width, height);
       post.setSize(width, height, pixelRatio);
       roomScene.setFullAspect(aspect);
       const reelY = aspect <= 1 ? -1.6 : -1.6 - 0.3 * aspect + 0.2;
@@ -1308,8 +1395,13 @@ function FilmCanvas({
     const HERO_OWNS_POINTER_UNTIL = 0.86;
     const heroOwnsPointer = () => entryRef.current < HERO_OWNS_POINTER_UNTIL;
     /** Once the room is the picture, it is also what the pointer is pointing at. */
-    const roomOwnsPointer = () => exitRef.current > 0.55;
+    const roomOwnsPointer = () =>
+      exitRef.current > 0.55 && roomPresenceRef.current > 0.05;
     const roomPointer = { x: 0, y: 0 };
+    resetDeckViewRef.current = () => roomScene.resetPlayerOrbit();
+    let orbiting = false;
+    let orbitX = 0;
+    let orbitY = 0;
     let hoveredRoomObject: RoomObjectId | null = null;
 
     const normalisedPointer = (event: PointerEvent | MouseEvent) => {
@@ -1322,14 +1414,68 @@ function FilmCanvas({
 
     const heroPointerFromEvent = (event: PointerEvent) => {
       const bounds = canvas.getBoundingClientRect();
-      hero.setPointer(
-        ((event.clientX - bounds.left) / Math.max(1, bounds.width)) * 2 - 1,
-        -(((event.clientY - bounds.top) / Math.max(1, bounds.height)) * 2 - 1),
-      );
+      const x = ((event.clientX - bounds.left) / Math.max(1, bounds.width)) * 2 - 1;
+      const y = -(((event.clientY - bounds.top) / Math.max(1, bounds.height)) * 2 - 1);
+      hero.setPointer(x, y);
+      ocean.setPointer(x, y);
     };
 
+    /**
+     * The reel owns the pointer only in the stretch between the other two.
+     *
+     * Before it, the hero cycles the sea state on click; after it, the room takes
+     * hover and picking. `handlePointerDown` used to guard on the hero alone, so on
+     * About and Contact every press still opened a reel drag that nothing would ever
+     * move — and releasing it counted as a tap, which opened whichever project the
+     * playhead happened to be parked on. That is why a click anywhere down there went
+     * to /work/joi.
+     */
+    const reelOwnsPointer = () => !heroOwnsPointer() && !roomOwnsPointer();
+
+    /** Set while a record is being carried, so the drag is not read as a room click. */
+    let carryingRecord = false;
+    /** Set while the hero's light orb is being carried. */
+    let carryingOrb = false;
+    /** A drag that actually moved the orb must not also cycle the sea behind it. */
+    let orbMoved = false;
+    /** Last orb hover state, so a pointer move does not restyle the canvas every frame. */
+    let orbHovered = false;
+
     const handlePointerDown = (event: PointerEvent) => {
-      if (heroOwnsPointer()) return;
+      // Nothing on this canvas is text, and a drag that begins a selection drags that
+      // selection across every panel behind the stage — which is what turned the whole
+      // page coral the moment anyone tried to rotate the deck.
+      event.preventDefault();
+      // The orb is the hero's one grabbable thing, and it outranks the sea-state click
+      // it is sitting in front of.
+      if (heroOwnsPointer() && hero.grabOrb(normalisedPointer(event))) {
+        carryingOrb = true;
+        canvas.setPointerCapture(event.pointerId);
+        canvas.style.cursor = "grabbing";
+        return;
+      }
+      // At the deck the room's usual verbs are suspended: there is one object in shot
+      // and dragging turns it, the way you would turn it on a desk.
+      if (deckOpenRef.current && roomOwnsPointer()) {
+        orbiting = true;
+        orbitX = event.clientX;
+        orbitY = event.clientY;
+        canvas.setPointerCapture(event.pointerId);
+        canvas.style.cursor = "grabbing";
+        return;
+      }
+      if (roomOwnsPointer()) {
+        // A record under the pointer wins over everything else in the room: it is the
+        // one thing here that is picked up rather than looked at.
+        const grabbed = roomScene.grabRecordAt(normalisedPointer(event));
+        if (grabbed) {
+          carryingRecord = true;
+          canvas.setPointerCapture(event.pointerId);
+          canvas.style.cursor = "grabbing";
+        }
+        return;
+      }
+      if (!reelOwnsPointer()) return;
       pointerPosition(event);
       drag.active = true;
       onDragStateChangeRef.current(true);
@@ -1340,12 +1486,35 @@ function FilmCanvas({
       canvas.classList.add(styles.filmCanvasDragging);
     };
     const handlePointerMove = (event: PointerEvent) => {
+      if (carryingOrb) {
+        hero.moveOrb(normalisedPointer(event));
+        return;
+      }
+      if (orbiting) {
+        const bounds = canvas.getBoundingClientRect();
+        roomScene.orbitPlayer(
+          (event.clientX - orbitX) / Math.max(1, bounds.width),
+          (event.clientY - orbitY) / Math.max(1, bounds.height),
+        );
+        orbitX = event.clientX;
+        orbitY = event.clientY;
+        return;
+      }
       if (heroOwnsPointer()) {
         heroPointerFromEvent(event);
+        const overOrb = hero.orbHitTest(normalisedPointer(event));
+        if (overOrb !== orbHovered) {
+          orbHovered = overOrb;
+          canvas.style.cursor = overOrb ? "grab" : "";
+        }
         return;
       }
       if (roomOwnsPointer()) {
         const ndc = normalisedPointer(event);
+        if (carryingRecord) {
+          roomScene.moveRecordTo(ndc);
+          return;
+        }
         roomPointer.x = ndc.x;
         roomPointer.y = ndc.y;
         const hit = roomScene.raycastAt(ndc);
@@ -1364,6 +1533,12 @@ function FilmCanvas({
       targetReelOffset = stepRef.current * FRAME_WIDTH - drag.offset / (0.05 * width);
     };
     const finishDrag = (event: PointerEvent, openOnTap: boolean) => {
+      if (orbiting) {
+        orbiting = false;
+        canvas.style.cursor = "";
+        try { canvas.releasePointerCapture(event.pointerId); } catch {}
+        return;
+      }
       if (!drag.active) return;
       drag.active = false;
       onDragStateChangeRef.current(false);
@@ -1383,10 +1558,42 @@ function FilmCanvas({
         onProjectOpenRef.current(project.href);
       }
     };
-    const handlePointerUp = (event: PointerEvent) => finishDrag(event, true);
-    const handlePointerCancel = (event: PointerEvent) => finishDrag(event, false);
+    const dropRecord = (event: PointerEvent) => {
+      if (!carryingRecord) return false;
+      carryingRecord = false;
+      if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
+      canvas.style.cursor = "";
+      const drop = roomScene.releaseRecord();
+      if (drop?.docked) onRecordDockedRef.current(drop.id);
+      return true;
+    };
+    const dropOrb = (event: PointerEvent) => {
+      if (!carryingOrb) return false;
+      carryingOrb = false;
+      if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
+      canvas.style.cursor = orbHovered ? "grab" : "";
+      // `releaseOrb` reports whether the orb actually travelled. A press that never moved
+      // it is still a plain click on the terminal, and should still turn the sea over.
+      orbMoved = hero.releaseOrb();
+      return true;
+    };
+    const handlePointerUp = (event: PointerEvent) => {
+      if (dropOrb(event)) return;
+      if (dropRecord(event)) return;
+      finishDrag(event, true);
+    };
+    const handlePointerCancel = (event: PointerEvent) => {
+      if (dropOrb(event)) return;
+      if (dropRecord(event)) return;
+      finishDrag(event, false);
+    };
     const handleLeave = () => {
       hero.setPointer(0, 0);
+      ocean.setPointer(0, 0);
+      if (orbHovered) {
+        orbHovered = false;
+        if (!carryingOrb) canvas.style.cursor = "";
+      }
       roomPointer.x = 0;
       roomPointer.y = 0;
       if (hoveredRoomObject) {
@@ -1397,11 +1604,22 @@ function FilmCanvas({
       }
       if (!drag.active) targetPointer.set(0, 0);
     };
-    // Clicking the terminal cycles the particle form — the hero's one interaction,
-    // and it must not fire once the reel owns the surface.
+    // Clicking the terminal moves the sea on to its next state — the hero's one
+    // interaction, and it must not fire once the reel owns the surface.
     const handleClick = (event: MouseEvent) => {
-      if (heroOwnsPointer()) { hero.cycleForm(); return; }
-      if (!roomOwnsPointer()) return;
+      if (heroOwnsPointer()) {
+        // Putting the orb down fires a click on the canvas too. Swallow that one, or
+        // moving the light would also turn the weather over behind it.
+        if (orbMoved) {
+          orbMoved = false;
+          return;
+        }
+        const next = ocean.cycleSeaState();
+        hero.setSeaState(next);
+        onSeaStateChangeRef.current(next);
+        return;
+      }
+      if (!roomOwnsPointer() || carryingRecord || deckOpenRef.current) return;
       const hit = roomScene.raycastAt(normalisedPointer(event));
       roomScene.focus(hit);
       onRoomPickRef.current(hit);
@@ -1435,6 +1653,8 @@ function FilmCanvas({
     let elapsed = 0;
     const render = () => {
       const delta = Math.min(clock.getDelta(), 0.05);
+
+      roomScene.setRecordSpinning(recordPlayingRef.current);
 
       const reveal = revealRef.current;
       const entry = entryRef.current;
@@ -1538,7 +1758,12 @@ function FilmCanvas({
         modulo(activeProject - 4, projects.length),
         modulo(4 - activeProject, projects.length),
       );
-      const roomIsStage = exit > 0.001;
+      const roomPresence = roomPresenceRef.current;
+      const roomIsStage = roomPresence > 0.001;
+      // The deck owns the camera, the platter speed and the tonearm while it is open.
+      roomScene.setPlayerMode(deckOpenRef.current && roomIsStage);
+      roomScene.setPlatterRpm(deckRpmRef.current);
+      roomScene.setTonearm(deckProgressRef.current);
       if (roomDistance <= 1 || roomIsStage) roomScene.update(performance.now(), roomPointer);
       if (roomDistance <= 1) {
         renderer.setRenderTarget(roomTarget);
@@ -1553,7 +1778,21 @@ function FilmCanvas({
        * because a stale slot blended at even a hundredth would show yesterday's frame
        * ghosted behind today's.
        */
+      if (heroVisible || !readySent) {
+        ocean.setLodBias(
+          Math.log2(Math.max(1, oceanWidth / Math.max(1, hero.screenPixelWidth()))),
+        );
+        ocean.update(delta);
+        renderer.setRenderTarget(oceanTarget);
+        renderer.clear();
+        renderer.render(ocean.scene, ocean.camera);
+        renderer.setRenderTarget(null);
+      }
+
       hero.update(delta, entry);
+      // The orb's scattering buffer is a target of its own, so it has to be drawn before
+      // the stage target is bound — and only when the hero is what is being drawn.
+      if (!roomIsStage && (heroVisible || !readySent)) hero.prepare(renderer);
       renderer.setRenderTarget(post.slotA);
       renderer.clear();
       if (roomIsStage) renderer.render(roomScene.scene, roomScene.fullCamera);
@@ -1580,21 +1819,77 @@ function FilmCanvas({
       camera.fov = 65 + exit * 14;
       camera.updateProjectionMatrix();
 
-      post.uniforms.uLensDistortion.value = THREE.MathUtils.lerp(0.42, 0.92, reveal);
-      post.uniforms.uChromaticAberrationStrength.value = THREE.MathUtils.lerp(0.6, 1.15, reveal);
-      post.uniforms.uSepiaIntensity.value = THREE.MathUtils.lerp(0.18, 0.1, reveal);
+      // How much of the frame the reel still owns. The reel arrives on `reveal` and
+      // leaves on `exit`; `reveal` saturates at the anchor and never comes back down on
+      // its own, which is what used to leave the film hanging behind About and Contact.
+      // The handover is deliberately late and quick: the reel holds the frame while it
+      // pushes in, then gives way over the last third of the exit.
+      const reelOwnsFrame = reveal * (1 - smoothStep((exit - 0.62) / 0.3));
+
+      // The curved glass belongs to the reel and to nothing else.
+      //
+      // It used to be on everywhere — 0.42 under the hero before the reel had even
+      // arrived, 0.2 still bending the room afterwards — which put a lens on two
+      // sections that are not looking through one. The hero is a scene and the room is
+      // a room; only the reel is footage inside a tube. So both the distortion and the
+      // colour split it drags with it now ride `reelOwnsFrame`, the same term the
+      // composite blend uses, and reach zero the moment the reel hands the frame over.
+      // Note that the bezel radius and feather are already `mix(0, …, uLensDistortion)`
+      // in the shader, so zeroing this takes the rounded corners with it.
+      post.uniforms.uLensDistortion.value = THREE.MathUtils.lerp(0.32, 0.72, reveal) * reelOwnsFrame;
+      post.uniforms.uChromaticAberrationStrength.value =
+        THREE.MathUtils.lerp(0.18, 0.34, reveal) * reelOwnsFrame;
+
+      // Bright application screens need a much tighter CRT response than the dark
+      // hero. The old settings added a broad 32% bloom to already relit whites, then
+      // split their edges by more than a pixel. Preserve the tube in highlights and
+      // sprockets while letting UI text and the original video pixels stay readable.
+      post.uniforms.uBloomIntensity.value = roomIsStage
+        ? 0.32
+        : THREE.MathUtils.lerp(0.32, 0.08, reelOwnsFrame);
+      post.uniforms.uBloomThreshold.value = roomIsStage
+        ? 0.62
+        : THREE.MathUtils.lerp(0.62, 0.78, reelOwnsFrame);
+      post.uniforms.uBloomSmoothing.value = roomIsStage
+        ? 0.28
+        : THREE.MathUtils.lerp(0.28, 0.16, reelOwnsFrame);
+      post.uniforms.uBloomRadius.value = roomIsStage
+        ? 0.5
+        : THREE.MathUtils.lerp(0.5, 0.28, reelOwnsFrame);
+      post.uniforms.uPhosphorAmount.value = roomIsStage
+        ? 0.1
+        : THREE.MathUtils.lerp(0.1, 0.035, reelOwnsFrame);
+      post.uniforms.uPow.value = roomIsStage
+        ? 1
+        : THREE.MathUtils.lerp(1, 1.1, reelOwnsFrame);
+      post.uniforms.uSharpness.value = roomIsStage
+        ? 0
+        : THREE.MathUtils.lerp(0, 0.28, reelOwnsFrame);
+      post.uniforms.uSepiaIntensity.value = roomIsStage
+        ? 0.025
+        : THREE.MathUtils.lerp(0.18, 0.035, reelOwnsFrame);
+      // The baked room has already gone through its photographic contrast in
+      // Blender. A gentler display grade keeps the dark oak, black upholstery and
+      // small hardware legible without washing out the window or monitor whites.
+      post.uniforms.uBrightness.value = roomIsStage
+        ? 1.18
+        : THREE.MathUtils.lerp(1, 0.9, reelOwnsFrame);
+      post.uniforms.uContrast.value = roomIsStage
+        ? 0.86
+        : THREE.MathUtils.lerp(1.04, 1, reelOwnsFrame);
       // A little of the last frame while the reel is being thrown, and none of it
       // when the picture is still — persistence on a static frame is just softness.
-      post.uniforms.uPersistence.value = Math.min(0.34, Math.abs(reelVelocity) * 0.02);
+      post.uniforms.uPersistence.value = roomIsStage
+        ? 0
+        : Math.min(0.14, Math.abs(reelVelocity) * 0.008);
 
       elapsed += delta;
       post.render({
-        // The reel arrives on `reveal` and leaves on `exit`. Dropping the exit term
-        // is what left the film hanging behind About and Contact: `reveal` saturates
-        // at the anchor and never comes back down on its own.
-        // The handover is deliberately late and quick: the reel holds the frame while
-        // it pushes in, then gives way over the last third of the exit.
-        blend: reveal * (1 - smoothStep((exit - 0.62) / 0.3)),
+        blend: reelOwnsFrame,
+        // Slot A is the hero before the reel and the room after it. The room fades
+        // away before Contact becomes active, revealing the stage's dark call-sheet
+        // field instead of leaking About's desk into the next section.
+        slotAOpacity: exit > 0.001 ? roomPresence : 1,
         // Only the hero was authored under Neutral tone mapping, which a render
         // target drops. The room in the same slot never had it.
         toneMapA: roomIsStage ? 0 : 1,
@@ -1628,6 +1923,8 @@ function FilmCanvas({
       studioTexture.dispose();
       nightTideModel.dispose();
       nightTideTarget.dispose();
+      ocean.dispose();
+      oceanTarget.dispose();
       roomScene.dispose();
       roomTarget.dispose();
       hero.dispose();
@@ -1678,14 +1975,28 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
   const [step, setStep] = useState(0);
   const [filmReady, setFilmReady] = useState(false);
   /** Which room object the reader picked — lights the matching interest chip. */
-  const [pickedInterest, setPickedInterest] = useState<RoomObjectId | null>(null);
   const [hoveredInterest, setHoveredInterest] = useState<RoomObjectId | null>(null);
+  const [musicPlayerOpen, setMusicPlayerOpen] = useState(false);
+  // Which mix the turntable has been loaded with, and whether it is actually sounding.
+  // The record on the deck turns off the second, not the first, so a paused deck sits
+  // still with the record still on it.
+  const [requestedMixId, setRequestedMixId] = useState<string | null>(null);
+  const [playingMixId, setPlayingMixId] = useState<string | null>(null);
   const [computerReady, setComputerReady] = useState(false);
   const [fontsReady, setFontsReady] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   /** True while the leave-transition veil covers the stage on the way to a detail page. */
   const [leaving, setLeaving] = useState(false);
-  const [particleForm, setParticleForm] = useState(0);
+  const [seaState, setSeaState] = useState(0);
+  /** 33⅓ by default, the way a deck is left. */
+  const [deckRpm, setDeckRpm] = useState(33 + 1 / 3);
+  const [deckProgress, setDeckProgress] = useState<number | null>(null);
+  const resetDeckViewRef = useRef(() => {});
+  /** The scroll driver runs outside React, so it closes the deck through a ref. */
+  const closeDeckRef = useRef(() => {});
+  // Reassigned each render so it closes over the live flag: the scroll driver calls this
+  // on every frame it is away from About, and only the first one should do anything.
+  closeDeckRef.current = () => { if (musicPlayerOpen) setMusicPlayerOpen(false); };
   const [activeSection, setActiveSection] = useState<SectionId>(initialSection);
   const activeIndex = modulo(step, projects.length);
   // The loader doubles as the reference's boot screen: it holds the page (scroll lock in
@@ -1743,6 +2054,8 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
   const entryRef = useRef(0);
   const filmRevealRef = useRef(0);
   const reelExitRef = useRef(0);
+  /** About's full-stage room fades out before Contact owns the address and copy. */
+  const roomPresenceRef = useRef(0);
   const dragActiveRef = useRef(false);
 
   useEffect(() => {
@@ -1778,11 +2091,20 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
       // /selected-work deep link keeps landing on a fully arrived reel.
       const filmReveal = smoothStep((entry - 0.5) / 0.35);
       const aboutStart = getSection("about-me").position;
+      const contactStart = getSection("contact").position;
       const reelExit = smoothStep((screens - (aboutStart - 0.8)) / 0.8);
+      // `sectionAt` hands the route to Contact 0.35 screens before its anchor. Finish
+      // the room fade at that same boundary so a /contact landing never inherits the
+      // About scene, while the last stretch of About gets a deliberate exit.
+      const contactOwnership = contactStart - 0.35;
+      const roomExit = smoothStep((screens - (contactOwnership - 0.35)) / 0.35);
+      const roomPresence = reelExit * (1 - roomExit);
 
       entryRef.current = entry;
       filmRevealRef.current = filmReveal;
       reelExitRef.current = reelExit;
+      roomPresenceRef.current = roomPresence;
+      if (roomPresence < 0.35) closeDeckRef.current();
       filmActiveRef.current = filmReveal > 0.55 && screens < aboutStart - 0.4;
 
       const style = experience.style;
@@ -1847,10 +2169,10 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
         <aside className={styles.terminalHud} aria-label="JOI9000 screen controls">
           <div>
             <span>JOI9000 / OPTICAL CORE</span>
-            <strong>{particleForms[particleForm]}</strong>
+            <strong>{seaStateLabels[seaState]}</strong>
           </div>
-          <p><span>MOVE</span> DISTURB · <span>CLICK</span> REFORM</p>
-          <em>{String(particleForm + 1).padStart(2, "0")} / 04</em>
+          <p><span>MOVE</span> WIND · <span>CLICK</span> SEA STATE</p>
+          <em>{String(seaState + 1).padStart(2, "0")} / 04</em>
         </aside>
 
         <section
@@ -1872,10 +2194,24 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
             revealRef={filmRevealRef}
             entryRef={entryRef}
             exitRef={reelExitRef}
+            roomPresenceRef={roomPresenceRef}
+            deckOpen={musicPlayerOpen}
+            deckRpm={deckRpm}
+            deckProgress={deckProgress}
+            resetDeckViewRef={resetDeckViewRef}
             onHeroReady={() => setComputerReady(true)}
-            onFormChange={setParticleForm}
+            onSeaStateChange={setSeaState}
             onRoomHover={setHoveredInterest}
-            onRoomPick={setPickedInterest}
+            onRoomPick={(id) => {
+              if (id === "joi-music-box") setMusicPlayerOpen(true);
+            }}
+            onRecordDocked={(recordId) => {
+              // The wall hangs the records in the same order the panel lists the mixes.
+              const index = RECORD_IDS.indexOf(recordId as never);
+              const mixId = MIX_ORDER[index] ?? MIX_ORDER[0];
+              setRequestedMixId(mixId);
+            }}
+            recordPlaying={playingMixId !== null}
             onStepChange={setStep}
             onProjectOpen={(href) => {
               // Frames whose destination is a section of this page scroll instead of
@@ -1899,6 +2235,17 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
             onDragStateChange={(active: boolean) => { dragActiveRef.current = active; }}
           />
         </div>
+
+        <JoiMusicPlayer
+          open={musicPlayerOpen}
+          onClose={() => setMusicPlayerOpen(false)}
+          requestedMixId={requestedMixId}
+          onPlayingChange={setPlayingMixId}
+          onProgressChange={setDeckProgress}
+          rpm={deckRpm}
+          onRpmChange={setDeckRpm}
+          onResetView={() => resetDeckViewRef.current()}
+        />
 
         <section
           className={`${styles.filmUi} ${activeSection === "selected-work" ? styles.filmLayerActive : ""}`}
@@ -1944,9 +2291,6 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
         <div
           className={`${styles.aboutScene} ${activeSection === "about-me" ? styles.aboutSceneActive : ""}`}
         >
-          <div className={styles.badgeBox}>
-            <LanyardBadge active={activeSection === "about-me"} />
-          </div>
           {hoveredInterest && (
             <p className={styles.roomLabel} aria-hidden="true">
               {ROOM_OBJECTS.find((entry) => entry.id === hoveredInterest)?.labelZh}
@@ -1955,45 +2299,32 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
           )}
         </div>
 
+        {/*
+          The badge hangs over Contact, not over the room. It is a call sheet's object —
+          a name, a role, a way to reach someone — and on About it was competing with
+          the desk for the same corner of the frame.
+        */}
+        <div
+          className={`${styles.contactScene} ${activeSection === "contact" ? styles.contactSceneActive : ""}`}
+        >
+          <div className={styles.badgeBox}>
+            <LanyardBadge active={activeSection === "contact"} />
+          </div>
+        </div>
+
         <section
           className={`${styles.closingPanel} ${styles.aboutPanel} ${activeSection === "about-me" ? styles.closingPanelActive : ""}`}
           aria-label="About me"
         >
-          <p className={styles.closingKicker}>03 / GALLO — ABOUT ME</p>
-          <h2>
-            Curious about<br />what technology<br />changes in us.
-          </h2>
-          <div className={styles.closingBody}>
-            <p>
-              I am Gallo, an AI product builder and product designer in Guangzhou. I care about
-              the distance between what a system says, what it intends, and what a person
-              actually feels.
-            </p>
-            <p lang="zh-CN">有思想深度，有好奇心，愿意拥抱新事物。</p>
-          </div>
-          {/* COPY-REVIEW: 实习经历为占位槽，等作者提供后逐条替换。 */}
-          <ol className={styles.aboutTimeline} aria-label="Experience">
-            <li>
-              <span>NOW</span>
-              <strong>AI 产品 · 产品设计</strong>
-              <em>经历时间线待补充 / TIMELINE TO BE FILLED</em>
-            </li>
-          </ol>
-          <ul className={styles.interestChips} aria-label="Interests">
-            {ROOM_OBJECTS.map((object) => (
-              <li
-                key={object.id}
-                data-interest={object.id}
-                className={
-                  pickedInterest === object.id || hoveredInterest === object.id
-                    ? styles.interestActive
-                    : ""
-                }
-              >
-                {object.labelZh}
-              </li>
-            ))}
-          </ul>
+          {/*
+            The About copy has been taken out on purpose. It is being rewritten as labels
+            that hang off the objects themselves — the room already carries one, on hover,
+            and the rest will join it — so a block of prose sitting over the desk was
+            describing what the room is about to say for itself.
+
+            The links stay: they are the only route to the CV from this section, and a
+            download is not copy.
+          */}
           <div className={styles.closingActions}>
             <a href="/resume/gallo-liu-resume-cn.pdf" download>RESUME / PDF</a>
             <a href="https://github.com/Gallo233" target="_blank" rel="noreferrer">GITHUB</a>

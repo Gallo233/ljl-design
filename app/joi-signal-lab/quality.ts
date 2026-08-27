@@ -3,8 +3,10 @@
  *
  * The reference keeps the same two switches — `isMobileDevice` and `reducedMemoryMode` —
  * and gates the expensive half of its post chain on them. Ours does the same, plus the
- * pixel-ratio clamp: the reference runs at 1.5 while we were running two contexts at
- * 1.65 and 1.7, which is how we managed to spend more than it does and get less.
+ * pixel-ratio clamp. The stage used to stop at 1.5 even on a 2x desktop display, so
+ * the browser enlarged every finished frame by a third and softened the video, drawn
+ * atlas and typography baked into those images together. Full-density desktop output
+ * is worth more than four-sample MSAA here; the post chain uses two samples instead.
  *
  * Read once at startup. A device does not stop being a phone mid-session, and a tier
  * that changes under a running renderer means reallocating every target.
@@ -32,7 +34,7 @@ export function detectQuality(): QualityTier {
       isMobile: false,
       reducedMemory: false,
       reducedMotion: false,
-      dprCap: 1.5,
+      dprCap: 2,
       bloomLevels: 7,
       persistence: true,
       antialias: true,
@@ -51,7 +53,7 @@ export function detectQuality(): QualityTier {
     isMobile,
     reducedMemory,
     reducedMotion,
-    dprCap: isMobile ? 1.25 : 1.5,
+    dprCap: isMobile ? 1.25 : reducedMemory ? 1.5 : 2,
     bloomLevels: isMobile || reducedMemory ? 5 : 7,
     // Two viewport-sized HalfFloat targets is the single largest allocation in the
     // chain, and the effect it buys is the one nobody misses on a small screen.

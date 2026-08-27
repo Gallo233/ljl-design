@@ -16,3 +16,7 @@ joi-doorway-video/node_modules/
 joi-doorway-video/out/
 joi-doorway-video/dist/
 .env.local
+
+# Tool scratch directories — skill working files and session plans, not project source.
+.img2threejs/
+.zcode/

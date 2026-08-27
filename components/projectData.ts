@@ -64,6 +64,12 @@ export type ProjectCase = {
     label: string;
     caption: string;
   };
+  interactiveShowcase?: {
+    kind: "joi-mobile-native";
+    poster: string;
+    label: string;
+    caption: string;
+  };
   loopTitle?: string;
   loopTitleZh?: string;
   loop?: ProjectLoopStep[];
@@ -253,26 +259,26 @@ export const projects: ProjectCase[] = [
     role: "PRODUCT / DESIGN / SWIFTUI",
     repo: "https://github.com/Gallo233/Joi-Mobile",
     status: "WORKING NATIVE PROTOTYPE",
-    stack: "SWIFTUI / LIVE2D / VRM / LOCAL MEMORY",
-    updated: "2026-08-24",
+    stack: "SWIFTUI / LIVE2D / VRM / MAPKIT / LOCAL MEMORY",
+    updated: "2026-08-26",
     summary:
-      "Joi Mobile carries the companion to iPhone as a native stage — conversation, character, user-confirmed memory, and a local library for characters the person already owns.",
+      "Joi Mobile carries the companion to iPhone as two native surfaces that share context: Chat keeps the character, conversation, and confirmed memory together; Map turns a place request into search, route context, and a walk Joi can remember with permission.",
     summaryZh:
-      "Joi Mobile 把这段陪伴关系带到 iPhone：原生角色舞台、对话、由用户亲自确认的记忆，以及存放用户自有角色文件的本地角色库。",
+      "Joi Mobile 把陪伴关系带到 iPhone，并收束为两个共享上下文的原生界面：Chat 把角色、对话和经确认的记忆放在一起；Map 把地点请求转成搜索、路线语境，以及一段经许可后可以被 Joi 记住的同行。",
     question:
-      "How does the same companion move to a phone without turning character files and memory into somebody else's cloud account?",
+      "How can one companion move between conversation and the physical world without turning character files, memory, and location into somebody else's cloud account?",
     caseFrame: {
       decision:
-        "Design the phone around a character-first stage, local character ownership, and memory that only becomes durable after explicit confirmation.",
+        "Give Chat and Map one shared journey context, while keeping character ownership local and making durable memory an explicit user decision.",
       outcome:
-        "A working SwiftUI prototype: full- and half-body stages, conversation controls, a consented memory flow, and local import for character packages, VRM, and Live2D archives.",
+        "A working SwiftUI prototype with a native character stage, text and transcript flows, confirmed memory, preloaded character switching, Map search, saved walks, and cached route playback.",
     },
-    motion: {
-      src: "/reel/02-joi-mobile/showcase.mp4",
-      poster: "/reel/02-joi-mobile/still.avif",
-      label: "REAL BUILD / SHOWCASE",
+    interactiveShowcase: {
+      kind: "joi-mobile-native",
+      poster: "/work/joi-mobile-home-screen.webp",
+      label: "PROCEDURAL DEVICE / NATIVE DEMO LINK",
       caption:
-        "Captured from the working SwiftUI build — the same footage the film reel plays on the selected-work strip.",
+        "A code-built iPhone 17 Pro carries a Home Screen captured directly from the iOS Simulator. Turn the object, then tap its screen to open the uploaded Joi Mobile SwiftUI build in a dedicated native session.",
     },
     loopTitle: "A companion should survive the change of screen.",
     loopTitleZh: "换一块屏幕，关系不该重置。",
@@ -287,7 +293,7 @@ export const projects: ProjectCase[] = [
         index: "02",
         label: "TALK",
         title: "Keep conversation close to the body.",
-        body: "Text, push-to-talk, session controls, and full- or half-body framing stay reachable without covering the character.",
+        body: "Text, transcript, memory proposals, session controls, and full- or half-body framing stay reachable without covering the character.",
       },
       {
         index: "03",
@@ -297,9 +303,9 @@ export const projects: ProjectCase[] = [
       },
       {
         index: "04",
-        label: "BRING",
-        title: "Let people bring characters they own.",
-        body: "The local library accepts Joi character packages, VRM files, and Live2D archives — ownership before upload.",
+        label: "GO",
+        title: "Carry the conversation into a place.",
+        body: "A request can move from Chat into Map search, a saved walk, or a cached route — then return with the journey context intact.",
       },
     ],
     sections: [
@@ -328,6 +334,18 @@ export const projects: ProjectCase[] = [
         ],
       },
       {
+        heading: "Chat And Map Share One Journey",
+        headingZh: "Chat 与 Map 共享同一段旅程",
+        body: [
+          "Map is no longer a separate Joi Map product. That standalone direction was retired; its useful travel capability was rebuilt inside Joi Mobile as a second native surface beside Chat.",
+          "A place request can become search results, a selected destination, a saved walk, or an offline cached route. The handoff keeps a small, explicit journey context rather than creating a second assistant with a second memory.",
+        ],
+        bodyZh: [
+          "Map 不再是独立的 Joi Map 产品。那条单独的产品路线已经停止，其中真正有价值的旅行能力被重新做进 Joi Mobile，成为与 Chat 并列的第二个原生界面。",
+          "一个地点请求可以继续变成搜索结果、选中的目的地、收藏的散步路线，或离线缓存的路径。交接保留一份精简而明确的旅程上下文，而不是再创造一个拥有另一套记忆的助手。",
+        ],
+      },
+      {
         heading: "Memory By Consent",
         headingZh: "经确认才成为记忆",
         body: [
@@ -343,10 +361,10 @@ export const projects: ProjectCase[] = [
         heading: "Where It Goes",
         headingZh: "下一步",
         body: [
-          "The next milestone is a reliable daily loop across character import, conversation, explicit memory review, and a clean handoff between desktop and phone.",
+          "The next milestone is a reliable daily loop across character switching, conversation, explicit memory review, Map search, and a clean handoff between desktop and phone.",
         ],
         bodyZh: [
-          "下一步是把角色导入、对话、明确的记忆复核，以及桌面与手机之间的顺畅交接，做成可靠的日常循环。",
+          "下一步是把角色切换、对话、明确的记忆复核、Map 搜索，以及桌面与手机之间的顺畅交接，做成可靠的日常循环。",
         ],
       },
     ],

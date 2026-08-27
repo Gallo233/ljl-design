@@ -57,12 +57,11 @@ export type ArcadeGame = {
 };
 
 /**
- * Internal render size for every canvas game. 4:3, matching the handheld's screen, and
- * fixed so gameplay geometry never depends on the element's CSS size — the shell scales
- * the canvas, the game always draws into the same grid.
+ * Internal render size for every canvas game. Exact 16:9, matching the enlarged handheld
+ * screen, and fixed so gameplay geometry never depends on the element's CSS size.
  */
-export const SCREEN_WIDTH = 640;
-export const SCREEN_HEIGHT = 480;
+export const SCREEN_WIDTH = 800;
+export const SCREEN_HEIGHT = 450;
 
 /**
  * The shared palette.

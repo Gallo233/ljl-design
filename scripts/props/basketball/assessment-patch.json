@@ -1,0 +1,80 @@
+{
+  "preSpecAssessment": {
+    "objectClass": {
+      "primaryType": "basketball",
+      "primaryDomain": "object",
+      "formLanguage": ["geometric", "radial-symmetric", "closed-shell"],
+      "structureKind": ["monolithic-shell", "surface-relief"],
+      "motionPotential": ["rolls", "bounces", "spins-about-any-axis"],
+      "materialFamilies": ["composite-rubber"],
+      "notes": "Single inflated shell. All structure is surface relief: eight-panel seam layout plus pebble grain."
+    },
+    "complexity": {
+      "scores": {
+        "silhouetteComplexity": 1,
+        "componentCount": 1,
+        "hierarchyDepth": 1,
+        "repetitionDensity": 2,
+        "materialLayerCount": 2,
+        "localDetailDensity": 3,
+        "occlusionRisk": 1,
+        "actionReadinessNeed": 2
+      },
+      "estimatedCounts": {
+        "macroComponents": 1,
+        "mesoComponents": 2,
+        "microFeatureGroups": 2,
+        "materialLayers": 2,
+        "repetitionSystems": 1
+      },
+      "reasoning": [
+        "Silhouette is one sphere; every identity feature is surface relief, not outline.",
+        "The eight-panel seam layout is a repetition system, not eight separate parts.",
+        "Read at roughly 60 px on the About stage, so seam contrast matters more than seam depth."
+      ]
+    },
+    "detailInventory": {
+      "scanMethod": "component-zones",
+      "targetMinDetails": 3,
+      "details": [
+        {
+          "id": "seam-channels",
+          "kind": "seam",
+          "region": [0.12, 0.08, 0.78, 0.72],
+          "affects": ["geometry", "albedo"],
+          "scale": 0.02,
+          "evidenceRef": "docs/design-references/room-props/basketball.png",
+          "confidence": 0.95,
+          "mapsTo": { "ref": "ball-shell.seam-grooves" },
+          "note": "Two orthogonal great circles plus four curved panel seams; recessed, near-black, reads as line work at prop scale."
+        },
+        {
+          "id": "pebble-grain",
+          "kind": "ridge",
+          "region": [0.1, 0.06, 0.8, 0.76],
+          "affects": ["normal", "roughness"],
+          "scale": 0.004,
+          "evidenceRef": "docs/design-references/room-props/basketball.png",
+          "confidence": 0.85,
+          "mapsTo": { "ref": "ball-shell.pebble-grain" },
+          "note": "Dense micro-bump field across every panel; carried as normal-scale relief, never geometry."
+        },
+        {
+          "id": "upper-sheen",
+          "kind": "gloss",
+          "region": [0.24, 0.06, 0.48, 0.3],
+          "affects": ["roughness"],
+          "scale": 0.3,
+          "evidenceRef": "docs/design-references/room-props/basketball.png",
+          "confidence": 0.7,
+          "mapsTo": { "ref": "leather.upper-sheen" },
+          "note": "Broad low-intensity specular lobe on the upper hemisphere; satin, no sharp highlight."
+        }
+      ]
+    },
+    "unknownsToResolveBeforeImplementation": [
+      "The far hemisphere is not visible; the seam layout there is inferred from the standard eight-panel pattern.",
+      "Embossed lateral lettering is illegible at this crop and is not reconstructed."
+    ]
+  }
+}

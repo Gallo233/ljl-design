@@ -1,0 +1,5 @@
+[
+  {"id": "overall-silhouette", "score": 0.93, "tier": "critical", "notes": "Render outline is a circle of even curvature against the reference's circle; no flat spots, no elongation. Faceting is visible at 16 segments and is a form-pass fix, not a silhouette failure."},
+  {"id": "primary-structure", "score": 0.8, "tier": "critical", "notes": "One shell, as specified. The eight-panel seam layout is not present yet — it belongs to the structural and form passes."},
+  {"id": "reference-material-system", "score": 0.1, "tier": "critical", "notes": "Blockout: no albedo, no roughness response. Expected at this pass."}
+]

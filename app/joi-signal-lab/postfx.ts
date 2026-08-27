@@ -81,6 +81,7 @@ const BLEND_FRAGMENT = /* glsl */ `
   uniform sampler2D uSlotA;
   uniform sampler2D uSlotB;
   uniform float uBlend;
+  uniform float uSlotAOpacity;
   uniform float uToneMapA;
   uniform float uExposure;
   uniform float uDim;
@@ -93,6 +94,7 @@ const BLEND_FRAGMENT = /* glsl */ `
     // Slot A carries the hero early and the room late; only the hero was ever
     // tone-mapped, and through a render target three would have dropped it.
     a.rgb = mix(a.rgb, neutralToneMapping(a.rgb, uExposure), uToneMapA);
+    a *= clamp(uSlotAOpacity, 0.0, 1.0);
     vec4 mixed = mix(a, b, clamp(uBlend, 0.0, 1.0));
     gl_FragColor = vec4(mixed.rgb * (1.0 - uDim), mixed.a * (1.0 - uDim * 0.35));
   }
@@ -247,6 +249,8 @@ const COMPOSE_FRAGMENT = /* glsl */ `
   uniform float uSepiaIntensity;
   uniform float uBrightness;
   uniform float uContrast;
+  uniform float uSharpness;
+  uniform vec2 uBaseTexel;
   uniform float uLensDistortion;
   uniform float uLensDistortionBorder;
   uniform float uAspect;
@@ -333,6 +337,18 @@ const COMPOSE_FRAGMENT = /* glsl */ `
     return vec4(c, base.a);
   }
 
+  vec4 sharpenedGradeAt(vec2 uv) {
+    vec4 centre = gradeAt(uv);
+    if (uSharpness <= 0.001) return centre;
+    vec3 neighbours = gradeAt(uv + vec2(uBaseTexel.x, 0.0)).rgb;
+    neighbours += gradeAt(uv - vec2(uBaseTexel.x, 0.0)).rgb;
+    neighbours += gradeAt(uv + vec2(0.0, uBaseTexel.y)).rgb;
+    neighbours += gradeAt(uv - vec2(0.0, uBaseTexel.y)).rgb;
+    neighbours *= 0.25;
+    centre.rgb = clamp(centre.rgb + (centre.rgb - neighbours) * uSharpness, 0.0, 1.0);
+    return centre;
+  }
+
   // 9. Gaussian grain. The source names a normal deviate with mean 0 and sigma
   //    0.7; Box-Muller gives exactly that and stays stable over a long session,
   //    where feeding an ever-growing time straight into a PDF would decay to zero.
@@ -354,7 +370,10 @@ const COMPOSE_FRAGMENT = /* glsl */ `
     vec2 radial = (uv - 0.5) * vec2(uAspect, 1.0) / max(uAspect, 1.0) * 2.0;
     float offset = CA_BASE * length(radial) * 2.0 * uChromaticAberrationStrength;
 
-    vec4 tapCentre = gradeAt(lensUv);
+    // A restrained output-space unsharp pass restores the last bit of definition
+    // lost when the curved ribbon is projected into the viewport. The colour-split
+    // taps stay unsharpened so the CRT fringe cannot turn into a hard halo.
+    vec4 tapCentre = sharpenedGradeAt(lensUv);
     vec4 tapRed = gradeAt(lensUv + vec2(0.0, -offset));
     vec4 tapBlue = gradeAt(lensUv + vec2(0.0, offset));
     vec3 aberrated = vec3(tapRed.r, tapCentre.g, tapBlue.b);
@@ -399,7 +418,13 @@ export type PostChain = {
    * `blend` 0 shows slot A, 1 shows slot B. `toneMapA` re-applies the hero's
    * Neutral tone mapping, which a render target would otherwise drop.
    */
-  render: (options: { blend: number; toneMapA: number; dim: number; elapsed: number }) => void;
+  render: (options: {
+    blend: number;
+    slotAOpacity: number;
+    toneMapA: number;
+    dim: number;
+    elapsed: number;
+  }) => void;
   dispose: () => void;
 };
 
@@ -434,7 +459,10 @@ export function createPostChain(renderer: any, tier: QualityTier): PostChain {
 
   // The canvas's own `antialias` only ever applied to the default framebuffer, so
   // moving every scene through a target lost it. These ask for it back explicitly.
-  const sceneSamples = tier.antialias && renderer.capabilities.isWebGL2 ? 4 : 0;
+  // Two samples at the desktop's native 2x density keep the ribbon edge clean while
+  // using less multisample storage than the former 1.5x / 4-sample combination. The
+  // saved memory pays for actual picture detail instead of extra sub-pixel coverage.
+  const sceneSamples = tier.antialias && renderer.capabilities.isWebGL2 ? 2 : 0;
   const slotA = makeTarget(2, 2, true, sceneSamples);
   const slotB = makeTarget(2, 2, true, sceneSamples);
   const sceneTarget = makeTarget(2, 2, false);
@@ -466,6 +494,9 @@ export function createPostChain(renderer: any, tier: QualityTier): PostChain {
     uSepiaIntensity: { value: 0.14 },
     uBrightness: { value: 1.0 },
     uContrast: { value: 1.04 },
+    // Raised only while the reel owns the stage; the hero and room stay untouched.
+    uSharpness: { value: 0.0 },
+    uBaseTexel: { value: new THREE.Vector2(0.5, 0.5) },
     // Glass — steps 7 and 8.
     uLensDistortion: { value: 0.55 },
     uLensDistortionBorder: { value: 0.0 },
@@ -507,6 +538,7 @@ export function createPostChain(renderer: any, tier: QualityTier): PostChain {
     uSlotA: { value: slotA.texture },
     uSlotB: { value: slotB.texture },
     uBlend: { value: 0 },
+    uSlotAOpacity: { value: 1 },
     uToneMapA: { value: 1 },
     uExposure: { value: 1 },
     uDim: { value: 0 },
@@ -551,6 +583,8 @@ export function createPostChain(renderer: any, tier: QualityTier): PostChain {
     uSepiaIntensity: uniforms.uSepiaIntensity,
     uBrightness: uniforms.uBrightness,
     uContrast: uniforms.uContrast,
+    uSharpness: uniforms.uSharpness,
+    uBaseTexel: uniforms.uBaseTexel,
     uLensDistortion: uniforms.uLensDistortion,
     uLensDistortionBorder: uniforms.uLensDistortionBorder,
     uAspect: uniforms.uAspect,
@@ -591,14 +625,28 @@ export function createPostChain(renderer: any, tier: QualityTier): PostChain {
       levelHeight = Math.max(1, Math.floor(levelHeight / 2));
     });
     uniforms.uAspect.value = width / Math.max(1, height);
+    uniforms.uBaseTexel.value.set(1 / w, 1 / h);
     // A resized history is a stretched ghost of the old viewport; drop it.
     historyValid = false;
   };
 
-  const render = ({ blend, toneMapA, dim, elapsed }: { blend: number; toneMapA: number; dim: number; elapsed: number }) => {
+  const render = ({
+    blend,
+    slotAOpacity,
+    toneMapA,
+    dim,
+    elapsed,
+  }: {
+    blend: number;
+    slotAOpacity: number;
+    toneMapA: number;
+    dim: number;
+    elapsed: number;
+  }) => {
     uniforms.uTime.value = elapsed;
 
     blendMaterial.uniforms.uBlend.value = blend;
+    blendMaterial.uniforms.uSlotAOpacity.value = slotAOpacity;
     blendMaterial.uniforms.uToneMapA.value = toneMapA;
     blendMaterial.uniforms.uDim.value = dim;
     drawPass(blendMaterial, sceneTarget);

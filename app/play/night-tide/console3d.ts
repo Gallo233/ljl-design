@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
 import { CSS3DObject, CSS3DRenderer } from "three/examples/jsm/renderers/CSS3DRenderer.js";
-import type { GameButton } from "./games";
+import { SCREEN_WIDTH, type GameButton } from "./games";
 
 /**
  * The handheld, as an actual object, modelled against the supplied design render.
@@ -25,12 +25,8 @@ import type { GameButton } from "./games";
  * has to track a moving quad, and drift shows immediately as the screen peeling off the
  * bezel. The camera holds the design's head-on attitude and only breathes with the pointer.
  *
- * ### The one deliberate departure from the design
- *
- * The reference screen is about 16:10. This one is **4:3**, because all four cartridges are
- * 4:3 — the three canvas games and the Godot build — and a 16:10 bezel would letterbox every
- * one of them behind grey bars. Matching the render exactly would have made the screen look
- * right and the games look worse.
+ * The screen is an exact 16:9 live surface. Canvas cartridges share that internal aspect,
+ * while the Godot iframe keeps its native wide presentation without CSS letterboxing.
  */
 
 export type CartridgeSpec = {
@@ -64,16 +60,16 @@ export type ConsoleScene = {
   dispose: () => void;
 };
 
-/* ── proportions, read off the design render ─────────────────────────────────
- * The body is ~1.9:1. Everything else is derived from the screen so the whole device
- * stays in proportion if that changes.
+/* ── proportions, measured from the approved optimisation image ──────────────
+ * The active display is 20.2% larger in area than the former 6.2 × 4.65 opening,
+ * with a thinner moulded bezel and enough side deck for every control to remain seated.
  */
-const SCREEN_W = 6.2;
-const SCREEN_H = SCREEN_W * 0.75;
-const BEZEL = 0.46;          // the raised frame around the screen, thick in the render
-const DECK_W = 3.05;         // control deck either side
+const SCREEN_W = 7.85;
+const SCREEN_H = SCREEN_W * (9 / 16);
+const BEZEL = 0.28;
+const DECK_W = 2.75;
 const BODY_W = SCREEN_W + BEZEL * 2 + DECK_W * 2;
-const BODY_H = BODY_W / 1.9;
+const BODY_H = BODY_W / 1.82;
 const BODY_D = 1.25;
 const BODY_R = BODY_H * 0.19; // the render's corners are very generous
 const FACE_Z = BODY_D / 2;
@@ -154,7 +150,7 @@ export function createConsoleScene(options: ConsoleSceneOptions): ConsoleScene {
   renderer.setClearColor(0x000000, 0);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.0;
+  renderer.toneMappingExposure = 0.92;
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.domElement.style.cssText = "position:absolute;inset:0;width:100%;height:100%;touch-action:none;";
@@ -203,8 +199,8 @@ export function createConsoleScene(options: ConsoleSceneOptions): ConsoleScene {
   pmrem.dispose();
 
   // ── lighting ──────────────────────────────────────────────────────────────
-  scene.add(new THREE.HemisphereLight(0xffffff, 0xc9d2e0, 0.9));
-  const key = new THREE.DirectionalLight(0xffffff, 1.35);
+  scene.add(new THREE.HemisphereLight(0xffffff, 0xc9d2e0, 0.8));
+  const key = new THREE.DirectionalLight(0xffffff, 1.2);
   key.position.set(-6, 13, 12);
   key.castShadow = true;
   key.shadow.mapSize.set(1024, 1024);
@@ -217,24 +213,24 @@ export function createConsoleScene(options: ConsoleSceneOptions): ConsoleScene {
   key.shadow.bias = -0.0011;
   key.shadow.radius = 4;
   scene.add(key);
-  const fill = new THREE.DirectionalLight(0xe6ecf7, 0.45);
+  const fill = new THREE.DirectionalLight(0xe6ecf7, 0.4);
   fill.position.set(10, 3, 7);
   scene.add(fill);
 
-  // A shadow catcher rather than a floor, so the device reads as floating on the page.
+  // A close shadow catcher gives the lower shell a real contact point on the page.
   const ground = new THREE.Mesh(
     new THREE.PlaneGeometry(90, 60),
     new THREE.ShadowMaterial({ opacity: 0.13 }),
   );
   ground.rotation.x = -Math.PI / 2;
-  ground.position.y = -BODY_H / 2 - 0.72;
+  ground.position.y = -BODY_H / 2 - 0.12;
   ground.receiveShadow = true;
   scene.add(ground);
 
   // ── materials ─────────────────────────────────────────────────────────────
   const shellMat = new THREE.MeshPhysicalMaterial({
     color: SHELL, roughness: 0.42, metalness: 0,
-    clearcoat: 0.45, clearcoatRoughness: 0.35, envMapIntensity: 0.85,
+    clearcoat: 0.18, clearcoatRoughness: 0.5, envMapIntensity: 0.68,
   });
   const shellEdgeMat = new THREE.MeshPhysicalMaterial({
     color: SHELL_EDGE, roughness: 0.5, metalness: 0,
@@ -249,20 +245,28 @@ export function createConsoleScene(options: ConsoleSceneOptions): ConsoleScene {
   });
 
   const consoleGroup = new THREE.Group();
+  consoleGroup.name = "game-center-handheld";
   scene.add(consoleGroup);
 
   type Pressable = { mesh: any; id: GameButton; restZ: number; axis: "z" | "y" };
   const pressables: Pressable[] = [];
-  const addKey = (mesh: any, id: GameButton, axis: "z" | "y" = "z") => {
+  const addKey = (
+    mesh: any,
+    id: GameButton,
+    axis: "z" | "y" = "z",
+    parent: any = consoleGroup,
+  ) => {
     mesh.castShadow = true;
+    mesh.name = `control-${id}`;
     mesh.userData.button = id;
     pressables.push({ mesh, id, restZ: mesh.position[axis], axis });
-    consoleGroup.add(mesh);
+    parent.add(mesh);
   };
 
   // ── body ──────────────────────────────────────────────────────────────────
   const bodyGeometry = plate(BODY_W, BODY_H, BODY_D, BODY_R, 0.26);
   const body = new THREE.Mesh(bodyGeometry, shellMat);
+  body.name = "shell-front";
   body.castShadow = true;
   body.receiveShadow = true;
   consoleGroup.add(body);
@@ -271,28 +275,33 @@ export function createConsoleScene(options: ConsoleSceneOptions): ConsoleScene {
   // two moulded halves. Cheap to add, and it is most of what stops the body looking printed.
   const seamGeometry = plate(BODY_W * 0.986, BODY_H * 0.986, 0.1, BODY_R * 0.97, 0.04);
   const seam = new THREE.Mesh(seamGeometry, shellEdgeMat);
+  seam.name = "shell-seam";
   seam.position.set(0, 0, -BODY_D / 2 + 0.16);
   consoleGroup.add(seam);
 
   // ── screen ────────────────────────────────────────────────────────────────
   // A raised frame standing proud of the face, with the screen recessed inside it.
+  const displayAssembly = new THREE.Group();
+  displayAssembly.name = "display-module";
+  consoleGroup.add(displayAssembly);
   const bezelGeometry = plate(SCREEN_W + BEZEL * 2, SCREEN_H + BEZEL * 2, 0.34, 0.28, 0.08);
   const bezelFrame = new THREE.Mesh(bezelGeometry, bezelMat);
+  bezelFrame.name = "screen-bezel";
   bezelFrame.position.set(0, 0.3, FACE_Z - 0.02);
   bezelFrame.castShadow = true;
   bezelFrame.receiveShadow = true;
-  consoleGroup.add(bezelFrame);
+  displayAssembly.add(bezelFrame);
 
   const screenWell = new THREE.Mesh(
     new THREE.PlaneGeometry(SCREEN_W, SCREEN_H),
     new THREE.MeshBasicMaterial({ color: 0xf6f8fb }),
   );
+  screenWell.name = "screen-aperture";
   screenWell.position.set(0, 0.3, FACE_Z + 0.115);
-  consoleGroup.add(screenWell);
+  displayAssembly.add(screenWell);
 
-  const SCREEN_PX = 640;
   const screenObject = new CSS3DObject(screenElement);
-  screenObject.scale.setScalar(SCREEN_W / SCREEN_PX);
+  screenObject.scale.setScalar(SCREEN_W / SCREEN_WIDTH);
   screenObject.position.set(0, 0.3, FACE_Z + 0.13);
   cssScene.add(screenObject);
 
@@ -302,14 +311,18 @@ export function createConsoleScene(options: ConsoleSceneOptions): ConsoleScene {
   const dishMat = new THREE.MeshPhysicalMaterial({
     color: "#dbe1ea", roughness: 0.62, metalness: 0, envMapIntensity: 0.55,
   });
+  const dpadAssembly = new THREE.Group();
+  dpadAssembly.name = "dpad";
+  consoleGroup.add(dpadAssembly);
   const dish = new THREE.Mesh(
     new THREE.CylinderGeometry(1.06, 1.12, 0.2, 56),
     dishMat,
   );
+  dish.name = "dpad-well";
   dish.rotation.x = Math.PI / 2;
   dish.position.set(-deckX, dpadY, FACE_Z - 0.01);
   dish.receiveShadow = true;
-  consoleGroup.add(dish);
+  dpadAssembly.add(dish);
 
   // The pad is one plus-shaped piece; the four keys are separate meshes on top of it so
   // each can depress on its own, which a single moulded cross could not do.
@@ -331,30 +344,52 @@ export function createConsoleScene(options: ConsoleSceneOptions): ConsoleScene {
       dpadY + dy * (ARM / 2 + 0.02),
       FACE_Z + 0.16,
     );
-    addKey(mesh, id);
+    mesh.userData.explodeWithParent = "dpad";
+    addKey(mesh, id, "z", dpadAssembly);
   });
   const dpadHub = new THREE.Mesh(
     new THREE.BoxGeometry(WAIST, WAIST, 0.28),
     keyMat,
   );
+  dpadHub.name = "dpad-hub";
+  dpadHub.userData.explodeWithParent = "dpad";
   dpadHub.position.set(-deckX, dpadY, FACE_Z + 0.15);
-  consoleGroup.add(dpadHub);
+  dpadAssembly.add(dpadHub);
 
   // ── face buttons ──────────────────────────────────────────────────────────
-  // Colours sampled from the render: sage top, periwinkle left, salmon right, wheat bottom.
+  // Exact target order: X top, Y left, A right, B bottom.
   const faceColours: Record<string, string> = {
-    y: CONSOLE_ACCENTS.sage,
-    x: CONSOLE_ACCENTS.periwinkle,
-    b: CONSOLE_ACCENTS.salmon,
-    a: CONSOLE_ACCENTS.wheat,
+    x: CONSOLE_ACCENTS.sage,
+    y: CONSOLE_ACCENTS.periwinkle,
+    a: CONSOLE_ACCENTS.salmon,
+    b: CONSOLE_ACCENTS.wheat,
   };
   // Pulled in from the shell edge, and offset the way the render staggers them.
   const faceLayout: Array<[GameButton, number, number]> = [
-    ["y", -0.12, 0.64],
-    ["x", -0.78, 0.04],
-    ["b", 0.54, -0.08],
-    ["a", -0.16, -0.66],
+    ["x", -0.12, 0.64],
+    ["y", -0.78, 0.04],
+    ["a", 0.54, -0.08],
+    ["b", -0.16, -0.66],
   ];
+  const faceButtonAssembly = new THREE.Group();
+  faceButtonAssembly.name = "face-buttons";
+  consoleGroup.add(faceButtonAssembly);
+  const buttonLabelTexture = (label: string) => {
+    const canvas = document.createElement("canvas");
+    canvas.width = 128;
+    canvas.height = 128;
+    const context = canvas.getContext("2d")!;
+    context.clearRect(0, 0, 128, 128);
+    context.fillStyle = "#596173";
+    context.font = "700 58px ui-monospace, Menlo, monospace";
+    context.textAlign = "center";
+    context.textBaseline = "middle";
+    context.fillText(label, 64, 68);
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.anisotropy = 4;
+    return texture;
+  };
   faceLayout.forEach(([id, x, y]) => {
     const mesh = new THREE.Mesh(
       new THREE.CylinderGeometry(0.44, 0.46, 0.3, 40),
@@ -364,8 +399,24 @@ export function createConsoleScene(options: ConsoleSceneOptions): ConsoleScene {
       }),
     );
     mesh.rotation.x = Math.PI / 2;
+    const label = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.48, 0.48),
+      new THREE.MeshBasicMaterial({
+        map: buttonLabelTexture(id.toUpperCase()),
+        transparent: true,
+        depthWrite: false,
+        polygonOffset: true,
+        polygonOffsetFactor: -2,
+      }),
+    );
+    label.rotation.x = -Math.PI / 2;
+    label.position.y = 0.157;
+    label.raycast = () => {};
+    label.userData.explodeWithParent = "face-buttons";
+    mesh.add(label);
     mesh.position.set(deckX + x, dpadY + y, FACE_Z + 0.13);
-    addKey(mesh, id);
+    mesh.userData.explodeWithParent = "face-buttons";
+    addKey(mesh, id, "z", faceButtonAssembly);
   });
 
   // ── shoulders ─────────────────────────────────────────────────────────────
@@ -376,16 +427,23 @@ export function createConsoleScene(options: ConsoleSceneOptions): ConsoleScene {
     ["r1", BODY_W / 2 - 2.65],
     ["r2", BODY_W / 2 - 1.35],
   ];
+  const shoulderAssembly = new THREE.Group();
+  shoulderAssembly.name = "shoulder-buttons";
+  consoleGroup.add(shoulderAssembly);
   shoulderLayout.forEach(([id, x]) => {
     const mesh = new THREE.Mesh(
       new RoundedBoxGeometry(1.55, 0.54, 0.86, 5, 0.2),
       shellEdgeMat,
     );
     mesh.position.set(x, BODY_H / 2 + 0.2, -0.02);
-    addKey(mesh, id, "y");
+    mesh.userData.explodeWithParent = "shoulder-buttons";
+    addKey(mesh, id, "y", shoulderAssembly);
   });
 
   // ── select / start ────────────────────────────────────────────────────────
+  const utilityAssembly = new THREE.Group();
+  utilityAssembly.name = "utility-buttons";
+  consoleGroup.add(utilityAssembly);
   ([["select", -0.72], ["start", 0.72]] as Array<[GameButton, number]>).forEach(([id, x]) => {
     const mesh = new THREE.Mesh(
       new RoundedBoxGeometry(0.92, 0.26, 0.22, 4, 0.11),
@@ -394,7 +452,8 @@ export function createConsoleScene(options: ConsoleSceneOptions): ConsoleScene {
       }),
     );
     mesh.position.set(x, -SCREEN_H / 2 - 0.36, FACE_Z + 0.08);
-    addKey(mesh, id);
+    mesh.userData.explodeWithParent = "utility-buttons";
+    addKey(mesh, id, "z", utilityAssembly);
   });
 
   /* ── identity ──────────────────────────────────────────────────────────────
@@ -412,13 +471,17 @@ export function createConsoleScene(options: ConsoleSceneOptions): ConsoleScene {
     texture.anisotropy = 4;
     return texture;
   };
+  const markingAssembly = new THREE.Group();
+  markingAssembly.name = "technical-markings";
+  consoleGroup.add(markingAssembly);
   const decal = (texture: any, width: number, height: number, x: number, y: number) => {
     const mesh = new THREE.Mesh(
       new THREE.PlaneGeometry(width, height),
       new THREE.MeshBasicMaterial({ map: texture, transparent: true }),
     );
     mesh.position.set(x, y, FACE_Z + 0.02);
-    consoleGroup.add(mesh);
+    mesh.userData.explodeWithParent = "technical-markings";
+    markingAssembly.add(mesh);
     return mesh;
   };
 
@@ -442,19 +505,25 @@ export function createConsoleScene(options: ConsoleSceneOptions): ConsoleScene {
     }),
     2.2, 0.3, -deckX, 2.58,
   );
-  decal(
-    decalTexture(380, 200, (c) => {
-      c.fillStyle = "#c3cbd9";
-      for (let row = 0; row < 3; row += 1) {
-        for (let col = 0; col < 7; col += 1) {
-          c.beginPath();
-          c.arc(46 + col * 48, 52 + row * 48, 9, 0, Math.PI * 2);
-          c.fill();
-        }
-      }
-    }),
-    1.9, 1.0, deckX + 0.35, -2.25,
-  );
+  const speakerGeometry = new THREE.CylinderGeometry(0.055, 0.055, 0.045, 16);
+  const speakerMaterial = new THREE.MeshStandardMaterial({
+    color: "#b7c0ce", roughness: 0.78, metalness: 0,
+  });
+  const speakerGrid = new THREE.InstancedMesh(speakerGeometry, speakerMaterial, 20);
+  speakerGrid.name = "speaker-array";
+  const speakerDot = new THREE.Object3D();
+  let speakerIndex = 0;
+  for (let row = 0; row < 4; row += 1) {
+    for (let col = 0; col < 5; col += 1) {
+      speakerDot.position.set(deckX - 0.04 + col * 0.21, -2.52 + row * 0.2, FACE_Z + 0.03);
+      speakerDot.rotation.set(Math.PI / 2, 0, 0);
+      speakerDot.updateMatrix();
+      speakerGrid.setMatrixAt(speakerIndex, speakerDot.matrix);
+      speakerIndex += 1;
+    }
+  }
+  speakerGrid.instanceMatrix.needsUpdate = true;
+  consoleGroup.add(speakerGrid);
 
   // Two status LEDs on the top-right of the face: power is always lit, the cartridge one
   // comes up as a card seats. Driven from the loop by reading the cartridge states — the
@@ -468,11 +537,15 @@ export function createConsoleScene(options: ConsoleSceneOptions): ConsoleScene {
     color: CONSOLE_ACCENTS.periwinkle, emissive: CONSOLE_ACCENTS.periwinkle, emissiveIntensity: 0.12,
     roughness: 0.4,
   });
+  const statusLensAssembly = new THREE.Group();
+  statusLensAssembly.name = "status-lenses";
+  consoleGroup.add(statusLensAssembly);
   [powerLedMat, cartLedMat].forEach((material, index) => {
     const led = new THREE.Mesh(ledGeometry, material);
     led.rotation.x = Math.PI / 2;
     led.position.set(BODY_W / 2 - 1.05 + index * 0.34, 2.58, FACE_Z + 0.04);
-    consoleGroup.add(led);
+    led.userData.explodeWithParent = "status-lenses";
+    statusLensAssembly.add(led);
   });
 
   // Non-functional stick caps below the controls, matching the render's silhouette.
@@ -490,9 +563,20 @@ export function createConsoleScene(options: ConsoleSceneOptions): ConsoleScene {
     group.add(base, stalk, cap);
     group.position.set(x, -1.72, FACE_Z + 0.02);
     consoleGroup.add(group);
+    return group;
   };
-  buildStick(-deckX + 0.85);
-  buildStick(deckX - 0.85);
+  const leftStick = buildStick(-deckX + 0.85);
+  leftStick.name = "analog-left";
+  const rightStick = buildStick(deckX - 0.85);
+  rightStick.name = "analog-right";
+  const leftControlAssembly = new THREE.Group();
+  leftControlAssembly.name = "left-control-cluster";
+  consoleGroup.add(leftControlAssembly);
+  leftControlAssembly.add(dpadAssembly, leftStick);
+  const rightControlAssembly = new THREE.Group();
+  rightControlAssembly.name = "right-control-cluster";
+  consoleGroup.add(rightControlAssembly);
+  rightControlAssembly.add(faceButtonAssembly, rightStick, statusLensAssembly, speakerGrid);
 
   // ── cartridges ────────────────────────────────────────────────────────────
   /** Switch-style: a thick card with a clipped **top-right** corner, as in the render. */
@@ -594,6 +678,7 @@ export function createConsoleScene(options: ConsoleSceneOptions): ConsoleScene {
     label.position.z = CART_D / 2 + 0.04;
 
     const group = new THREE.Group();
+    group.name = `cartridge-${spec.id}`;
     group.add(mesh, label);
     group.position.set(RACK_X + index * RACK_STEP, -BODY_H / 2 + CART_H / 2 + 0.3, index * -0.34);
     group.rotation.set(0, RACK_LEAN, 0.02);
@@ -619,9 +704,13 @@ export function createConsoleScene(options: ConsoleSceneOptions): ConsoleScene {
    * itself before the reader has to guess.
    */
   const SLOT_Z = -0.12;
+  const cartridgeAssembly = new THREE.Group();
+  cartridgeAssembly.name = "cartridge-assembly";
+  consoleGroup.add(cartridgeAssembly);
   const slotGroup = new THREE.Group();
+  slotGroup.name = "cartridge-slot";
   slotGroup.position.set(0, BODY_H / 2, SLOT_Z);
-  consoleGroup.add(slotGroup);
+  cartridgeAssembly.add(slotGroup);
 
   const slotLip = new THREE.Mesh(
     new RoundedBoxGeometry(CART_W + 0.46, 0.3, CART_D + 0.42, 4, 0.1),
@@ -667,6 +756,80 @@ export function createConsoleScene(options: ConsoleSceneOptions): ConsoleScene {
   // as jammed rather than loaded.
   const slotSeatedPoint = new THREE.Vector3(0, BODY_H / 2 - CART_H * 0.16, SLOT_Z);
   const SNAP_RANGE = 3.2;
+
+  // `img2threejs` assembly contract: the same semantic part table powers picking,
+  // action metadata and a reversible exploded view for structural inspection.
+  const runtimeNodes: Record<string, any> = {
+    root: consoleGroup,
+    "shell-front": body,
+    "shell-seam": seam,
+    "display-module": displayAssembly,
+    "screen-bezel": bezelFrame,
+    "screen-aperture": screenWell,
+    "left-control-cluster": leftControlAssembly,
+    "dpad-well": dish,
+    dpad: dpadAssembly,
+    "analog-left": leftStick,
+    "right-control-cluster": rightControlAssembly,
+    "face-buttons": faceButtonAssembly,
+    "status-lenses": statusLensAssembly,
+    "analog-right": rightStick,
+    "speaker-array": speakerGrid,
+    "utility-buttons": utilityAssembly,
+    "cartridge-assembly": cartridgeAssembly,
+    "cartridge-slot": slotGroup,
+    "cartridge-night-tide": cartridgeList.find((item) => item.spec.id === "night-tide")?.group,
+    "shoulder-left-outer": pressables.find((item) => item.id === "l2")?.mesh,
+    "shoulder-left-inner": pressables.find((item) => item.id === "l1")?.mesh,
+    "shoulder-right-inner": pressables.find((item) => item.id === "r1")?.mesh,
+    "shoulder-right-outer": pressables.find((item) => item.id === "r2")?.mesh,
+    "technical-markings": markingAssembly,
+  };
+  const explodable = Object.entries(runtimeNodes)
+    .filter(([id, node], index, entries) =>
+      id !== "root" && node && entries.findIndex(([, candidate]) => candidate === node) === index)
+    .map(([id, node], index) => ({ id, node, index, base: node.position.clone() }));
+  consoleGroup.userData.sculptRuntime = {
+    nodes: runtimeNodes,
+    sockets: {
+      cartridgeSeat: {
+        position: slotSeatedPoint.clone(),
+        axis: new THREE.Vector3(0, 1, 0),
+        gapTolerance: 0.01,
+      },
+    },
+    colliders: {
+      body: { type: "box", size: [BODY_W, BODY_H, BODY_D] },
+      screen: { type: "box", size: [SCREEN_W, SCREEN_H, 0.12] },
+      cartridge: { type: "box", size: [CART_W, CART_H, CART_D] },
+    },
+    destructionGroups: {
+      shell: ["shell-front", "shell-seam"],
+      controls: ["dpad", "analog-left", "face-buttons", "analog-right", "utility-buttons"],
+      cartridge: ["cartridge-slot", "cartridge-night-tide"],
+    },
+    resolvePart(object: any) {
+      let current = object;
+      while (current && current !== consoleGroup) {
+        if (current.userData?.explodeWithParent) return current.userData.explodeWithParent;
+        if (current.name) return current.name;
+        current = current.parent;
+      }
+      return "root";
+    },
+    setExploded(amount = 0) {
+      const distance = THREE.MathUtils.clamp(amount, 0, 1) * 1.35;
+      explodable.forEach(({ node, index, base }) => {
+        const direction = new THREE.Vector3(base.x, base.y, base.z * 0.5);
+        if (direction.lengthSq() < 0.04) {
+          const angle = (index / Math.max(1, explodable.length)) * Math.PI * 2;
+          direction.set(Math.cos(angle), Math.sin(angle), index % 2 ? 0.35 : -0.35);
+        }
+        direction.normalize().multiplyScalar(distance * (1 + index * 0.018));
+        node.position.copy(base).add(direction);
+      });
+    },
+  };
 
   // ── camera framing ────────────────────────────────────────────────────────
   const leftEdge = -BODY_W / 2 - 0.5;

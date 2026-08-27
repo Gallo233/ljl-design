@@ -75,7 +75,7 @@ export const LAB_ITEMS: LabItem[] = [
     status: "RETIRED",
     tag: "INTERACTION",
     summary:
-      "The site's first entrance: a particle prologue and a knock-the-door QTE in front of a peephole. Retired when the CRT shell became the doorway — but the particle system lives on inside the JOI9000's screen.",
+      "The site's first entrance: a particle prologue and a knock-the-door QTE in front of a peephole. Retired when the CRT shell became the doorway. The particle system moved into the JOI9000's screen and lived there for a while; the terminal now shows an open sea instead.",
     summaryZh:
       "本站的第一版入口：粒子开场，加上猫眼前的敲门 QTE。CRT 外壳成为新的「门」之后退役——但粒子系统活在了 JOI9000 的屏幕里。",
     learned: [

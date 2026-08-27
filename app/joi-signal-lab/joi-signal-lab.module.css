@@ -157,6 +157,8 @@
   cursor: grab;
   outline: none;
   touch-action: pan-y;
+  user-select: none;
+  -webkit-user-select: none;
 }
 .filmCanvasOpenable { cursor: pointer; }
 .filmCanvas:focus-visible {
@@ -438,7 +440,49 @@
 .closingPanelActive > *:nth-child(5) { transition-delay: .28s; }
 .closingPanelActive > *:nth-child(6) { transition-delay: .35s; }
 
-.aboutPanel { max-width: min(92vw, 960px); }
+.aboutPanel {
+  right: auto;
+  left: clamp(34px, 6vw, 96px);
+  bottom: clamp(72px, 11svh, 118px);
+  gap: 14px;
+  max-width: min(42vw, 520px);
+}
+
+.aboutPanel h2 {
+  max-width: 12ch;
+  font-size: clamp(34px, 3.3vw, 54px);
+  line-height: .94;
+}
+
+.aboutPanel .closingBody {
+  max-width: 43ch;
+  font-size: clamp(12px, .94vw, 15px);
+  line-height: 1.48;
+}
+
+.aboutPanel .aboutTimeline { gap: 6px; }
+.aboutPanel .aboutTimeline li { padding-top: 7px; }
+.aboutPanel /* DEAD until the per-object copy lands: the About panel's chips and
+   timeline were removed with the rest of that section's prose. */
+.interestChips { gap: 6px; }
+.aboutPanel .interestChips li { padding: 5px 9px; font-size: 8px; }
+.aboutPanel .closingActions { gap: clamp(14px, 1.6vw, 24px); }
+
+@media (max-width: 900px) {
+  .aboutPanel {
+    left: clamp(22px, 5vw, 48px);
+    bottom: clamp(70px, 10svh, 100px);
+    max-width: min(68vw, 520px);
+  }
+}
+
+@media (max-width: 600px) {
+  .aboutPanel {
+    right: 20px;
+    left: 20px;
+    max-width: none;
+  }
+}
 
 .aboutTimeline {
   display: grid;
@@ -541,6 +585,33 @@
 }
 
 /*
+ * The Contact scene layer carries one thing: the badge. It sits above the closing
+ * panel rather than under it, because the badge is the only object on this section a
+ * reader can pick up, and it shares `.aboutSceneActive` for the fade so the two
+ * sections appear and leave the same way.
+ */
+.contactScene {
+  position: absolute;
+  inset: 0;
+  z-index: 13;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity .6s ease, visibility 0s linear .6s;
+  pointer-events: none;
+}
+
+/*
+ * Its own active rule rather than sharing `.aboutSceneActive`: at equal specificity the
+ * later rule wins, and `.contactScene` is declared after it, so the shared class was
+ * being overridden by the hidden state it was meant to replace.
+ */
+.contactSceneActive {
+  opacity: 1;
+  visibility: visible;
+  transition: opacity .6s ease;
+}
+
+/*
  * The room is the stage now, not a box on the panel, so what lives on this layer is
  * the label for whatever object the reader is pointing at out in the scene.
  */
@@ -565,6 +636,382 @@
   font-size: 9px;
   letter-spacing: .18em;
   color: var(--coral);
+}
+
+/* JOI record unit — a compact hardware panel opened from the Blender hotspot. */
+/*
+ * The deck console.
+ *
+ * Built against the reference rather than from memory: warm cream cards that float over
+ * the deck, a tan pill for the live speed, serif for anything a person reads and
+ * wide-tracked uppercase for anything the machine says, one big dark play button, and
+ * sleeve cards with the record peeking out behind them.
+ *
+ * Light, not dark. The first pass made these panels near-black and put them over a room
+ * whose walls and desk are already white and whose turntable is already black — three
+ * blacks stacked, and nothing legible. Cream reads against both the room and the deck,
+ * and it is what the reference does for the same reason.
+ *
+ * The layer itself never takes the pointer; only the controls do, because dragging the
+ * empty middle is how the deck is turned.
+ */
+.deckLayer {
+  position: absolute;
+  inset: 0;
+  z-index: 32;
+  pointer-events: none;
+  color: #2b2621;
+  animation: deckLayerIn .28s ease both;
+}
+
+.deckLayer button,
+.deckLayer label,
+.deckLayer section { pointer-events: auto; }
+
+.deckLayer span,
+.deckLayer p {
+  font-family: var(--font-signal-mono), monospace;
+  font-size: 8px;
+  letter-spacing: .18em;
+  color: #6d6157;
+}
+
+/* --- speed, floating at the deck's left shoulder --- */
+.deckSpeed {
+  position: absolute;
+  left: clamp(14px, 5vw, 74px);
+  top: 56%;
+  translate: 0 -50%;
+  display: grid;
+  gap: 9px;
+  padding: 14px 16px 13px;
+  border-radius: 14px;
+  background: #faf6ec;
+  box-shadow: 0 14px 40px rgba(58, 44, 30, .16), 0 1px 0 rgba(255, 255, 255, .9) inset;
+}
+
+.deckSpeed > div {
+  display: flex;
+  padding: 4px;
+  border-radius: 999px;
+  background: #efe7d8;
+}
+
+.deckSpeed button {
+  padding: 8px 17px;
+  border: 0;
+  border-radius: 999px;
+  color: #6d6157;
+  background: transparent;
+  font-family: var(--font-signal-mono), monospace;
+  font-size: 11px;
+  letter-spacing: .04em;
+  cursor: pointer;
+  transition: background .22s ease, color .22s ease;
+}
+
+.deckSpeedOn {
+  color: #fdfaf3 !important;
+  background: #c2a06a !important;
+  box-shadow: 0 2px 8px rgba(140, 108, 60, .34);
+}
+
+/* --- rotate, at the deck's right shoulder --- */
+.deckAside {
+  position: absolute;
+  right: clamp(14px, 5vw, 74px);
+  top: 56%;
+  translate: 0 -50%;
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+}
+
+.deckAside button {
+  width: 54px;
+  height: 54px;
+  border: 0;
+  border-radius: 15px;
+  color: #4a4038;
+  background: #faf6ec;
+  box-shadow: 0 12px 32px rgba(58, 44, 30, .16);
+  font-size: 19px;
+  cursor: pointer;
+}
+
+.deckClose {
+  position: absolute;
+  top: clamp(14px, 3vw, 34px);
+  right: clamp(14px, 5vw, 74px);
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: 50%;
+  color: #4a4038;
+  background: #faf6ec;
+  box-shadow: 0 8px 24px rgba(58, 44, 30, .16);
+  font-size: 21px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.deckTray {
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 268px;
+  pointer-events: none;
+  background: linear-gradient(180deg, rgba(244, 238, 226, 0) 0%, rgba(244, 238, 226, .72) 26%, rgba(244, 238, 226, .95) 52%);
+}
+
+.deckHint {
+  position: absolute;
+  left: 50%;
+  bottom: 232px;
+  margin: 0;
+  translate: -50% 0;
+  white-space: nowrap;
+  color: #4a4038;
+  text-shadow: 0 1px 10px rgba(244, 238, 226, .9);
+}
+
+/* --- the transport bar --- */
+.deckBar {
+  position: absolute;
+  left: 50%;
+  bottom: 146px;
+  translate: -50% 0;
+  width: min(720px, calc(100% - 32px));
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 20px;
+  padding: 13px 22px;
+  border-radius: 16px;
+  background: #faf6ec;
+  box-shadow: 0 18px 52px rgba(58, 44, 30, .18);
+}
+
+.deckNow {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  min-width: 0;
+  padding-right: 20px;
+  border-right: 1px solid rgba(109, 97, 87, .16);
+}
+
+.deckNow i {
+  flex: none;
+  width: 42px;
+  height: 42px;
+  border-radius: 7px;
+  background:
+    radial-gradient(circle at 34% 28%, rgba(255, 255, 255, .5), transparent 58%),
+    linear-gradient(150deg, var(--record-color), #2b2621);
+  box-shadow: 0 3px 10px rgba(58, 44, 30, .22);
+}
+
+.deckNow div { min-width: 0; }
+
+.deckNow strong {
+  display: block;
+  font-family: var(--font-signal-display), Georgia, serif;
+  font-size: 16px;
+  font-weight: 400;
+  letter-spacing: 0;
+  color: #2b2621;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.deckNow span {
+  display: block;
+  font-size: 10px;
+  letter-spacing: .02em;
+  text-transform: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.deckTransport { display: flex; align-items: center; gap: 13px; }
+
+.deckTransport button {
+  width: 26px;
+  height: 26px;
+  border: 0;
+  color: #4a4038;
+  background: transparent;
+  font-size: 12px;
+  cursor: pointer;
+  opacity: .8;
+}
+
+.deckTransport button:hover { opacity: 1; }
+
+.deckPlay {
+  width: 50px !important;
+  height: 50px !important;
+  border-radius: 50%;
+  color: #faf6ec !important;
+  background: #3a2f27 !important;
+  font-size: 15px !important;
+  opacity: 1 !important;
+  box-shadow: 0 8px 20px rgba(58, 44, 30, .3);
+}
+
+.deckSeek { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.deckSeek span { font-size: 10px; letter-spacing: .04em; }
+
+.deckTrack {
+  position: relative;
+  flex: 1;
+  height: 2px;
+  border-radius: 999px;
+  background: rgba(109, 97, 87, .22);
+}
+
+/* The dot rides the end of the fill, the way the reference's handle does. */
+.deckTrack i {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: #3a2f27;
+}
+
+.deckTrack i::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 100%;
+  width: 9px;
+  height: 9px;
+  translate: -50% -50%;
+  border-radius: 50%;
+  background: #3a2f27;
+}
+
+.deckVolume { display: flex; align-items: center; gap: 9px; color: #4a4038; }
+.deckVolume input { width: 74px; accent-color: #3a2f27; }
+
+/* --- the shelf --- */
+.deckShelf {
+  position: absolute;
+  left: 50%;
+  bottom: 26px;
+  translate: -50% 0;
+  width: min(720px, calc(100% - 32px));
+  display: grid;
+  gap: 11px;
+}
+
+.deckShelf > span {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-size: 9px;
+}
+
+.deckShelf > span::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: rgba(109, 97, 87, .22);
+}
+
+.deckShelf > div { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+
+/* Sleeve in front, record peeking out behind it — the reference's nicest detail. */
+.deckShelf button {
+  position: relative;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 54px 1fr;
+  align-items: center;
+  gap: 3px 34px;
+  padding: 0 0 0 0;
+  text-align: left;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+
+.deckShelf i {
+  position: relative;
+  grid-row: span 2;
+  display: grid;
+  place-items: center;
+  width: 54px;
+  height: 54px;
+  border-radius: 4px;
+  background:
+    radial-gradient(circle at 32% 26%, rgba(255, 255, 255, .5), transparent 60%),
+    linear-gradient(150deg, var(--record-color), #2b2621);
+  box-shadow: 0 6px 18px rgba(58, 44, 30, .22);
+  outline: 3px solid #faf6ec;
+  transition: translate .24s ease;
+}
+
+.deckShelf i::before {
+  content: "";
+  position: absolute;
+  right: -19px;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  z-index: -1;
+  background:
+    radial-gradient(circle at 50% 50%, #d8cdb8 0 15%, transparent 16%),
+    repeating-radial-gradient(circle at 50% 50%, #14100d 0 1px, #221c17 1px 3px);
+}
+
+.deckShelf i b {
+  font-family: var(--font-signal-mono), monospace;
+  font-size: 8px;
+  color: rgba(255, 255, 255, .82);
+}
+
+.deckShelf button:hover i,
+.deckSleeveOn i { translate: 0 -3px; }
+.deckSleeveOn i { outline-color: #c2a06a; }
+
+.deckShelf strong {
+  font-family: var(--font-signal-display), Georgia, serif;
+  font-size: 14px;
+  font-weight: 400;
+  color: #2b2621;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.deckShelf button > span { font-size: 8px; }
+
+@keyframes deckLayerIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes musicRecordSpin { to { rotate: 360deg; } }
+
+@media (max-width: 760px) {
+  .deckBar {
+    grid-template-columns: auto 1fr;
+    row-gap: 12px;
+    bottom: 168px;
+  }
+  .deckNow { border-right: 0; padding-right: 0; }
+  .deckSeek, .deckVolume { grid-column: 1 / -1; }
+  .deckShelf > div { grid-template-columns: 1fr; }
+  .deckShelf button:nth-child(n + 2) { display: none; }
+  .deckHint { bottom: 250px; }
+  .deckSpeed, .deckAside { top: auto; bottom: 300px; translate: 0 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .deckLayer { animation: none; }
+  .deckShelf i { transition: none; }
 }
 
 @keyframes roomLabelIn {
@@ -728,13 +1175,18 @@
   text-shadow: -1.5px 0 #ec6549, 1.5px 0 #6592bd, 0 0 12px rgba(255,255,255,.36);
 }
 
+/*
+ * The mark is a square animated GIF, so everything the old CSS oval needed is gone with
+ * it: no gradient, no skew, and no border-radius — the artwork carries its own round
+ * silhouette, and clipping it to an ellipse would cut the corners off the animation.
+ */
 .brand > i {
-  width: clamp(40px, 5vw, 66px);
-  height: clamp(21px, 2.6vw, 34px);
-  border-radius: 50%;
-  background: repeating-linear-gradient(180deg, #e95d43 0 4px, #efb54d 4px 8px, #3b8dbc 8px 12px, #a14e80 12px 16px);
-  box-shadow: -2px 0 rgba(99, 144, 193, .75), 2px 0 rgba(237, 101, 74, .6), 0 0 12px rgba(255,255,255,.18);
-  transform: skewX(-14deg);
+  width: clamp(34px, 4vw, 52px);
+  height: clamp(34px, 4vw, 52px);
+  background: url("/media/brand-mark.gif") center / contain no-repeat;
+  /* The artwork is near-black and the header sits on a near-black stage, so without a
+     little lift the mark disappears into the page. */
+  filter: drop-shadow(0 0 10px rgba(255, 255, 255, .28));
 }
 
 .menu {
@@ -1009,7 +1461,7 @@
   .stage { min-height: 480px; border-width: 2px; border-radius: 16px; }
   .header { height: 82px; padding-inline: 18px; }
   .brand { gap: 10px; font-size: 27px; }
-  .brand > i { width: 40px; height: 22px; }
+  .brand > i { width: 32px; height: 32px; }
   .headerProgress { display: none; }
   .heroCopy {
     top: 100px;

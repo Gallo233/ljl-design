@@ -155,7 +155,8 @@ If you change section boundaries, re-check that deep-linking to each route shows
 One stage `WebGLRenderer`, Three.js **r178**, WebGL2. The scenes are renderer-free modules
 the stage composites:
 
-- `heroScene.ts` — the terminal: GLB, CRT screen material, particle morphs, beam, fog
+- `heroScene.ts` — the terminal: GLB, CRT screen material, beam, fog
+- `oceanScene.ts` — the sea drawn into the terminal's screen: Gerstner cascade, sky, sea states
 - the reel scene, built inside `FilmCanvas` in `JoiSignalLab.tsx`
 - `room3d.ts` — the desk, used twice: as reel frame 05's render target and, separately,
   as the About panel's interactive inset
@@ -352,8 +353,8 @@ The three that used to live here are all answered: 司天监 is out of the reel 
 What is actually open:
 
 1. **Assets the author owns.** `docs/asset-requests.md` is the list, and it is short: a portrait
-   for the badge front, the character art for its holographic back, the internship timeline, the
-   interest copy, four Joi Mobile screenshots, and a reference image for the LAB page's layout.
+   for the badge front, the internship timeline, the interest copy, four Joi Mobile screenshots,
+   and a reference image for the LAB page's layout. The holographic badge-back art has landed.
    Everything ships without them; each has a stable slot to drop into.
 2. **The drafted copy** carries `// COPY-REVIEW` and has not been through the author.
 3. **The post chain's grade** is set to measured defaults driven by scroll. Distortion, grain,

@@ -1,0 +1,1478 @@
+{
+  "targetName": "Basketball",
+  "targetId": "basketball",
+  "schemaVersion": "2.1",
+  "terminologyProfile": {
+    "domain": "real-time procedural Three.js asset",
+    "geometryTerms": [
+      "silhouette",
+      "topology",
+      "primitive",
+      "bevel",
+      "chamfer",
+      "taper",
+      "bend",
+      "boolean cut",
+      "edge loop",
+      "surface normal",
+      "displacement"
+    ],
+    "materialTerms": [
+      "albedo",
+      "baseColor",
+      "roughness",
+      "metalness",
+      "normal map",
+      "bump map",
+      "ambient occlusion",
+      "cavity dirt",
+      "edge wear",
+      "clearcoat"
+    ],
+    "lightingTerms": [
+      "key light",
+      "fill light",
+      "rim light",
+      "HDRI/environment reflection",
+      "contact shadow"
+    ],
+    "descriptionRule": "Use measurable 3D graphics terms. Avoid vague words unless they are paired with concrete geometry/material/shader parameters."
+  },
+  "sourceImage": "/Users/liujialuo/Documents/ljl.design/docs/design-references/room-props/basketball.png",
+  "referenceCamera": {
+    "solved": false,
+    "fovDegrees": 40.0,
+    "aspect": 1.0,
+    "orientation": {
+      "yaw": 0.0,
+      "pitch": 0.0,
+      "roll": 0.0
+    },
+    "positionHint": [
+      0.0,
+      0.0,
+      3.0
+    ],
+    "note": "For likeness work, solve the reference camera (forge/stage1_intake/solve_camera_pose.py) so the review render aligns with the photo and the reference can be projected. Confirm by overlay review."
+  },
+  "suitability": "pass",
+  "scores": {
+    "object_isolation": 3,
+    "silhouette_readability": 3,
+    "depth_inference": 3,
+    "primitive_decomposition": 3,
+    "material_procedurality": 3,
+    "occlusion_risk": 1,
+    "interaction_fit": 3
+  },
+  "preSpecAssessment": {
+    "objectClass": {
+      "primaryType": "basketball",
+      "primaryDomain": "object",
+      "formLanguage": [
+        "geometric",
+        "radial-symmetric",
+        "closed-shell"
+      ],
+      "structureKind": [
+        "monolithic-shell",
+        "surface-relief"
+      ],
+      "motionPotential": [
+        "rolls",
+        "bounces",
+        "spins-about-any-axis"
+      ],
+      "materialFamilies": [
+        "composite-rubber"
+      ],
+      "notes": "Single inflated shell. All structure is surface relief: eight-panel seam layout plus pebble grain."
+    },
+    "complexity": {
+      "tier": "simple",
+      "scores": {
+        "silhouetteComplexity": 1,
+        "componentCount": 1,
+        "hierarchyDepth": 1,
+        "repetitionDensity": 2,
+        "materialLayerCount": 2,
+        "localDetailDensity": 3,
+        "occlusionRisk": 1,
+        "actionReadinessNeed": 2
+      },
+      "estimatedCounts": {
+        "macroComponents": 1,
+        "mesoComponents": 2,
+        "microFeatureGroups": 2,
+        "materialLayers": 2,
+        "repetitionSystems": 1
+      },
+      "reasoning": [
+        "Silhouette is one sphere; every identity feature is surface relief, not outline.",
+        "The eight-panel seam layout is a repetition system, not eight separate parts.",
+        "Read at roughly 60 px on the About stage, so seam contrast matters more than seam depth."
+      ]
+    },
+    "specDepthDecision": {
+      "requiredDepth": "simple",
+      "minimumComponentLevels": [
+        "macro"
+      ],
+      "needsRepetitionSystems": false,
+      "needsMaterialLocalOverrides": false,
+      "needsMultipleReviewViews": true,
+      "needsActionReadyHierarchy": true,
+      "rationale": "Choose simple/moderate/complex/ultra-complex from observed structure, not from a hardcoded domain."
+    },
+    "unknownsToResolveBeforeImplementation": [],
+    "detailInventory": {
+      "scanMethod": "component-zones",
+      "targetMinDetails": 3,
+      "note": "Enumerate every identity-defining small detail before authoring the spec. Each detail must map to a component.localFeatures entry or material.localOverrides entry, never prose only. Use forge/stage1_intake/build_detail_inventory.py to scan zones.",
+      "details": [
+        {
+          "id": "seam-channels",
+          "kind": "seam",
+          "region": [
+            0.12,
+            0.08,
+            0.78,
+            0.72
+          ],
+          "affects": [
+            "geometry",
+            "albedo"
+          ],
+          "scale": 0.02,
+          "evidenceRef": "docs/design-references/room-props/basketball.png",
+          "confidence": 0.95,
+          "mapsTo": {
+            "ref": "ball-shell/seam-grooves"
+          }
+        },
+        {
+          "id": "pebble-grain",
+          "kind": "ridge",
+          "region": [
+            0.1,
+            0.06,
+            0.8,
+            0.76
+          ],
+          "affects": [
+            "normal",
+            "roughness"
+          ],
+          "scale": 0.004,
+          "evidenceRef": "docs/design-references/room-props/basketball.png",
+          "confidence": 0.85,
+          "mapsTo": {
+            "ref": "ball-shell/pebble-grain"
+          }
+        },
+        {
+          "id": "upper-sheen",
+          "kind": "gloss",
+          "region": [
+            0.24,
+            0.06,
+            0.48,
+            0.3
+          ],
+          "affects": [
+            "roughness"
+          ],
+          "scale": 0.3,
+          "evidenceRef": "docs/design-references/room-props/basketball.png",
+          "confidence": 0.7,
+          "mapsTo": {
+            "ref": "leather/upper-sheen"
+          }
+        }
+      ]
+    },
+    "anatomy": {
+      "applies": false,
+      "styleHeads": 0.0,
+      "proportions": {
+        "headUnit": 0.0,
+        "torso": 0.0,
+        "legs": 0.0,
+        "shoulderWidth": 0.0,
+        "hipWidth": 0.0
+      },
+      "pose": {
+        "type": "unassessed",
+        "jointAngles": {}
+      },
+      "faceLandmarks": {
+        "eyeLine": 0.0,
+        "eyeSpacing": 0.0,
+        "noseBase": 0.0,
+        "mouthLine": 0.0,
+        "hairline": 0.0
+      },
+      "features": [],
+      "confidence": 0.0,
+      "note": "Only meaningful when objectClass.primaryDomain is character or hybrid. Set applies=true and fill from forge/stage1_intake/extract_landmarks.py. See grimoire/character/reconstruction.md and grimoire/character/likeness_maximization.md."
+    },
+    "sourceImage": "/Users/liujialuo/Documents/ljl.design/docs/design-references/room-props/basketball.png"
+  },
+  "qualityContract": {
+    "qualityBar": "simple",
+    "definitionOfDone": [
+      "The rendered model matches the reference silhouette, primary proportions, visible component hierarchy, material response, and most recognizable local features for the selected fidelity tier."
+    ],
+    "minimumSpecDepth": {
+      "macroComponents": 1,
+      "mesoComponents": 0,
+      "microFeatureGroups": 0,
+      "materialLayers": 1,
+      "repetitionSystems": 0,
+      "reviewViewpoints": 2
+    },
+    "featureGroups": [
+      {
+        "id": "overall-silhouette",
+        "name": "Overall silhouette and proportions",
+        "required": true,
+        "qualityCriteria": [
+          "Bounding shape, dominant curves, negative spaces, and scale relationships are explicitly described."
+        ],
+        "evidenceRefs": [
+          "full-object"
+        ],
+        "failureModes": [
+          "model reads as a generic placeholder instead of the reference object",
+          "major proportions are guessed without evidence"
+        ]
+      },
+      {
+        "id": "primary-structure",
+        "name": "Primary structure and hierarchy",
+        "required": true,
+        "qualityCriteria": [
+          "Major parts, joints, seams, contact points, and parent-child relationships are named before code generation."
+        ],
+        "evidenceRefs": [
+          "full-object"
+        ],
+        "failureModes": [
+          "large visible parts are merged into one mesh",
+          "component hierarchy is too shallow for the observed complexity"
+        ]
+      },
+      {
+        "id": "attachment-joint-correctness",
+        "name": "Attachment and joint correctness",
+        "required": true,
+        "qualityCriteria": [
+          "Every visible child appendage, branch, limb, handle, connector, tube, cable, horn, wing, leg, or hinged part has an attachment contract with parent socket, localStart/localEnd, contact type, embed/overlap, and gap tolerance."
+        ],
+        "evidenceRefs": [
+          "full-object"
+        ],
+        "failureModes": [
+          "child part root floats away from the parent",
+          "branch/limb/tube is centered in space instead of pivoting from its root",
+          "parent-child transform mixes world and local coordinates"
+        ]
+      },
+      {
+        "id": "surface-material-response",
+        "name": "Surface material response",
+        "required": true,
+        "qualityCriteria": [
+          "Albedo zones, roughness, normal/bump/displacement intent, cavity dirt, edge wear, and local overrides are specified where visible.",
+          "Important materials define independent albedo, roughness, height/normal, and AO responses instead of reusing one texture for unrelated PBR channels.",
+          "Surface response is decomposed into macro, meso, and micro frequency bands with scale and amplitude tied to object scale."
+        ],
+        "evidenceRefs": [
+          "full-object"
+        ],
+        "failureModes": [
+          "surface looks like flat plastic",
+          "local material variation is missing or not tied to image evidence"
+        ]
+      },
+      {
+        "id": "reference-lookdev",
+        "name": "Reference color, material, and lighting response",
+        "required": true,
+        "qualityCriteria": [
+          "Material-pass names the reference-derived albedo palette, roughness variation, tactile normal/bump/displacement response, and local masks.",
+          "When a source image is available, run reference PBR extraction and require confidence >= 0.7 before treating maps as implementation-ready.",
+          "Lighting-pass names key/fill/rim or environment light, exposure, tone mapping, background, and contact shadow behavior.",
+          "Neutral, grazing-angle, and reference-matched renders prove that surface relief survives relighting and is not painted into albedo."
+        ],
+        "evidenceRefs": [
+          "full-object"
+        ],
+        "failureModes": [
+          "model has acceptable shape but reads as flat shaded or plastic",
+          "colors are a generic average instead of reference-observed local color zones",
+          "lighting is evenly ambient and cannot reproduce the source value range"
+        ]
+      }
+    ],
+    "visualDeltaChecks": [
+      "silhouette and negative-space delta",
+      "component hierarchy depth delta",
+      "repetition density and distribution delta",
+      "material albedo/roughness/normal response delta",
+      "local feature placement and scale delta"
+    ],
+    "antiShallowSpecRules": [
+      "Do not proceed to code if qualityContract.qualityBar is unassessed.",
+      "Do not proceed to code if the spec only contains a root component for a moderate or complex object.",
+      "Do not proceed to code if required featureGroups are not represented by componentTree, materials, or repetitionSystems.",
+      "Do not proceed to code if visible local features are described only in prose and not attached to components/materials/evidenceRefs.",
+      "Do not proceed past structural-pass if attached child parts lack attachment.parentSocket, localStart, localEnd, embedDepth/overlap, and gapTolerance.",
+      "Do not pass material look-dev when albedo is reused as roughness, height, normal, or AO.",
+      "Do not pass material look-dev without macro, meso, and micro surface frequency bands for close-up materials.",
+      "Do not pass reference-fidelity material look-dev from a source image without usable referencePbr maps or an explicit documented limitation.",
+      "Do not patch a spec with extracted PBR maps when extraction confidence is below the target threshold unless the user explicitly accepts lower fidelity.",
+      "Do not place adjacent separate-geometry parts below 0.02 world-unit seam overlap (source: grimoire/build/geometry_patterns.md).",
+      "Do not satisfy raised or recessed relief, fasteners, or grip structure with a map alone when the feature affects form; use geometry or displacement (source: grimoire/build/geometry_patterns.md).",
+      "Adjacent components must overlap by at least 0.02 world units at shared seams (source: grimoire/build/geometry_patterns.md).",
+      "Raised or recessed relief and fasteners must be geometry, instanced micro-parts, or displacement; a map alone is an approximation (source: grimoire/build/geometry_patterns.md)."
+    ],
+    "mustNotDo": [
+      "Do not proceed to code if qualityContract.qualityBar is unassessed.",
+      "Do not proceed to code if the spec only contains a root component for a moderate or complex object.",
+      "Do not proceed to code if required featureGroups are not represented by componentTree, materials, or repetitionSystems.",
+      "Do not proceed to code if visible local features are described only in prose and not attached to components/materials/evidenceRefs.",
+      "Do not proceed past structural-pass if attached child parts lack attachment.parentSocket, localStart, localEnd, embedDepth/overlap, and gapTolerance.",
+      "Do not pass material look-dev when albedo is reused as roughness, height, normal, or AO.",
+      "Do not pass material look-dev without macro, meso, and micro surface frequency bands for close-up materials.",
+      "Do not pass reference-fidelity material look-dev from a source image without usable referencePbr maps or an explicit documented limitation.",
+      "Do not patch a spec with extracted PBR maps when extraction confidence is below the target threshold unless the user explicitly accepts lower fidelity.",
+      "Do not place adjacent separate-geometry parts below 0.02 world-unit seam overlap (source: grimoire/build/geometry_patterns.md).",
+      "Do not satisfy raised or recessed relief, fasteners, or grip structure with a map alone when the feature affects form; use geometry or displacement (source: grimoire/build/geometry_patterns.md).",
+      "Adjacent components must overlap by at least 0.02 world units at shared seams (source: grimoire/build/geometry_patterns.md).",
+      "Raised or recessed relief and fasteners must be geometry, instanced micro-parts, or displacement; a map alone is an approximation (source: grimoire/build/geometry_patterns.md)."
+    ]
+  },
+  "qualityTargets": {
+    "targetFidelity": 0.7,
+    "mustMatch": [
+      "macro silhouette and proportions",
+      "primary material albedo/roughness response",
+      "reference-derived PBR material response at or above 0.7 confidence when source pixels are usable",
+      "most recognizable local features"
+    ],
+    "niceToHave": [
+      "micro scratches, stains, chips, and dirt masks",
+      "secondary lighting match"
+    ],
+    "fpsTarget": 60,
+    "reviewViewpoints": [
+      "front",
+      "three-quarter",
+      "side",
+      "thickness-axis",
+      "long-axis"
+    ]
+  },
+  "selfCorrectLoop": {
+    "enabled": true,
+    "visualAcceptance": {
+      "reviewer": "ai-vision",
+      "threshold": 0.7,
+      "comparisonArtifactRequired": true,
+      "layerScoresRequired": true,
+      "codePixelDiffIsAcceptanceAuthority": false,
+      "scoringRule": "AI vision must inspect a side-by-side reference/render sheet and score the current pass from 0 to 1. Pixel-diff code may assist diagnostics but cannot approve a pass.",
+      "requiredLayerScores": [
+        "silhouetteProportion",
+        "componentStructure",
+        "formDetail",
+        "materialSurface",
+        "lightingCamera"
+      ],
+      "featureReviewPolicy": {
+        "enabled": true,
+        "reviewUnit": "semantic-subsystem",
+        "maxCriticalFeaturesPerPass": 5,
+        "maxImportantFeaturesPerPass": 3,
+        "criticalDefaultThreshold": 0.8,
+        "importantAverageThreshold": 0.65,
+        "adaptiveEscalation": true,
+        "singleImagePairOnly": true,
+        "selectionRule": "Choose only the most visually salient, identity-defining, user-prioritized, or high-risk semantic systems. Group repeated parts instead of reviewing every mesh. AI vision scores every selected feature from the same full reference/render pair."
+      }
+    },
+    "reviewAfterPasses": [
+      "blockout",
+      "structural-pass",
+      "form-refinement",
+      "material-pass",
+      "surface-pass",
+      "lighting-pass",
+      "interaction-pass",
+      "optimization-pass"
+    ],
+    "allowedActions": [
+      "continue",
+      "refine-spec",
+      "refine-code",
+      "request-input",
+      "stop"
+    ],
+    "specRefineTriggers": [
+      "missing component",
+      "wrong primitive family",
+      "wrong proportions",
+      "material layer under-specified",
+      "local feature not traceable to viewEvidence",
+      "reference ambiguity discovered during implementation"
+    ],
+    "codeRefineTriggers": [
+      "spec is adequate but generated geometry/material does not match",
+      "browser render differs from reference",
+      "performance budget exceeded",
+      "lighting hides geometry or material response"
+    ],
+    "stopCriteria": [
+      "target fidelity reached or user accepts current approximation",
+      "remaining gaps require new reference images or manual art"
+    ],
+    "screenshotPolicy": {
+      "requiredForPasses": [
+        "blockout",
+        "structural-pass",
+        "form-refinement",
+        "material-pass",
+        "surface-pass",
+        "lighting-pass",
+        "interaction-pass"
+      ],
+      "preferredCapture": "in-app-browser-screenshot",
+      "fallbackCapture": "user-supplied-screenshot-path",
+      "minimumEvidence": "Each visual pass needs a reference image, rendered screenshot, side-by-side comparison sheet, AI vision score, layer scores, and critique before choosing continue.",
+      "reviewPairRule": "Compare the same camera/viewpoint whenever possible; do not judge a front reference against a random render angle.",
+      "acceptanceAuthority": "AI vision review of the comparison sheet. Code-generated pixel similarity is not sufficient evidence."
+    }
+  },
+  "featureReviewTargets": [
+    {
+      "id": "overall-silhouette",
+      "name": "Overall silhouette and proportion system",
+      "tier": "critical",
+      "passIds": [
+        "blockout"
+      ],
+      "minimumScore": 0.8,
+      "mustPass": true,
+      "componentRefs": [
+        "root"
+      ],
+      "evidenceRefs": [
+        "full-object"
+      ]
+    },
+    {
+      "id": "primary-structure",
+      "name": "Primary identity-defining structure",
+      "tier": "critical",
+      "passIds": [
+        "structural-pass",
+        "form-refinement"
+      ],
+      "minimumScore": 0.8,
+      "mustPass": true,
+      "componentRefs": [
+        "root"
+      ],
+      "evidenceRefs": [
+        "full-object"
+      ]
+    },
+    {
+      "id": "reference-material-system",
+      "name": "Primary reference material and surface response",
+      "tier": "critical",
+      "passIds": [
+        "material-pass",
+        "surface-pass"
+      ],
+      "minimumScore": 0.75,
+      "mustPass": true,
+      "componentRefs": [
+        "root"
+      ],
+      "evidenceRefs": [
+        "full-object"
+      ]
+    }
+  ],
+  "sculptPipeline": {
+    "passGateMode": "locked-sequential",
+    "passOrder": [
+      "blockout",
+      "structural-pass",
+      "form-refinement",
+      "material-pass",
+      "surface-pass",
+      "lighting-pass",
+      "interaction-pass",
+      "optimization-pass"
+    ],
+    "currentPass": "structural-pass",
+    "completedPasses": [
+      "blockout"
+    ],
+    "lastCompletedPass": "blockout",
+    "blockedReason": "",
+    "nextRequiredEvidence": [
+      "Macro, meso, and repeated structures meet qualityContract.minimumSpecDepth.",
+      "Parent-child relations, joints, seams, sockets, and contact points are explicit.",
+      "Every attached child appendage/connector has parentSocket, localStart/localEnd, contactType, embedDepth or overlap, and gapTolerance.",
+      "AI vision comparison score meets selfCorrectLoop.visualAcceptance.threshold.",
+      "attachment contracts for child appendages/connectors",
+      "no floating child roots/joints in the browser screenshot",
+      "browser render screenshot from your agent's browser/screenshot tool",
+      "single side-by-side full reference/render comparison sheet",
+      "all critical semantic feature scores at or above their thresholds",
+      "self-correction review appended with action=continue before the next pass"
+    ]
+  },
+  "lookDevTargets": {
+    "qualityPriority": "reference-fidelity",
+    "materialPass": {
+      "albedoPaletteRequired": true,
+      "roughnessVariationRequired": true,
+      "normalOrBumpRequired": true,
+      "localOverridesRequired": true,
+      "minimumTextureResolution": 1024,
+      "preferredTextureResolution": 2048,
+      "independentMapChannels": [
+        "albedo",
+        "roughness",
+        "height",
+        "normal",
+        "ambient-occlusion"
+      ],
+      "requiredSurfaceFrequencyBands": [
+        "macro",
+        "meso",
+        "micro"
+      ],
+      "geometryReliefRequiredWhenSilhouetteAffected": true,
+      "referencePbrExtraction": {
+        "requiredWhenSourceImagePresent": true,
+        "targetThreshold": 0.7,
+        "stopOnLowConfidence": true,
+        "script": "forge/stage1_intake/extract_pbr_evidence.py",
+        "acceptedLimitation": "single-image extraction is reference-derived inference, not exact photogrammetry"
+      },
+      "mustAvoid": [
+        "single flat albedo per material",
+        "uniform roughness",
+        "albedo texture reused as roughness/height/normal/AO",
+        "single-frequency random noise",
+        "plastic-looking smooth bark, stone, cloth, foliage, or aged material",
+        "local color/detail described only in prose without material masks",
+        "claiming exact PBR recovery when confidence is below the target threshold"
+      ]
+    },
+    "lightingPass": {
+      "requiredTerms": [
+        "key light",
+        "fill light",
+        "rim or environment light",
+        "exposure",
+        "tone mapping",
+        "background",
+        "contact shadow"
+      ],
+      "mustAvoid": [
+        "ambient-only lighting",
+        "flat value range",
+        "missing contact shadow",
+        "reference lighting copied without separating material readability"
+      ]
+    },
+    "screenshotReview": [
+      "Compare albedo palette and local color zones.",
+      "Compare roughness/normal/bump response under light.",
+      "Compare cavity dirt, edge wear, stains, moss, scratches, or other local masks.",
+      "Compare key/fill/rim structure, exposure, tone mapping, background, and contact shadows.",
+      "Capture a neutral-light render to verify material readability without reference lighting.",
+      "Capture a grazing-light close-up to expose flat normals, uniform roughness, tiling, and plastic highlights.",
+      "Capture a reference-matched render from the same camera framing as the source."
+    ]
+  },
+  "actionReadiness": {
+    "contract": "Every macro/meso component should be generated as a stable named Object3D pivot node with a mesh child, action metadata, optional sockets, collider proxy, and destruction metadata.",
+    "defaultRigType": "action-ready-static-rig",
+    "rootMotionNode": "root",
+    "requiredComponentFields": [
+      "id",
+      "parent",
+      "transform",
+      "attachment for child appendages, connectors, limbs, tubes, handles, legs, horns, wings, branches, or cables",
+      "actionProfile.animationRole",
+      "actionProfile.pivot",
+      "actionProfile.collider",
+      "actionProfile.destruction"
+    ],
+    "transformChannels": [
+      "translate",
+      "rotate",
+      "scale",
+      "bend",
+      "twist",
+      "detach",
+      "visibility",
+      "material-state"
+    ],
+    "authoringRules": [
+      "Do not collapse independently movable parts into one mesh.",
+      "Put transforms on component pivot groups, not only on raw meshes.",
+      "For attached child parts, put the pivot at the semantic root/socket and build visible geometry from localStart to localEnd.",
+      "Represent hinge, socket, detachable, and breakable intent even when no animation is implemented yet.",
+      "Use simplified collider proxies for runtime physics instead of visual mesh colliders by default."
+    ],
+    "destructionPolicy": {
+      "defaultBreakable": false,
+      "fractureGroupNaming": "Use stable semantic names such as body-shell, left-hinge, glass-panel, branch-segment.",
+      "debrisStrategy": "Prefer detachable component groups and a small number of procedural fragments over random mesh explosion."
+    }
+  },
+  "assumptions": [],
+  "coordinateFrame": {
+    "front": "the panel facing the reference camera",
+    "up": "world +Y; the ball rests tangent to the floor plane at -Y",
+    "scaleReference": "0.24 m regulation diameter, authored as radius 0.12 in metres"
+  },
+  "silhouette": {
+    "boundingShape": "sphere",
+    "aspectRatios": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "symmetry": "radial about the centre; the seam layout is bilateral about the seam plane",
+    "dominantCurves": [
+      "single constant-curvature outline, no flat spots"
+    ],
+    "negativeSpaces": [],
+    "landmarks": [
+      "seam crossing point",
+      "floor tangent point"
+    ]
+  },
+  "viewEvidence": [
+    {
+      "id": "full-object",
+      "view": "primary",
+      "imageRegion": {
+        "x": 0.0,
+        "y": 0.0,
+        "width": 1.0,
+        "height": 1.0,
+        "units": "normalized"
+      },
+      "observations": [],
+      "confidence": 0.5
+    }
+  ],
+  "componentTree": [
+    {
+      "id": "ball-shell",
+      "name": "Inflated shell",
+      "level": "macro",
+      "role": "body",
+      "importance": 1.0,
+      "confidence": 0.95,
+      "primitive": "sphere",
+      "topologyClass": "continuous-sculpt",
+      "topologyRationale": "One closed constant-curvature surface. Every feature on it is relief, so nothing is assembled and nothing is cut.",
+      "geometryDescriptor": {
+        "topologyIntent": "uv-sphere, 32x24 segments \u2014 enough that the outline stays circular at prop scale",
+        "radius": 0.12,
+        "widthSegments": 32,
+        "heightSegments": 24,
+        "edgeTreatment": {
+          "type": "none",
+          "bevelRadius": 0.0,
+          "segments": 1
+        },
+        "deformationStack": [],
+        "uvStrategy": "spherical, driven from the vertex normal so the seam field is view-stable",
+        "normalStrategy": "smooth vertex normals"
+      },
+      "localFeatures": [
+        {
+          "id": "seam-grooves",
+          "kind": "seam",
+          "description": "Eight-panel layout: two orthogonal great circles plus four curved panel seams, each a groove ~2 mm deep, ~6 mm wide.",
+          "realization": "distance field over the sphere normal, darkening albedo and cutting a shallow groove into the displaced radius"
+        },
+        {
+          "id": "pebble-grain",
+          "kind": "ridge",
+          "description": "Dense pebble bumps across every panel, ~1.5 mm pitch.",
+          "realization": "high-frequency procedural noise on the normal only; never geometry"
+        }
+      ],
+      "colorMaterialRecipe": {
+        "dominantAlbedo": "rgba(169, 82, 44, 1.0)",
+        "secondaryAlbedo": "rgba(23, 16, 13, 1.0)",
+        "materialClass": "rubber",
+        "materialClassConfidence": 0.9,
+        "evidenceRef": "docs/design-references/room-props/basketball.png",
+        "note": "Burnt-orange composite, satin. Seam channels carry the secondary albedo. Roughness 0.82 on the panels, 0.75 in the channels, 0.28 across the upper-front sheen."
+      },
+      "actionProfile": {
+        "animationRole": "free-body prop",
+        "pivot": {
+          "mode": "volumetric-centre",
+          "localPosition": [
+            0,
+            0,
+            0
+          ],
+          "confidence": 0.95
+        },
+        "transformChannels": {
+          "translate": true,
+          "rotate": true,
+          "scale": false,
+          "visibility": true
+        },
+        "sockets": [
+          {
+            "id": "floor-contact",
+            "localPosition": [
+              0,
+              -0.12,
+              0
+            ],
+            "note": "tangent point the room stands it on"
+          },
+          {
+            "id": "shell-surface",
+            "localPosition": [
+              0,
+              0,
+              0
+            ],
+            "note": "seam rings ride the shell's own surface"
+          }
+        ],
+        "collider": {
+          "type": "sphere",
+          "offset": [
+            0,
+            0,
+            0
+          ],
+          "scale": [
+            0.12,
+            0.12,
+            0.12
+          ],
+          "isTrigger": false
+        },
+        "note": "Pivot at the volumetric centre so a roll never wobbles; the About stage only hover-lifts it, but the anchor costs nothing."
+      },
+      "parent": null,
+      "attachment": null,
+      "dimensions": {
+        "width": 0.24,
+        "height": 0.24,
+        "depth": 0.24,
+        "units": "m",
+        "confidence": 0.95
+      },
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0.35,
+          0.6,
+          0.1
+        ]
+      },
+      "material": "leather"
+    },
+    {
+      "id": "seam-ring-equator",
+      "name": "Equatorial seam",
+      "level": "micro",
+      "role": "detail",
+      "importance": 0.6,
+      "confidence": 0.85,
+      "primitive": "torus",
+      "topologyClass": "surface-relief",
+      "topologyRationale": "A groove carved around a continuous shell; modelled as a thin proud ring because a real cut would cost an order of magnitude more triangles than the read is worth.",
+      "geometryDescriptor": {
+        "topologyIntent": "thin ring sitting proud of the shell by the depth of a seam channel",
+        "torusTubeRatio": 0.033,
+        "edgeTreatment": {
+          "type": "none",
+          "bevelRadius": 0.0,
+          "segments": 1
+        },
+        "deformationStack": [],
+        "uvStrategy": "generated procedural coordinates",
+        "normalStrategy": "smooth vertex normals"
+      },
+      "colorMaterialRecipe": {
+        "dominantAlbedo": "rgba(23, 16, 13, 1.0)",
+        "secondaryAlbedo": "rgba(40, 26, 20, 1.0)",
+        "materialClass": "rubber",
+        "materialClassConfidence": 0.85,
+        "evidenceRef": "docs/design-references/room-props/basketball.png",
+        "note": "Near-black channel, slightly less rough than the panels because the moulded groove is smoother than the pebbled field."
+      },
+      "parent": "ball-shell",
+      "attachment": {
+        "parentSocket": "shell-surface",
+        "contactType": "embed",
+        "embedDepth": 0.002,
+        "gapTolerance": 0.0005,
+        "localStart": [
+          0,
+          0,
+          0
+        ],
+        "localEnd": [
+          0,
+          0,
+          0
+        ]
+      },
+      "dimensions": {
+        "width": 0.2667,
+        "height": 0.2667,
+        "depth": 0.2667,
+        "units": "m",
+        "confidence": 0.85
+      },
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ]
+      },
+      "material": "seam-line"
+    },
+    {
+      "id": "seam-ring-meridian",
+      "name": "Meridian seam",
+      "level": "micro",
+      "role": "detail",
+      "importance": 0.6,
+      "confidence": 0.85,
+      "primitive": "torus",
+      "topologyClass": "surface-relief",
+      "topologyRationale": "The orthogonal great circle, same treatment as the equator.",
+      "geometryDescriptor": {
+        "topologyIntent": "thin ring sitting proud of the shell by the depth of a seam channel",
+        "torusTubeRatio": 0.033,
+        "edgeTreatment": {
+          "type": "none",
+          "bevelRadius": 0.0,
+          "segments": 1
+        },
+        "deformationStack": [],
+        "uvStrategy": "generated procedural coordinates",
+        "normalStrategy": "smooth vertex normals"
+      },
+      "colorMaterialRecipe": {
+        "dominantAlbedo": "rgba(23, 16, 13, 1.0)",
+        "secondaryAlbedo": "rgba(40, 26, 20, 1.0)",
+        "materialClass": "rubber",
+        "materialClassConfidence": 0.85,
+        "evidenceRef": "docs/design-references/room-props/basketball.png",
+        "note": "Near-black channel, slightly less rough than the panels because the moulded groove is smoother than the pebbled field."
+      },
+      "parent": "ball-shell",
+      "attachment": {
+        "parentSocket": "shell-surface",
+        "contactType": "embed",
+        "embedDepth": 0.002,
+        "gapTolerance": 0.0005,
+        "localStart": [
+          0,
+          0,
+          0
+        ],
+        "localEnd": [
+          0,
+          0,
+          0
+        ]
+      },
+      "dimensions": {
+        "width": 0.2667,
+        "height": 0.2667,
+        "depth": 0.2667,
+        "units": "m",
+        "confidence": 0.85
+      },
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          1.5708,
+          0,
+          0
+        ]
+      },
+      "material": "seam-line"
+    }
+  ],
+  "materials": [
+    {
+      "id": "leather",
+      "name": "Composite basketball leather",
+      "type": "standard",
+      "shaderModel": "MeshStandardMaterial",
+      "finish": "satin",
+      "baseColor": "#a9522c",
+      "color": "#a9522c",
+      "albedo": {
+        "dominant": "#a9522c",
+        "secondary": [
+          "#8a4526",
+          "#c46a3a"
+        ],
+        "samplingNotes": "De-lit estimate: the reference's #3e1f14 shadow side and #c46a3a key side are one albedo under a warm key with deep falloff."
+      },
+      "colorVariation": {
+        "palette": [
+          "#a9522c",
+          "#8a4526",
+          "#b85f33"
+        ],
+        "pattern": "mottled",
+        "amplitude": 0.08,
+        "heightCorrelation": 0.45
+      },
+      "metalness": {
+        "base": 0.0,
+        "variation": 0.0
+      },
+      "roughness": {
+        "base": 0.82,
+        "variation": 0.06,
+        "map": "/models/props/basketball/leather_roughness.png",
+        "note": "Variance-derived from the reference crop, so it carries surface contrast rather than the scene's key light."
+      },
+      "clearcoat": {
+        "base": 0.0,
+        "variation": 0.0
+      },
+      "textureResolution": 1024,
+      "textureProjection": {
+        "mode": "triplanar",
+        "repeat": [
+          4.0,
+          4.0
+        ],
+        "anisotropy": 4,
+        "texelDensityIntent": "Pebble pitch stays ~1.5 mm in world space regardless of the ball's transform; a spherical UV would pinch the grain at the poles."
+      },
+      "surfaceFrequencyBands": [
+        {
+          "id": "macro",
+          "frequency": 1.0,
+          "amplitude": 0.5,
+          "role": "the eight-panel seam layout \u2014 the only feature that survives at prop scale"
+        },
+        {
+          "id": "meso",
+          "frequency": 12.0,
+          "amplitude": 0.12,
+          "role": "broad albedo mottling across each panel from wear and dust"
+        },
+        {
+          "id": "micro",
+          "frequency": 90.0,
+          "amplitude": 0.04,
+          "role": "pebble grain, normal-only"
+        }
+      ],
+      "localOverrides": [
+        {
+          "id": "seam-darkening",
+          "region": "seam grooves",
+          "baseColor": "#17100d",
+          "roughness": 0.75,
+          "note": "Channel albedo, from the near-black seam pixels in the reference."
+        },
+        {
+          "id": "upper-sheen",
+          "region": "upper-front hemisphere facing the key",
+          "roughness": 0.28,
+          "note": "Broad satin lobe; the only place the reference shows specular."
+        }
+      ],
+      "referencePbr": {
+        "source": "docs/design-references/room-props/basketball.png",
+        "method": "extract_pbr_evidence.py over a 200 px panel crop, with the finish classification overridden by inspection",
+        "usable": true,
+        "confidence": 0.72,
+        "albedoHex": "#a9522c",
+        "roughnessEstimate": 0.82,
+        "metalnessEstimate": 0.0,
+        "note": "analyze_texture.py classified this crop as painted-metal and set clearcoat 1.0. It is composite rubber: no clearcoat, roughness 0.82. The extracted maps are kept, the finish call is not.",
+        "maps": {
+          "albedo": {
+            "path": "public/models/props/basketball/leather_albedo.png",
+            "channel": "rgb",
+            "url": "/models/props/basketball/leather_albedo.png"
+          },
+          "roughness": {
+            "path": "public/models/props/basketball/leather_roughness.png",
+            "channel": "r",
+            "url": "/models/props/basketball/leather_roughness.png"
+          },
+          "height": {
+            "path": "public/models/props/basketball/leather_height.png",
+            "channel": "r",
+            "url": "/models/props/basketball/leather_height.png"
+          },
+          "normal": {
+            "path": "public/models/props/basketball/leather_normal.png",
+            "channel": "rgb",
+            "url": "/models/props/basketball/leather_normal.png"
+          },
+          "ao": {
+            "path": "public/models/props/basketball/leather_ao.png",
+            "channel": "r",
+            "url": "/models/props/basketball/leather_ao.png"
+          }
+        }
+      },
+      "ambientOcclusion": {
+        "intensity": 0.75,
+        "source": "procedural cavity term in the seam channels; the extracted ao map is lit evidence, not a usable mask"
+      },
+      "normal": {
+        "map": "/models/props/basketball/leather_normal.png",
+        "scale": 0.45,
+        "note": "Pebble relief. Derived from the same crop, so its low frequencies carry a little of the key light; at 0.45 that reads as grain rather than as a second light."
+      }
+    },
+    {
+      "id": "seam-line",
+      "name": "Seam channel",
+      "type": "standard",
+      "shaderModel": "MeshStandardMaterial",
+      "finish": "satin",
+      "baseColor": "#17100d",
+      "color": "#17100d",
+      "albedo": {
+        "dominant": "#17100d",
+        "secondary": [
+          "#281a14"
+        ],
+        "samplingNotes": "Near-black channel pixels from the reference, de-lit."
+      },
+      "colorVariation": {
+        "palette": [
+          "#17100d",
+          "#281a14"
+        ],
+        "pattern": "mottled",
+        "amplitude": 0.05,
+        "heightCorrelation": 0.2
+      },
+      "metalness": {
+        "base": 0.0,
+        "variation": 0.0
+      },
+      "roughness": {
+        "base": 0.75,
+        "variation": 0.04,
+        "map": "/models/props/basketball/leather_roughness.png",
+        "note": "Shares the shell's variance map; a moulded channel is smoother than the pebbled field around it."
+      },
+      "ambientOcclusion": {
+        "intensity": 0.9,
+        "source": "procedural crevice term along the ring's contact with the shell"
+      },
+      "textureResolution": 1024,
+      "textureProjection": {
+        "mode": "triplanar",
+        "repeat": [
+          4.0,
+          4.0
+        ],
+        "anisotropy": 4,
+        "texelDensityIntent": "Matches the shell so the channel does not read as a different material scale."
+      },
+      "surfaceFrequencyBands": [
+        {
+          "id": "macro",
+          "frequency": 1.0,
+          "amplitude": 0.2,
+          "role": "the ring itself"
+        },
+        {
+          "id": "meso",
+          "frequency": 10.0,
+          "amplitude": 0.06,
+          "role": "slight albedo variation along the channel"
+        },
+        {
+          "id": "micro",
+          "frequency": 80.0,
+          "amplitude": 0.02,
+          "role": "residual grain carried over from the panels"
+        }
+      ],
+      "referencePbr": {
+        "source": "docs/design-references/room-props/basketball.png",
+        "method": "same crop as the shell; the channel is the darkest cluster in its palette",
+        "usable": true,
+        "confidence": 0.7,
+        "albedoHex": "#17100d",
+        "roughnessEstimate": 0.75,
+        "metalnessEstimate": 0.0,
+        "maps": {
+          "albedo": {
+            "path": "public/models/props/basketball/leather_albedo.png",
+            "channel": "rgb",
+            "url": "/models/props/basketball/leather_albedo.png"
+          },
+          "roughness": {
+            "path": "public/models/props/basketball/leather_roughness.png",
+            "channel": "r",
+            "url": "/models/props/basketball/leather_roughness.png"
+          },
+          "height": {
+            "path": "public/models/props/basketball/leather_height.png",
+            "channel": "r",
+            "url": "/models/props/basketball/leather_height.png"
+          },
+          "normal": {
+            "path": "public/models/props/basketball/leather_normal.png",
+            "channel": "rgb",
+            "url": "/models/props/basketball/leather_normal.png"
+          },
+          "ao": {
+            "path": "public/models/props/basketball/leather_ao.png",
+            "channel": "r",
+            "url": "/models/props/basketball/leather_ao.png"
+          }
+        }
+      }
+    }
+  ],
+  "repetitionSystems": [
+    {
+      "id": "panel-seams",
+      "name": "Eight-panel seam layout",
+      "count": 2,
+      "distribution": "two orthogonal great circles; the four curved panel seams are albedo only at this scale",
+      "realization": "map-only",
+      "buildsGeometry": false,
+      "note": "Built as two torus components rather than instanced meshes: at prop scale only the great circles survive, and two rings cost less than a six-instance system."
+    }
+  ],
+  "buildPasses": [
+    {
+      "id": "blockout",
+      "goal": "Match macro silhouette and proportions.",
+      "componentRefs": [
+        "root"
+      ],
+      "acceptance": [
+        "Silhouette reads correctly without materials.",
+        "Quality contract has named all required macro feature groups before code generation.",
+        "AI vision comparison score meets selfCorrectLoop.visualAcceptance.threshold."
+      ]
+    },
+    {
+      "id": "structural-pass",
+      "goal": "Build the component hierarchy implied by the pre-spec complexity assessment.",
+      "componentRefs": [
+        "root"
+      ],
+      "acceptance": [
+        "Macro, meso, and repeated structures meet qualityContract.minimumSpecDepth.",
+        "Parent-child relations, joints, seams, sockets, and contact points are explicit.",
+        "Every attached child appendage/connector has parentSocket, localStart/localEnd, contactType, embedDepth or overlap, and gapTolerance.",
+        "AI vision comparison score meets selfCorrectLoop.visualAcceptance.threshold."
+      ]
+    },
+    {
+      "id": "form-refinement",
+      "goal": "Refine shape, deformation, bevels, tapers, curves, asymmetry, and visible local geometry.",
+      "componentRefs": [
+        "root"
+      ],
+      "acceptance": [
+        "Important visible forms are represented in component geometryDescriptor, deformations, localFeatures, or repetitionSystems.",
+        "Endpoint-based child parts are rooted at their attachment sockets and do not visibly float away from parents.",
+        "AI vision comparison score meets selfCorrectLoop.visualAcceptance.threshold."
+      ]
+    },
+    {
+      "id": "material-pass",
+      "goal": "Match material color, roughness, bump, and local variation.",
+      "componentRefs": [
+        "root"
+      ],
+      "acceptance": [
+        "Reference-derived albedo palette records dominant, secondary, and accent colors per visible material.",
+        "Each important material defines roughness variation and at least one normal/bump/displacement response.",
+        "Local material overrides, dirt/wear/stains/moss/chips/scratches or equivalent masks are tied to evidenceRefs.",
+        "Thin, transparent, reflective, wet, or fibrous materials document alpha/transmission/clearcoat/metalness/fiber response when relevant.",
+        "Generated preview uses procedural albedo/roughness/bump texture or vertex color variation instead of one flat color.",
+        "Generated preview uses independent PBR maps at 1024px or higher for the quality-first tier.",
+        "If source pixels are available, referencePbr extraction passed at confidence >= 0.7 or the pass is stopped/requesting better references.",
+        "Macro, meso, and micro surface frequency bands are visible at the intended review distance without obvious tiling.",
+        "AI vision comparison score meets selfCorrectLoop.visualAcceptance.threshold."
+      ]
+    },
+    {
+      "id": "surface-pass",
+      "goal": "Add procedural surface locality such as normal/bump/displacement, AO, dirt, stains, chips, grain, moss, scratches, and wear.",
+      "componentRefs": [
+        "root"
+      ],
+      "acceptance": [
+        "Every required material feature group has local overrides or surfaceDetail tied to evidenceRefs.",
+        "A grazing-angle close-up proves that normal/height detail breaks highlights naturally and does not read as smooth plastic.",
+        "AI vision comparison score meets selfCorrectLoop.visualAcceptance.threshold."
+      ]
+    },
+    {
+      "id": "lighting-pass",
+      "goal": "Make material and form readable under neutral turntable lighting plus optional reference lighting.",
+      "componentRefs": [
+        "root"
+      ],
+      "acceptance": [
+        "lightingFromPhoto identifies key light direction/color/intensity, fill light, rim or environment light, and ambient color.",
+        "Exposure, tone mapping, background color/gradient, shadow softness, and contact shadow behavior are specified.",
+        "Lighting does not hide geometry/material gaps and screenshots can be compared fairly to the reference.",
+        "Neutral, grazing, and reference-matched lighting checks distinguish material errors from lighting errors.",
+        "AI vision comparison score meets selfCorrectLoop.visualAcceptance.threshold."
+      ]
+    },
+    {
+      "id": "interaction-pass",
+      "goal": "Make the model ready for future animation, transformation, physics, or destruction.",
+      "componentRefs": [
+        "root"
+      ],
+      "acceptance": [
+        "Macro and movable meso components have stable pivot nodes.",
+        "Sockets, collider proxies, and destruction metadata are present for future runtime actions.",
+        "AI vision comparison score meets selfCorrectLoop.visualAcceptance.threshold."
+      ]
+    },
+    {
+      "id": "optimization-pass",
+      "goal": "Protect runtime performance after visual fidelity is accepted.",
+      "componentRefs": [
+        "root"
+      ],
+      "acceptance": [
+        "Triangle count, draw calls, instancing, LOD strategy, and FPS target are documented or verified.",
+        "Repeated detail is instanced or simplified where possible without breaking silhouette/material believability."
+      ]
+    }
+  ],
+  "visualEvidence": [
+    {
+      "timestamp": "2026-08-25T11:12:12.249900+00:00",
+      "passId": "blockout",
+      "estimatedFidelity": 0.93,
+      "aiVisionScore": 0.93,
+      "visualAcceptanceThreshold": 0.7,
+      "layerScores": {
+        "silhouetteProportion": 0.93,
+        "componentStructure": 0.8,
+        "formDetail": 0.25,
+        "materialSurface": 0.1,
+        "lightingCamera": 0.7
+      },
+      "featureReviews": [
+        {
+          "id": "overall-silhouette",
+          "score": 0.93,
+          "tier": "critical",
+          "notes": "Render outline is a circle of even curvature against the reference's circle; no flat spots, no elongation. Faceting is visible at 16 segments and is a form-pass fix, not a silhouette failure."
+        },
+        {
+          "id": "primary-structure",
+          "score": 0.8,
+          "tier": "critical",
+          "notes": "One shell, as specified. The eight-panel seam layout is not present yet \u2014 it belongs to the structural and form passes."
+        },
+        {
+          "id": "reference-material-system",
+          "score": 0.1,
+          "tier": "critical",
+          "notes": "Blockout: no albedo, no roughness response. Expected at this pass."
+        }
+      ],
+      "referenceScreenshot": "/Users/liujialuo/Documents/ljl.design/docs/design-references/room-props/basketball.png",
+      "renderScreenshot": "/Users/liujialuo/Documents/ljl.design/.next/cache/room-preview/prop-basketball-blockout.png",
+      "comparisonImage": "/Users/liujialuo/Documents/ljl.design/scripts/props/basketball/review/blockout-sheet.png",
+      "cameraView": "3/4 orbit, yaw 0.6 pitch 0.3",
+      "notes": "",
+      "aiVisionNotes": "Blockout gate reads silhouette only; material and form scores are expected low here."
+    }
+  ],
+  "reviewHistory": [
+    {
+      "timestamp": "2026-08-25T11:12:12.249900+00:00",
+      "passId": "blockout",
+      "estimatedFidelity": 0.93,
+      "aiVisionScore": 0.93,
+      "visualAcceptanceThreshold": 0.7,
+      "layerScores": {
+        "silhouetteProportion": 0.93,
+        "componentStructure": 0.8,
+        "formDetail": 0.25,
+        "materialSurface": 0.1,
+        "lightingCamera": 0.7
+      },
+      "featureReviews": [
+        {
+          "id": "overall-silhouette",
+          "score": 0.93,
+          "tier": "critical",
+          "notes": "Render outline is a circle of even curvature against the reference's circle; no flat spots, no elongation. Faceting is visible at 16 segments and is a form-pass fix, not a silhouette failure."
+        },
+        {
+          "id": "primary-structure",
+          "score": 0.8,
+          "tier": "critical",
+          "notes": "One shell, as specified. The eight-panel seam layout is not present yet \u2014 it belongs to the structural and form passes."
+        },
+        {
+          "id": "reference-material-system",
+          "score": 0.1,
+          "tier": "critical",
+          "notes": "Blockout: no albedo, no roughness response. Expected at this pass."
+        }
+      ],
+      "action": "continue",
+      "summary": "Blockout silhouette matches the reference: a single even-curvature circle at the right proportion. Faceting at 16 segments and the missing seam layout belong to the next two passes.",
+      "matched": [
+        "outline curvature,proportion,single closed shell"
+      ],
+      "mismatches": [
+        "16-segment faceting visible on the outline,no seam layout,no albedo"
+      ],
+      "specFixes": [],
+      "codeFixes": [],
+      "evidence": [],
+      "mapStrippedRender": "/Users/liujialuo/Documents/ljl.design/.next/cache/room-preview/prop-basketball-blockout-flat.png",
+      "visualEvidence": {
+        "referenceScreenshot": "/Users/liujialuo/Documents/ljl.design/docs/design-references/room-props/basketball.png",
+        "renderScreenshot": "/Users/liujialuo/Documents/ljl.design/.next/cache/room-preview/prop-basketball-blockout.png",
+        "comparisonImage": "/Users/liujialuo/Documents/ljl.design/scripts/props/basketball/review/blockout-sheet.png",
+        "cameraView": "3/4 orbit, yaw 0.6 pitch 0.3",
+        "notes": "",
+        "aiVisionNotes": "Blockout gate reads silhouette only; material and form scores are expected low here."
+      }
+    }
+  ],
+  "lodPlan": [
+    {
+      "tier": "near",
+      "distance": 0,
+      "strategy": "full component tree and material layers"
+    },
+    {
+      "tier": "far",
+      "distance": 30,
+      "strategy": "merge static components and reduce local feature geometry"
+    }
+  ],
+  "performanceBudget": {
+    "qualityPriority": "reference-fidelity",
+    "targetTriangles": 3200,
+    "maxDrawCalls": 3,
+    "textureSize": 512,
+    "fpsTarget": 60,
+    "optimizationPolicy": "Prop reads at roughly 60 px on the About stage. Spend triangles on the sphere's outline and the seam grooves; everything else is shading."
+  },
+  "lightingFromPhoto": [
+    {
+      "id": "key",
+      "type": "directional",
+      "direction": [
+        -0.55,
+        0.72,
+        0.42
+      ],
+      "colorTemperatureK": 3200,
+      "relativeIntensity": 1.0,
+      "evidence": "warm highlight across the upper-front-left of the shell"
+    },
+    {
+      "id": "bounce",
+      "type": "hemisphere",
+      "direction": [
+        0,
+        -1,
+        0
+      ],
+      "colorTemperatureK": 5200,
+      "relativeIntensity": 0.18,
+      "evidence": "faint cool return along the lower shell from the floor"
+    },
+    {
+      "id": "grade",
+      "type": "exposure",
+      "note": "Scene-linear out, no per-object tone mapping: the About stage renders into a linear target and its post chain owns the single linear-to-sRGB encode. Exposure is carried by the room, not by this prop."
+    },
+    {
+      "id": "ground",
+      "type": "contact shadow",
+      "note": "Contact shadow is the room's, baked into the floor pass; the prop contributes ambient occlusion in its own crevices only and casts no runtime shadow."
+    }
+  ],
+  "proceduralStrategy": [
+    "Block out macro silhouette first.",
+    "Add component hierarchy and joints.",
+    "Create stable pivot groups, sockets, collider proxies, and destruction metadata before visual polish.",
+    "Refine forms with bevels, tapers, bends, and procedural noise.",
+    "Run reference PBR extraction for important source-image materials and stop when confidence is below the target threshold.",
+    "Add material variation before adding expensive micro-geometry."
+  ],
+  "animationAnchors": [
+    "root pivot node supports whole-object translation, rotation, scale, and visibility changes",
+    "component pivot groups support later local transforms without rebuilding geometry"
+  ],
+  "destructionAnchors": [
+    "actionProfile.destruction.fractureGroup marks detachable or breakable component sets",
+    "component seams and sockets define plausible break points instead of random explosions"
+  ],
+  "risks": [],
+  "localSpecSearch": {
+    "collection": "core_3d",
+    "query": "Basketball",
+    "index": {
+      "status": "rebuilt",
+      "reason": "missing",
+      "fingerprint": "6857e5ab528b42ac12f4f411f862610a0bffce8e47aee3610a7603c318072fe8"
+    },
+    "matches": []
+  }
+}
