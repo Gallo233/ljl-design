@@ -160,7 +160,11 @@ export function createConsoleScene(options: ConsoleSceneOptions): ConsoleScene {
   container.appendChild(renderer.domElement);
 
   const onContextLost = (event: Event) => {
-    event.preventDefault();
+    // Deliberately *not* calling preventDefault(). That call is a promise to the
+    // browser that this renderer will rebuild itself on `webglcontextrestored`,
+    // and nothing here listens for that event — the shell folds to the flat DOM
+    // fallback and stays there. Making the promise and not keeping it only costs
+    // the reader the restore the browser would otherwise have driven itself.
     options.onFatal?.();
   };
   renderer.domElement.addEventListener("webglcontextlost", onContextLost);

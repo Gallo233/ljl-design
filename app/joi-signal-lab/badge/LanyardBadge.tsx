@@ -44,6 +44,10 @@ export function LanyardBadge({ active }: { active: boolean }) {
   const [hasBackArt, setHasBackArt] = useState(true);
   const backArtRef = useRef<HTMLImageElement>(null);
   const wakeRef = useRef<() => void>(() => {});
+  // The pointer listeners are window-level and mount once, so they cannot read
+  // the `active` prop directly — it would be whatever it was on mount forever.
+  const activeRef = useRef(active);
+  activeRef.current = active;
 
   // An image that 404s before hydration errors into the void — onError never fires.
   // One post-mount check catches that case; the art appears the moment the author
@@ -238,7 +242,14 @@ export function LanyardBadge({ active }: { active: boolean }) {
       wake();
     };
     const onPointerMove = (event: PointerEvent) => {
-      // The holo layers chase the pointer whether or not a drag is on.
+      // The holo layers chase the pointer whether or not a drag is on — but only
+      // while the badge is on screen. Off About it is `visibility: hidden` and
+      // aria-hidden, and this listener is on the window, so every pointer move
+      // anywhere on the site was measuring a card nobody could see. The read is a
+      // forced layout, interleaved with two style writes; that is a whole-page
+      // thrash bought for an invisible element. A drag still wins, because a drag
+      // that survives the section leaving should still track the hand holding it.
+      if (!dragging && !activeRef.current) return;
       const cardBounds = card.getBoundingClientRect();
       const relX = Math.max(
         0,

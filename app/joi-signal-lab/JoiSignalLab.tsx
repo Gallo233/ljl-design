@@ -1930,6 +1930,12 @@ function FilmCanvas({
       hero.dispose();
       post.dispose();
       renderer.dispose();
+      // `dispose()` releases what Three allocated; the GL context itself lives on
+      // until the canvas is collected. A reader bouncing between the reel and a
+      // project page can outrun the collector and walk into the browser's
+      // per-tab context ceiling, at which point the oldest live context is killed
+      // — which is this one, on the way back.
+      renderer.forceContextLoss();
     };
   }, []);
 
