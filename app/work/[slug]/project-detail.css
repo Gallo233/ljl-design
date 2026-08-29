@@ -671,6 +671,23 @@
 /* ── hover life on the editorial pages ───────────────────────────────────── */
 
 /*
+ * The reveal contract, stated explicitly. The legacy reveal bases that ship with
+ * redesign.css and work-legacy-base.css hide every [data-reveal] element by
+ * default (opacity 0 / .001 + translateY) and wait for an `.is-visible` class
+ * that nothing on this route ever adds — they predate RevealRoot, whose contract
+ * is the opposite: hiding lives in `reveal-armed`, applied by script, and an
+ * element that is not armed is simply visible. Without this rule every block
+ * came back from a reveal to opacity .001, and the title — never armed, since
+ * it starts on screen — rested there from the first paint.
+ * Specificity sits above the legacy `[data-reveal]` rules and excludes armed
+ * elements, so arming, the reveal transitions and the melt states all still run.
+ */
+.project-page [data-reveal]:not(.reveal-armed) {
+  opacity: 1;
+  transform: none;
+}
+
+/*
  * The two figure effects (components/detail-figure-fx.ts) mount canvases into
  * these boxes: the condensation covers the first figure, the hover shadow
  * covers the whole gallery from above. Both are additive; the figures remain
