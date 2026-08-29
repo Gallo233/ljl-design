@@ -106,6 +106,36 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
 
   return (
     <main className={`${fontVariables} project-page project-page--${project.slug}`}>
+      {/*
+       * The alpha threshold the melt reveals re-harden through — the melt shape in
+       * globals.css holds this filter over an element only while its type is soft,
+       * and drops it the moment the melt settles. Zero-size: it only supplies defs.
+       */}
+      <svg
+        className="reveal-fx-defs"
+        aria-hidden="true"
+        focusable="false"
+        role="presentation"
+        width="0"
+        height="0"
+      >
+        <filter
+          id="reveal-melt-threshold"
+          x="-60%"
+          y="-300%"
+          width="220%"
+          height="700%"
+          colorInterpolationFilters="sRGB"
+        >
+          <feComponentTransfer>
+            {/* Alpha below ~0.11 vanishes, above ~0.19 saturates: during the blur
+                most of a glyph's halo is eaten and only its peaks survive, which is
+                what makes the type condense instead of focus. Numbers tuned from the
+                viscose morph (blur 8.5 / cut .33 / gain 400) for these heading sizes. */}
+          <feFuncA type="linear" slope={14} intercept={-1.6} />
+          </feComponentTransfer>
+        </filter>
+      </svg>
       <ProjectJsonLd project={project} />
       {project.slug === "joi" && <PageScrollState />}
       <ArrivalFade />
@@ -128,7 +158,9 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
             <p className="project-detail-kicker">
               {project.index}{project.kind ? ` / ${project.kind}` : ""}
             </p>
-            <h1 data-reveal="clip">{project.title}</h1>
+            <h1 data-reveal="melt">
+              <span className="melt-media">{project.title}</span>
+            </h1>
             {project.tagline && <p className="project-detail-tagline">{project.tagline}</p>}
           </div>
 
@@ -227,15 +259,17 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
         {hasBody && (
           <div className="project-detail-body">
             {hasLoop && (
-              <section className="project-detail-loop" aria-labelledby={`${project.slug}-loop-title`} data-reveal>
+              <section className="project-detail-loop" aria-labelledby={`${project.slug}-loop-title`}>
                 <header>
-                  <p className="project-detail-kicker">THE PRODUCT LOOP</p>
-                  <div>
-                    <h2 id={`${project.slug}-loop-title`}>{project.loopTitle}</h2>
-                    {project.loopTitleZh && <p lang="zh-CN">{project.loopTitleZh}</p>}
+                  <p className="project-detail-kicker" data-reveal>THE PRODUCT LOOP</p>
+                  <div data-reveal="melt">
+                    <div className="melt-media">
+                      <h2 id={`${project.slug}-loop-title`}>{project.loopTitle}</h2>
+                      {project.loopTitleZh && <p lang="zh-CN">{project.loopTitleZh}</p>}
+                    </div>
                   </div>
                 </header>
-                <ol>
+                <ol data-reveal>
                   {project.loop!.map((step) => (
                     <li key={step.index}>
                       <span>{step.index}</span>
@@ -249,12 +283,14 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
             )}
 
             {project.sections?.map((section) => (
-              <section className="project-detail-section" key={section.heading} data-reveal>
-                <div>
-                  <p className="project-detail-kicker">{section.heading}</p>
-                  <h2 lang="zh-CN">{section.headingZh}</h2>
+              <section className="project-detail-section" key={section.heading}>
+                <div data-reveal="melt">
+                  <div className="melt-media">
+                    <p className="project-detail-kicker">{section.heading}</p>
+                    <h2 lang="zh-CN">{section.headingZh}</h2>
+                  </div>
                 </div>
-                <div className="project-detail-section-copy">
+                <div className="project-detail-section-copy" data-reveal>
                   {section.body.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}
                   {section.bodyZh.map((paragraph) => <p lang="zh-CN" key={paragraph}>{paragraph}</p>)}
                 </div>
@@ -287,7 +323,14 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
             {hasNext && (
               <Link className="project-next" href={nextHref!}>
                 <span>NEXT PROJECT</span>
-                <strong>{project.nextTitle}</strong>
+                <strong>
+                  <span className="project-next-title">
+                    <span className="project-next-static">{project.nextTitle}</span>
+                    <span className="project-next-melt" aria-hidden="true">
+                      <span className="melt-media">{project.nextTitle}</span>
+                    </span>
+                  </span>
+                </strong>
               </Link>
             )}
           </div>

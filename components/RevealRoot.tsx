@@ -15,7 +15,16 @@ import { useEffect } from "react";
  * Three ways a block comes back, in order of preference: the observer, a scroll sweep
  * for browsers where the observer is present but silent, and a stranded-in-view timer.
  * A lost animation costs nothing; invisible copy costs everything.
+ *
+ * `data-reveal="melt"` blocks run one state further. Their shape keeps an SVG alpha
+ * threshold over the element while the type is soft, and the threshold must come off
+ * once the melt lands — it would otherwise stamp the settled glyphs. So reveal moves
+ * them armed → melting → settled: melting runs the un-blur under the threshold,
+ * settled (a timer past the animation's worst-case end, delay included) clears every
+ * class and the filter with them. The CSS in globals.css owns what each state means.
  */
+const MELT_SETTLE_MS = 1400;
+
 export function RevealRoot() {
   useEffect(() => {
     const targets = Array.from(document.querySelectorAll<HTMLElement>("[data-reveal]"));
@@ -23,7 +32,23 @@ export function RevealRoot() {
 
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
 
-    const reveal = (target: Element) => target.classList.remove("reveal-armed");
+    const settlers = new Set<number>();
+    // Observer callbacks hand back Element; everything armed here is an HTMLElement
+    // by construction, so the melt state machine narrows once at the top.
+    const reveal = (target: Element) => {
+      const el = target as HTMLElement;
+      el.classList.remove("reveal-armed");
+      if (el.dataset.reveal === "melt" && !el.classList.contains("reveal-settled")) {
+        el.classList.add("reveal-melting");
+        const id = window.setTimeout(() => {
+          el.classList.remove("reveal-melting");
+          el.classList.add("reveal-settled");
+          settlers.delete(id);
+        }, MELT_SETTLE_MS);
+        settlers.add(id);
+      }
+    };
+
     const armed: HTMLElement[] = [];
 
     targets.forEach((target) => {
@@ -75,6 +100,7 @@ export function RevealRoot() {
     }, 3000);
 
     return () => {
+      settlers.forEach((id) => window.clearTimeout(id));
       window.clearTimeout(failsafe);
       window.removeEventListener("scroll", sweep);
       observer.disconnect();
