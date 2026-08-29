@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { DRACOLoader } from "three/examples/jsm/loaders/DRACOLoader.js";
 import { ROOM_OBJECTS, type RoomObjectId } from "./roomObjects";
+import { ROOM_BOOKS } from "./roomBooks";
 import { retireCapturedDeck } from "./roomPlatter";
 import { createRoomTerminal, type RoomTerminalRig } from "./roomTerminal";
 import { createRoomProps, type RoomPropId } from "./roomProps";
@@ -517,8 +518,16 @@ export function createRoomScene(filmSources?: RoomFilmSources): RoomScene {
   scene.add(props.group);
 
   /** The shelf books that answer the reading timeline. */
-  const bookRigs: Map<number, { nodes: any[]; homes: any[]; direction: any; progress: number }> = new Map();
+  /** The shelf books that answer the reading timeline — our meshes, not the bake's. */
+  const dataBooks: Map<
+    number,
+    { mesh: any; spineMaterial: any; home: any; progress: number; hoverProgress: number }
+  > = new Map();
   let selectedBook: number | null = null;
+  let hoverBook: number | null = null;
+  /** Out of the wall, into the room: the capture's shelf stands on x ≈ 1.78. */
+  const PULL_DIRECTION = new THREE.Vector3(1, 0, 0);
+  const dataBookMeshes: any[] = [];
 
   const disposeObject = (root: any) => {
     const geometries = new Set<any>();
@@ -873,36 +882,99 @@ export function createRoomScene(filmSources?: RoomFilmSources): RoomScene {
       });
 
       /*
-       * The reading timeline's half of the deal: remember where every shelved book
-       * sits, and which way "out of the rack" is. Outward is horizontal, away from the
-       * shelf's own centre — which puts the slide into the room no matter which wall
-       * the capture stands the shelf against.
+       * The reading timeline's books are ours, not the bake's. Every capture book with
+       * a data volume behind it is hidden and a real mesh stands in at the same world
+       * pose — sized from the captured book's own bounds, coloured and titled from
+       * roomBooks.ts, pullable, hoverable, clickable. Books without data (9, 10) keep
+       * their captured meshes.
        */
-      const shelfCentre = new THREE.Vector3();
-      const bookCentres: { index: number; centre: any; nodes: any[]; homes: any[] }[] = [];
-      for (let index = 1; index <= 10; index += 1) {
-        const nodes = [`book${index}`, `book${index} outer`]
+      const hiddenBooks: any[] = [];
+      for (const book of ROOM_BOOKS) {
+        const captured = [`book${book.nodeIndex}`, `book${book.nodeIndex} outer`]
           .map((name) => model.getObjectByName(name))
           .filter(Boolean);
-        if (nodes.length === 0) continue;
-        const centre = new THREE.Vector3();
+        if (captured.length === 0) {
+          if (process.env.NODE_ENV !== "production") {
+            console.warn(`[about-room] no captured mesh for data book "${book.id}"`);
+          }
+          continue;
+        }
         const bounds = new THREE.Box3();
-        nodes.forEach((node: any) => {
+        captured.forEach((node: any) => {
           node.updateWorldMatrix(true, false);
           bounds.expandByObject(node);
         });
-        bounds.getCenter(centre);
-        shelfCentre.add(centre);
-        bookCentres.push({ index, centre, nodes, homes: nodes.map((node: any) => node.position.clone()) });
-      }
-      if (bookCentres.length > 0) {
-        shelfCentre.multiplyScalar(1 / bookCentres.length);
-        bookCentres.forEach(({ index, centre, nodes, homes }) => {
-          const direction = new THREE.Vector3(centre.x - shelfCentre.x, 0, centre.z - shelfCentre.z);
-          if (direction.lengthSq() < 0.0001) direction.set(1, 0, 0);
-          direction.normalize();
-          bookRigs.set(index, { nodes, homes, direction, progress: 0 });
+        const size = bounds.getSize(new THREE.Vector3());
+        const centre = bounds.getCenter(new THREE.Vector3());
+        const quaternion = new THREE.Quaternion();
+        captured[0].getWorldQuaternion(quaternion);
+
+        captured.forEach((node: any) => {
+          node.visible = false;
+          hiddenBooks.push(node);
         });
+
+        const spineCanvas = document.createElement("canvas");
+        spineCanvas.width = 96;
+        spineCanvas.height = 512;
+        const spineCtx = spineCanvas.getContext("2d");
+        if (spineCtx) {
+          spineCtx.fillStyle = book.cover;
+          spineCtx.fillRect(0, 0, 96, 512);
+          spineCtx.fillStyle = book.accent;
+          spineCtx.fillRect(0, 0, 96, 14);
+          spineCtx.fillRect(0, 498, 96, 14);
+          spineCtx.save();
+          spineCtx.translate(48, 40);
+          spineCtx.fillStyle = book.ink;
+          spineCtx.textAlign = "center";
+          spineCtx.textBaseline = "top";
+          const titleChars = [...book.title];
+          const charStep = Math.min(44, Math.floor(400 / Math.max(1, titleChars.length)));
+          spineCtx.font = `600 ${Math.min(34, charStep + 6)}px "IBM Plex Mono", monospace`;
+          titleChars.forEach((char, index) => {
+            spineCtx.fillText(char, 0, index * charStep);
+          });
+          spineCtx.restore();
+        }
+        const spineTexture = new THREE.CanvasTexture(spineCanvas);
+        spineTexture.colorSpace = THREE.SRGBColorSpace;
+        const spineMaterial = new THREE.MeshStandardMaterial({
+          map: spineTexture,
+          roughness: 0.62,
+          emissive: new THREE.Color(0xed654a),
+          emissiveIntensity: 0,
+        });
+        const coverMaterial = new THREE.MeshStandardMaterial({
+          color: new THREE.Color(book.cover),
+          roughness: 0.62,
+        });
+        // Box face order: +x (the spine, facing the room), -x, +y, -y, +z, -z.
+        const bookMesh = new THREE.Mesh(
+          new THREE.BoxGeometry(size.x * 0.94, size.y * 0.96, size.z * 0.94),
+          [spineMaterial, coverMaterial, coverMaterial, coverMaterial, coverMaterial, coverMaterial],
+        );
+        bookMesh.name = `data-book-${book.id}`;
+        bookMesh.position.copy(centre);
+        bookMesh.quaternion.copy(quaternion);
+        bookMesh.userData.roomObject = "bookshelf";
+        bookMesh.userData.roomBook = book.nodeIndex;
+        baseRoot.add(bookMesh);
+        interactiveMeshes.push(bookMesh);
+        dataBookMeshes.push(bookMesh);
+        dataBooks.set(book.nodeIndex, {
+          mesh: bookMesh,
+          spineMaterial,
+          home: centre.clone(),
+          progress: 0,
+          hoverProgress: 0,
+        });
+      }
+      // The hidden capture books must not keep answering raycasts meant for ours.
+      if (hiddenBooks.length > 0) {
+        for (let i = interactiveMeshes.length - 1; i >= 0; i -= 1) {
+          if (hiddenBooks.includes(interactiveMeshes[i])) interactiveMeshes.splice(i, 1);
+        }
       }
 
       // The practical glows sit at coordinates measured off this capture
@@ -1025,14 +1097,16 @@ export function createRoomScene(filmSources?: RoomFilmSources): RoomScene {
       });
     });
 
-    // The reading timeline's half: the selected volume eases out of the rack. This
-    // rides on top of the hover pass above, which owns position every frame.
-    bookRigs.forEach((rig, index) => {
-      const target = selectedBook === index ? 1 : 0;
-      rig.progress += (target - rig.progress) * (reducedMotion ? 1 : Math.min(1, delta * 7));
-      rig.nodes.forEach((node, nodeIndex) => {
-        node.position.copy(rig.homes[nodeIndex]).addScaledVector(rig.direction, rig.progress * 0.9);
-      });
+    // The reading timeline's half: the selected volume slides out of the rack (+X,
+    // out of the wall the shelf stands on), a hovered one peeks. This rides on top of
+    // the hover pass above, which owns position every frame.
+    dataBooks.forEach((book, index) => {
+      const selectTarget = selectedBook === index ? 1 : 0;
+      const hoverTarget = hoverBook === index ? 1 : 0;
+      book.progress += (selectTarget - book.progress) * (reducedMotion ? 1 : Math.min(1, delta * 7));
+      book.hoverProgress += (hoverTarget - book.hoverProgress) * (reducedMotion ? 1 : Math.min(1, delta * 10));
+      book.mesh.position.copy(book.home).addScaledVector(PULL_DIRECTION, book.progress * 1.4 + book.hoverProgress * 0.25);
+      book.spineMaterial.emissiveIntensity = book.hoverProgress * 0.35;
     });
 
     /*
@@ -1211,9 +1285,16 @@ export function createRoomScene(filmSources?: RoomFilmSources): RoomScene {
       orbitDistance = defaultDistance();
     },
     orbitDistance: () => distanceCurrent,
-    // Filled in with the data books (roomBooks.ts); absent until then.
-    bookAt: () => null,
-    setHoverBook: () => {},
+    // Which data book sits under this point, if any.
+    bookAt: (ndc) => {
+      if (!loaded || dataBookMeshes.length === 0) return null;
+      fullCamera.updateMatrixWorld();
+      pointerNdc.set(ndc.x, ndc.y);
+      raycaster.setFromCamera(pointerNdc, fullCamera);
+      const hit = raycaster.intersectObjects(dataBookMeshes, false)[0]?.object;
+      return (hit?.userData.roomBook as number | undefined) ?? null;
+    },
+    setHoverBook: (nodeIndex) => { hoverBook = nodeIndex; },
     setFilmHandoff: (progress, projectIndex) => {
       handoffProgress = THREE.MathUtils.clamp(progress, 0, 1);
       if (handoffMaterial) handoffMaterial.uniforms.uActiveFrame.value = projectIndex;
@@ -1284,6 +1365,15 @@ export function createRoomScene(filmSources?: RoomFilmSources): RoomScene {
         glow.material.dispose();
       });
       screenMaterials.forEach((material) => material.dispose());
+      dataBooks.forEach((book) => {
+        const materials = Array.isArray(book.mesh.material) ? book.mesh.material : [book.mesh.material];
+        materials.forEach((material: any) => {
+          material.map?.dispose();
+          material.dispose();
+        });
+        book.mesh.geometry.dispose();
+      });
+      dataBooks.clear();
       if (model) disposeObject(model);
       handoffGeometry?.dispose();
       handoffMaterial?.dispose();
