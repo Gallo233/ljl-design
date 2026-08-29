@@ -568,6 +568,24 @@
   width: 100%;
 }
 
+/*
+ * The fallback's positioning context. The shell's joi-embed.css makes
+ * `.joi-experience` relative with a tall stage, but that sheet is injected by
+ * JoiWebEmbed only when a broker is configured — with no broker the wrapper
+ * used to be static at zero height, and the fallback's `inset: 0` escaped to
+ * the document, painting an opaque full-viewport panel over the hero. The
+ * page owns the no-broker geometry so "the rest of the page is unaffected"
+ * is actually true; when the shell does load, its own sheet and inline
+ * geometry take the wrapper back.
+ */
+.joi-experience {
+  position: relative;
+}
+
+.joi-experience:has(.joi-experience-fallback) {
+  min-height: 320px;
+}
+
 .joi-experience-fallback {
   position: absolute;
   inset: 0;
