@@ -32,6 +32,18 @@ export function RevealRoot() {
 
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
 
+    // Wall-clock fail-open. Some embedded panes freeze the document timeline
+    // at zero while setTimeout keeps working, which leaves every load and
+    // reveal animation on its first frame — copy at opacity 0 — forever. Three
+    // seconds after mount, CSS keyed on `reveal-lights-on` retires those
+    // animations and shows the content; in a real browser every affected
+    // animation has finished by then, so this changes nothing there. Removed
+    // on cleanup so the next page's entrances still play.
+    document.documentElement.classList.remove("reveal-lights-on");
+    const lightsOn = window.setTimeout(() => {
+      document.documentElement.classList.add("reveal-lights-on");
+    }, 3000);
+
     const settlers = new Set<number>();
     // Observer callbacks hand back Element; everything armed here is an HTMLElement
     // by construction, so the melt state machine narrows once at the top.
@@ -102,6 +114,8 @@ export function RevealRoot() {
     return () => {
       settlers.forEach((id) => window.clearTimeout(id));
       window.clearTimeout(failsafe);
+      window.clearTimeout(lightsOn);
+      document.documentElement.classList.remove("reveal-lights-on");
       window.removeEventListener("scroll", sweep);
       observer.disconnect();
       armed.forEach(reveal);

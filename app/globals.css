@@ -167,6 +167,26 @@ canvas {
 [data-reveal="3"].reveal-armed .melt-media,
 [data-reveal="3"].reveal-melting .melt-media { animation-delay: .16s; }
 
+/*
+ * Settled is fail-open, not merely "the animation finished". Some embedded
+ * panes freeze the document timeline at zero while wall-clock timers keep
+ * running, so a "running" animation can hold its first frame forever — the
+ * type stuck at opacity .15 under the threshold. RevealRoot adds
+ * `reveal-settled` from a setTimeout, which does run everywhere, so the
+ * settled state retires the animation outright and lets the resting rules
+ * win. In a real browser the animation has finished long before settle, and
+ * this changes nothing.
+ */
+[data-reveal="melt"].reveal-settled {
+  filter: none;
+}
+
+[data-reveal="melt"].reveal-settled .melt-media {
+  animation: none;
+  opacity: 1;
+  filter: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
   [data-reveal="melt"],
   [data-reveal="melt"].reveal-armed,

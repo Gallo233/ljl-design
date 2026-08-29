@@ -688,6 +688,26 @@
 }
 
 /*
+ * The wall-clock fail-open (see RevealRoot). Three seconds after mount the
+ * root gains `reveal-lights-on` and every load animation on this page is
+ * retired: the title drops its threshold and un-blur, the evidence ladder
+ * drops its rise. Real browsers finish these animations inside the first
+ * second, so the class changes nothing there; in an environment whose
+ * animation clock never runs it is the difference between a page and a blank
+ * one.
+ */
+:root.reveal-lights-on .project-detail-hero-top h1,
+:root.reveal-lights-on .project-detail-hero-top h1 .melt-media,
+:root.reveal-lights-on .project-detail-summary,
+:root.reveal-lights-on .project-case-frame,
+:root.reveal-lights-on .project-detail-motion {
+  animation: none;
+  opacity: 1;
+  transform: none;
+  filter: none;
+}
+
+/*
  * The two figure effects (components/detail-figure-fx.ts) mount canvases into
  * these boxes: the condensation covers the first figure, the hover shadow
  * covers the whole gallery from above. Both are additive; the figures remain
