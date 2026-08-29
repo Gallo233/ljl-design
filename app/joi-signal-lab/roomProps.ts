@@ -27,6 +27,8 @@ export type RoomPropPlacement = {
   z: number;
   minY: number;
   maxY: number;
+  /** The height the surface is expected at; the probe takes the band hit nearest it. */
+  targetY?: number;
   /** World point the prop should face (yaw only), e.g. Nick watches the screen. */
   faceTo?: [number, number, number];
   /** Where to stand if the probe finds nothing — props are never left unplaced. */
@@ -95,51 +97,101 @@ export function createRoomProps(): RoomPropsRig {
   const nodesByProp: Record<RoomPropId, any[]> = { cat: [], handheld: [], balls: [] };
 
   /* ------------------------------------------------------------------ */
-  /* Nick — black tabby, yellow eyes, transform-level life only.         */
+  /* Nick — black tabby in a loaf, yellow eyes. Smooth high-segment     */
+  /* volumes only: faceted primitives are what made him read as blobs.  */
   /* ------------------------------------------------------------------ */
 
-  const fur = new THREE.MeshStandardMaterial({ color: 0x17171a, roughness: 0.62, metalness: 0.05 });
-  const furDark = new THREE.MeshStandardMaterial({ color: 0x101012, roughness: 0.7 });
-  const eyeMaterial = new THREE.MeshBasicMaterial({ color: 0xe6b93a });
+  const fur = new THREE.MeshStandardMaterial({ color: 0x1a1a1e, roughness: 0.58, metalness: 0.04 });
+  const furDark = new THREE.MeshStandardMaterial({ color: 0x101013, roughness: 0.68 });
+  const eyeMaterial = new THREE.MeshStandardMaterial({
+    color: 0xd8c23a,
+    roughness: 0.25,
+    emissive: 0x8a7a1a,
+    emissiveIntensity: 0.35,
+  });
+  const pupilMaterial = new THREE.MeshBasicMaterial({ color: 0x0a0a08 });
 
-  const catBody = new THREE.Mesh(track(new THREE.SphereGeometry(1.15, 20, 16), fur), fur);
-  catBody.scale.set(1.35, 0.95, 1.0);
-  catBody.position.y = 1.05;
+  // The loaf: one long smooth mass for the back, haunches rising behind, the head a
+  // slightly flattened sphere with a muzzle — the silhouette does the identification,
+  // not any single primitive.
+  const catBody = new THREE.Mesh(track(new THREE.SphereGeometry(1, 48, 36), fur), fur);
+  catBody.scale.set(1.7, 1.02, 1.0);
+  catBody.position.y = 1.0;
+  const catHaunch = new THREE.Mesh(track(new THREE.SphereGeometry(0.82, 40, 30), fur), fur);
+  catHaunch.scale.set(0.92, 1.05, 1.05);
+  catHaunch.position.set(0.95, 0.82, 0.12);
+
   const catHead = new THREE.Group();
   catHead.name = "nick-head";
-  catHead.position.set(0, 1.72, -1.28);
-  const catSkull = new THREE.Mesh(track(new THREE.SphereGeometry(0.78, 20, 16), fur), fur);
-  const catEarLeft = new THREE.Mesh(track(new THREE.ConeGeometry(0.26, 0.52, 8), furDark), furDark);
-  catEarLeft.position.set(-0.4, 0.72, 0);
+  catHead.position.set(0, 1.9, -1.32);
+  const catSkull = new THREE.Mesh(track(new THREE.SphereGeometry(0.62, 40, 30), fur), fur);
+  catSkull.scale.set(0.98, 0.9, 0.92);
+  const catMuzzle = new THREE.Mesh(track(new THREE.SphereGeometry(0.3, 28, 20), fur), fur);
+  catMuzzle.scale.set(1.2, 0.72, 0.85);
+  catMuzzle.position.set(0, -0.28, -0.5);
+  const catEarLeft = new THREE.Mesh(track(new THREE.ConeGeometry(0.21, 0.46, 20), fur), fur);
+  catEarLeft.position.set(-0.34, 0.62, -0.02);
+  catEarLeft.rotation.set(-0.18, 0, 0.16);
+  const catEarInnerLeft = new THREE.Mesh(track(new THREE.ConeGeometry(0.12, 0.3, 16), furDark), furDark);
+  catEarInnerLeft.position.set(-0.34, 0.58, 0.02);
+  catEarInnerLeft.rotation.copy(catEarLeft.rotation);
   const catEarRight = catEarLeft.clone();
-  catEarRight.position.x = 0.4;
-  const catEyeLeft = new THREE.Mesh(track(new THREE.SphereGeometry(0.115, 10, 8), eyeMaterial), eyeMaterial);
-  catEyeLeft.position.set(-0.28, 0.08, -0.66);
+  catEarRight.position.x = 0.34;
+  catEarRight.rotation.z = -0.16;
+  const catEarInnerRight = catEarInnerLeft.clone();
+  catEarInnerRight.position.x = 0.34;
+  catEarInnerRight.rotation.z = -0.16;
+  const catEyeLeft = new THREE.Mesh(track(new THREE.SphereGeometry(0.095, 20, 14), eyeMaterial), eyeMaterial);
+  catEyeLeft.position.set(-0.23, 0.06, -0.52);
+  const catPupilLeft = new THREE.Mesh(track(new THREE.SphereGeometry(0.032, 12, 10), pupilMaterial), pupilMaterial);
+  catPupilLeft.scale.set(0.45, 1.5, 0.5);
+  catPupilLeft.position.set(-0.23, 0.06, -0.6);
   const catEyeRight = catEyeLeft.clone();
-  catEyeRight.position.x = 0.28;
-  const catNose = new THREE.Mesh(track(new THREE.SphereGeometry(0.07, 8, 6), furDark), furDark);
-  catNose.position.set(0, -0.14, -0.76);
-  catHead.add(catSkull, catEarLeft, catEarRight, catEyeLeft, catEyeRight, catNose);
+  catEyeRight.position.x = 0.23;
+  const catPupilRight = catPupilLeft.clone();
+  catPupilRight.position.x = 0.23;
+  const catNose = new THREE.Mesh(track(new THREE.SphereGeometry(0.05, 14, 10), furDark), furDark);
+  catNose.scale.set(1.3, 0.8, 0.7);
+  catNose.position.set(0, -0.36, -0.76);
+  catHead.add(
+    catSkull,
+    catMuzzle,
+    catEarLeft,
+    catEarInnerLeft,
+    catEarRight,
+    catEarInnerRight,
+    catEyeLeft,
+    catPupilLeft,
+    catEyeRight,
+    catPupilRight,
+    catNose,
+  );
 
-  // The tail is a chain of beads the idle loop swings — no skinning, no rig, and it
-  // still reads as a tail because the beads share one radius profile.
-  const tailBeads: any[] = [];
-  for (let i = 0; i < 6; i += 1) {
-    const radius = 0.17 - i * 0.014;
-    const bead = new THREE.Mesh(track(new THREE.SphereGeometry(radius, 10, 8), fur), fur);
-    tailBeads.push(bead);
-    propGroups.cat.add(bead);
-  }
+  // Front paws tucked under the chest, just visible at the loaf's front edge.
+  const catPawLeft = new THREE.Mesh(track(new THREE.CapsuleGeometry(0.15, 0.42, 8, 16), fur), fur);
+  catPawLeft.rotation.x = Math.PI / 2;
+  catPawLeft.position.set(-0.26, 0.16, -1.28);
+  const catPawRight = catPawLeft.clone();
+  catPawRight.position.x = 0.26;
 
-  const catHaunchLeft = new THREE.Mesh(track(new THREE.SphereGeometry(0.62, 14, 12), fur), fur);
-  catHaunchLeft.position.set(-0.78, 0.62, 0.62);
-  const catHaunchRight = catHaunchLeft.clone();
-  catHaunchRight.position.x = 0.78;
-  const catPaws = new THREE.Mesh(track(new THREE.CapsuleGeometry(0.34, 0.9, 6, 12), fur), fur);
-  catPaws.rotation.z = Math.PI / 2;
-  catPaws.position.set(0, 0.3, -0.75);
+  // The tail wraps around the haunch as one smooth tube along a curve, pivoting at
+  // the root where it meets the body — the tip travels furthest, which is the trick.
+  const tailRoot = new THREE.Vector3(1.35, 0.42, 0.85);
+  const tailCurve = new THREE.CatmullRomCurve3([
+    new THREE.Vector3(0, 0, 0),
+    new THREE.Vector3(0.5, -0.02, -0.6),
+    new THREE.Vector3(0.6, 0.03, -1.32),
+    new THREE.Vector3(0.24, 0.1, -1.85),
+  ]);
+  const tailGroup = new THREE.Group();
+  tailGroup.name = "nick-tail";
+  tailGroup.position.copy(tailRoot);
+  const tail = new THREE.Mesh(track(new THREE.TubeGeometry(tailCurve, 32, 0.145, 16, false), fur), fur);
+  const tailTip = new THREE.Mesh(track(new THREE.SphereGeometry(0.145, 16, 12), fur), fur);
+  tailTip.position.copy(tailCurve.getPoint(1));
+  tailGroup.add(tail, tailTip);
 
-  propGroups.cat.add(catBody, catHead, catHaunchLeft, catHaunchRight, catPaws);
+  propGroups.cat.add(catBody, catHaunch, catHead, catPawLeft, catPawRight, tailGroup);
   nodesByProp.cat = [propGroups.cat];
 
   // Poke state: a head lift with a blink, then back to loaf.
@@ -250,57 +302,126 @@ export function createRoomProps(): RoomPropsRig {
   /* After hours — basketball on the floor, baseball in its glove.       */
   /* ------------------------------------------------------------------ */
 
-  const basketballTexture = createCanvasTexture(512, 256, (ctx) => {
-    ctx.fillStyle = "#c05a24";
-    ctx.fillRect(0, 0, 512, 256);
-    ctx.strokeStyle = "#2a1408";
-    ctx.lineWidth = 5;
-    ctx.beginPath();
-    ctx.moveTo(0, 128); ctx.lineTo(512, 128);
-    ctx.moveTo(128, 0); ctx.bezierCurveTo(160, 88, 160, 168, 128, 256);
-    ctx.moveTo(384, 0); ctx.bezierCurveTo(352, 88, 352, 168, 384, 256);
-    ctx.stroke();
+  // Leather with pebbling: a mottled undercoat plus a seam layout drawn in equirect —
+  // equator, two meridians, and the two curved side seams a real ball carries. The
+  // same canvas doubles as the bump map so the seams catch light.
+  const basketballCanvas = document.createElement("canvas");
+  basketballCanvas.width = 1024;
+  basketballCanvas.height = 512;
+  {
+    const ctx = basketballCanvas.getContext("2d");
+    if (ctx) {
+      ctx.fillStyle = "#c05418";
+      ctx.fillRect(0, 0, 1024, 512);
+      for (let i = 0; i < 5200; i += 1) {
+        const shade = Math.random();
+        ctx.fillStyle = shade > 0.5 ? "rgba(60,20,4,0.075)" : "rgba(255,190,140,0.05)";
+        ctx.beginPath();
+        ctx.arc(Math.random() * 1024, Math.random() * 512, 0.8 + Math.random() * 1.6, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.strokeStyle = "#26120a";
+      ctx.lineWidth = 7;
+      ctx.beginPath();
+      ctx.moveTo(0, 256); ctx.lineTo(1024, 256);
+      ctx.moveTo(256, 0); ctx.lineTo(256, 512);
+      ctx.moveTo(768, 0); ctx.lineTo(768, 512);
+      ctx.moveTo(0, 0); ctx.bezierCurveTo(150, 170, 150, 342, 0, 512);
+      ctx.moveTo(512, 0); ctx.bezierCurveTo(662, 170, 662, 342, 512, 512);
+      ctx.stroke();
+    }
+  }
+  const basketballTexture = new THREE.CanvasTexture(basketballCanvas);
+  basketballTexture.colorSpace = THREE.SRGBColorSpace;
+  const basketballBump = new THREE.CanvasTexture(basketballCanvas);
+  const basketballMaterial = new THREE.MeshStandardMaterial({
+    map: basketballTexture,
+    bumpMap: basketballBump,
+    bumpScale: 0.35,
+    roughness: 0.82,
   });
-  const basketballMaterial = new THREE.MeshStandardMaterial({ map: basketballTexture, roughness: 0.85 });
-  const basketball = new THREE.Mesh(track(new THREE.SphereGeometry(0.98, 24, 18), basketballMaterial), basketballMaterial);
+  const basketball = new THREE.Mesh(track(new THREE.SphereGeometry(0.98, 48, 32), basketballMaterial), basketballMaterial);
   basketball.position.set(0, 0.98, 0);
   basketball.castShadow = false;
 
-  // Glove: a palm pocket (flattened sphere) with four finger stalls and a thumb —
-  // readable at room distance without pretending to be a modelled catcher's mitt.
-  const leather = new THREE.MeshStandardMaterial({ color: 0x7a4a28, roughness: 0.8 });
-  const leatherDark = new THREE.MeshStandardMaterial({ color: 0x5c3319, roughness: 0.85 });
-  const glovePalm = new THREE.Mesh(track(new THREE.SphereGeometry(1.05, 18, 14), leather), leather);
-  glovePalm.scale.set(1.25, 0.55, 1.1);
-  const gloveStalls: any[] = [];
+  // The glove, lying open on the floor: a pocket bowl, four fingers built as curved
+  // tubes rising from the back edge, a thumb opposite, and cream lacing rings down
+  // every seam — the lacing is what makes it read as leather, not a brown blob.
+  const leather = new THREE.MeshStandardMaterial({ color: 0x8a5430, roughness: 0.72 });
+  const leatherDark = new THREE.MeshStandardMaterial({ color: 0x583318, roughness: 0.78 });
+  const laceMaterial = new THREE.MeshStandardMaterial({ color: 0xd8cdb4, roughness: 0.6 });
+  const glovePalm = new THREE.Mesh(track(new THREE.SphereGeometry(1.05, 40, 28), leather), leather);
+  glovePalm.scale.set(1.2, 0.5, 1.08);
+  const glovePocket = new THREE.Mesh(track(new THREE.CircleGeometry(0.58, 32), leatherDark), leatherDark);
+  glovePocket.rotation.x = -Math.PI / 2;
+  glovePocket.position.set(0, 0.245, 0.06);
+  const gloveFingers: any[] = [];
+  const fingerLaces: any[] = [];
   for (let i = 0; i < 4; i += 1) {
-    const stall = new THREE.Mesh(track(new THREE.CapsuleGeometry(0.17, 0.55, 5, 10), leatherDark), leatherDark);
-    stall.rotation.x = Math.PI / 2.3;
-    stall.position.set(-0.6 + i * 0.36, 0.42, -0.55);
-    gloveStalls.push(stall);
+    const baseX = -0.52 + i * 0.36;
+    const curve = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(baseX, 0.18, -0.5),
+      new THREE.Vector3(baseX * 1.12, 0.52, -0.88),
+      new THREE.Vector3(baseX * 1.2, 0.6, -1.18),
+    ]);
+    const finger = new THREE.Mesh(track(new THREE.TubeGeometry(curve, 16, 0.155 - i * 0.008, 14, false), leather), leather);
+    gloveFingers.push(finger);
+    for (let ring = 0; ring < 3; ring += 1) {
+      const point = curve.getPoint(0.25 + ring * 0.28);
+      const lace = new THREE.Mesh(
+        track(new THREE.TorusGeometry(0.16 - i * 0.008, 0.02, 8, 16), laceMaterial),
+        laceMaterial,
+      );
+      lace.position.copy(point);
+      lace.rotation.x = Math.PI / 2;
+      lace.rotation.z = baseX * 0.3;
+      fingerLaces.push(lace);
+    }
   }
-  const gloveThumb = new THREE.Mesh(track(new THREE.CapsuleGeometry(0.2, 0.5, 5, 10), leatherDark), leatherDark);
-  gloveThumb.rotation.set(Math.PI / 2.4, 0, 0.7);
-  gloveThumb.position.set(-0.95, 0.3, 0.35);
-  const baseballTexture = createCanvasTexture(128, 64, (ctx) => {
-    ctx.fillStyle = "#e8e2d4";
-    ctx.fillRect(0, 0, 128, 64);
-    ctx.strokeStyle = "#b03a2a";
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(24, 0); ctx.bezierCurveTo(44, 22, 44, 42, 24, 64);
-    ctx.moveTo(104, 0); ctx.bezierCurveTo(84, 22, 84, 42, 104, 64);
-    ctx.stroke();
+  const thumbCurve = new THREE.CatmullRomCurve3([
+    new THREE.Vector3(-0.72, 0.16, 0.35),
+    new THREE.Vector3(-1.12, 0.42, 0.42),
+    new THREE.Vector3(-1.34, 0.62, 0.12),
+  ]);
+  const gloveThumb = new THREE.Mesh(track(new THREE.TubeGeometry(thumbCurve, 16, 0.17, 14, false), leather), leather);
+  const thumbTip = new THREE.Mesh(track(new THREE.SphereGeometry(0.17, 16, 12), leather), leather);
+  thumbTip.position.copy(thumbCurve.getPoint(1));
+  const baseballTexture = createCanvasTexture(256, 128, (ctx) => {
+    ctx.fillStyle = "#ece6d8";
+    ctx.fillRect(0, 0, 256, 128);
+    // Faint leather grain so the ball is not plastic-flat.
+    for (let i = 0; i < 900; i += 1) {
+      ctx.fillStyle = "rgba(120,100,70,0.06)";
+      ctx.beginPath();
+      ctx.arc(Math.random() * 256, Math.random() * 128, 0.7 + Math.random() * 1.1, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.strokeStyle = "#a83226";
+    ctx.lineWidth = 3;
+    for (const cx of [48, 208]) {
+      ctx.beginPath();
+      ctx.moveTo(cx, 0);
+      ctx.bezierCurveTo(cx + (cx < 128 ? 34 : -34), 44, cx + (cx < 128 ? 34 : -34), 84, cx, 128);
+      ctx.stroke();
+      for (let y = 16; y < 128; y += 18) {
+        const offset = cx < 128 ? 34 : -34;
+        const x = cx + offset * Math.sin((y / 128) * Math.PI);
+        ctx.beginPath();
+        ctx.moveTo(x - 5, y);
+        ctx.lineTo(x + 5, y + 6);
+        ctx.stroke();
+      }
+    }
   });
-  const baseballMaterial = new THREE.MeshStandardMaterial({ map: baseballTexture, roughness: 0.7 });
-  const baseball = new THREE.Mesh(track(new THREE.SphereGeometry(0.3, 16, 12), baseballMaterial), baseballMaterial);
-  baseball.position.set(0, 0.62, 0.08);
+  const baseballMaterial = new THREE.MeshStandardMaterial({ map: baseballTexture, roughness: 0.65 });
+  const baseball = new THREE.Mesh(track(new THREE.SphereGeometry(0.3, 28, 20), baseballMaterial), baseballMaterial);
+  baseball.position.set(0.06, 0.6, 0.02);
 
-  // The glove is one placement (desk), the basketball another (floor), so each gets
+  // The glove is one placement (floor corner), the basketball another, so each gets
   // its own subgroup under the shared "balls" hotspot.
   const glove = new THREE.Group();
-  glove.add(glovePalm, ...gloveStalls, gloveThumb, baseball);
-  glove.rotation.y = 0.5;
+  glove.add(glovePalm, glovePocket, ...gloveFingers, ...fingerLaces, gloveThumb, thumbTip, baseball);
+  glove.rotation.y = -0.4;
   const basketballGroup = new THREE.Group();
   basketballGroup.add(basketball);
   propGroups.balls.add(basketballGroup, glove);
@@ -319,14 +440,16 @@ export function createRoomProps(): RoomPropsRig {
    * the desk spots look between desk and shelf bands.
    */
   const probeSpots: RoomPropPlacement[] = [
-    // Nick takes the chair and watches whoever the screen is for.
-    { id: "cat", x: 10.42, z: -4.25, minY: 3.2, maxY: 5.6, faceTo: [3.07, 5.8, -4.06], fallbackY: 4.3 },
-    // Desk surface, front-right quadrant, clear of the film's landing spot.
-    { id: "handheld", x: 4.2, z: 0.4, minY: 4.5, maxY: 8.5, fallbackY: 5.72 },
-    // The basketball lives on the floor beside the chair.
-    { id: "balls", part: "basketball", x: 12.2, z: -6.5, minY: -0.5, maxY: 2.0, fallbackY: 0 },
-    // The glove rests on the desk's near corner, between pen and camera.
-    { id: "balls", part: "glove", x: 3.4, z: 2.0, minY: 4.5, maxY: 8.5, fallbackY: 5.72 },
+    // Nick takes the chair and watches whoever the screen is for. The band stops below
+    // the backrest so the probe lands on the seat pan, not the tallest thing nearby.
+    { id: "cat", x: 10.42, z: -4.25, minY: 3.4, maxY: 4.7, targetY: 4.05, faceTo: [3.07, 5.8, -4.06], fallbackY: 4.05 },
+    // Desk surface between the MacBook and the pen, clear of lamp base, camera and
+    // the film's landing spot.
+    { id: "handheld", x: 4.5, z: -0.7, minY: 4.5, maxY: 8.5, targetY: 5.7, fallbackY: 5.72 },
+    // The after-hours corner on the floor beside the chair: ball and glove together,
+    // off the crowded desk.
+    { id: "balls", part: "basketball", x: 12.4, z: -6.2, minY: -0.5, maxY: 2.0, targetY: 0, fallbackY: 0 },
+    { id: "balls", part: "glove", x: 11.0, z: -7.6, minY: -0.5, maxY: 2.0, targetY: 0, fallbackY: 0 },
   ];
 
   const update = (delta: number, timeMs: number) => {
@@ -335,7 +458,7 @@ export function createRoomProps(): RoomPropsRig {
     // Nick: breathing, blink, tail sway, and the poke lift.
     catLift += (catLiftTarget - catLift) * Math.min(1, delta * 6);
     const breath = 1 + Math.sin(t * 1.9) * 0.016;
-    catBody.scale.set(1.35, 0.95 * breath, 1.0);
+    catBody.scale.set(1.7, 1.02 * breath, 1.0);
     catHead.rotation.x = -catLift * 0.5;
     catHead.position.y = 1.72 + catLift * 0.34;
     blinkTimer -= delta;
@@ -347,15 +470,11 @@ export function createRoomProps(): RoomPropsRig {
     const eyeScale = blink > 0 ? Math.max(0.08, 1 - (blink / 0.14) * 1.4) : 1;
     catEyeLeft.scale.y = eyeScale;
     catEyeRight.scale.y = eyeScale;
-    tailBeads.forEach((bead, index) => {
-      const along = index / (tailBeads.length - 1);
-      const sway = Math.sin(t * (catLiftTarget > 0 ? 5.2 : 2.1) + along * 2.4) * (0.16 + along * 0.5);
-      bead.position.set(
-        Math.sin(sway) * 0.9,
-        0.42 + along * 0.62,
-        1.28 + Math.cos(sway * 0.6) * along * 0.7,
-      );
-    });
+    // The tail is one solid tube; its idle life is a gentle pivot around the root
+    // where it meets the body — the tip travels furthest, which is the whole trick.
+    const tailSway = Math.sin(t * (catLiftTarget > 0 ? 4.6 : 1.9)) * (catLiftTarget > 0 ? 0.16 : 0.07);
+    tailGroup.rotation.y = tailSway;
+    tailGroup.rotation.x = Math.sin(t * 1.3 + 1.2) * 0.03;
     if (catLiftTarget > 0) {
       catLiftHold -= delta;
       if (catLiftHold <= 0) catLiftTarget = 0;

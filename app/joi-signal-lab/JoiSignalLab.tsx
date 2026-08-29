@@ -1027,7 +1027,9 @@ function FilmCanvas({
         roomOrbitDrag.x = event.clientX;
         roomOrbitDrag.y = event.clientY;
         roomOrbitDrag.travelled += Math.abs(dx) + Math.abs(dy);
-        roomScene.orbitRotate(dx, dy);
+        // Normalised deltas — the orbit works in screen fractions, so a full-width
+        // drag is a fixed, hand-following sweep no matter the display size.
+        roomScene.orbitRotate(dx / width, dy / height);
         return;
       }
       if (heroOwnsPointer()) {

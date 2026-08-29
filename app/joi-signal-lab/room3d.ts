@@ -840,14 +840,18 @@ export function createRoomScene(filmSources?: RoomFilmSources): RoomScene {
       props.probeSpots.forEach((spot) => {
         propProbe.set(new THREE.Vector3(spot.x, 30, spot.z), propDown);
         propProbe.far = 60;
-        const hit = propProbe.intersectObject(model, true).find((entry: any) => {
-          if (!entry.face || entry.point.y < spot.minY || entry.point.y > spot.maxY) return false;
-          const normal = entry.face.normal
-            .clone()
-            .applyMatrix3(propNormalMatrix.getNormalMatrix(entry.object.matrixWorld))
-            .normalize();
-          return normal.y > 0.72;
-        });
+        const desired = spot.targetY ?? spot.fallbackY;
+        const hit = propProbe
+          .intersectObject(model, true)
+          .filter((entry: any) => {
+            if (!entry.face || entry.point.y < spot.minY || entry.point.y > spot.maxY) return false;
+            const normal = entry.face.normal
+              .clone()
+              .applyMatrix3(propNormalMatrix.getNormalMatrix(entry.object.matrixWorld))
+              .normalize();
+            return normal.y > 0.72;
+          })
+          .sort((a: any, b: any) => Math.abs(a.point.y - desired) - Math.abs(b.point.y - desired))[0];
         let point: any;
         let normal: any;
         if (hit?.face) {
