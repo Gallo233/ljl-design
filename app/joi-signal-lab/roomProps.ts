@@ -150,22 +150,27 @@ export function createRoomProps(): RoomPropsRig {
 
   /* ------------------------------------------------------------------ */
   /* The handheld — Night Tide's fourth cartridge never shipped.         */
+  /* Built to a Switch's real proportions: 239 × 102 × 13.9 mm at        */
+  /* ~0.116 m per room unit is 2.06 × 0.88 × 0.12, lying flat.           */
   /* ------------------------------------------------------------------ */
 
-  const shellMaterial = new THREE.MeshStandardMaterial({ color: 0x232c3a, roughness: 0.45, metalness: 0.25 });
-  const bezelMaterial = new THREE.MeshStandardMaterial({ color: 0x0a0d12, roughness: 0.35 });
+  const bodyMaterial = new THREE.MeshStandardMaterial({ color: 0x1c1e22, roughness: 0.42, metalness: 0.2 });
+  // Joy-Con rails in the site's own pair — the reference silhouette, our colours.
+  const railLeftMaterial = new THREE.MeshStandardMaterial({ color: 0x294f82, roughness: 0.5 });
+  const railRightMaterial = new THREE.MeshStandardMaterial({ color: 0xed654a, roughness: 0.5 });
   const buttonMaterial = new THREE.MeshStandardMaterial({ color: 0xd8d4c8, roughness: 0.5 });
 
-  const shell = new THREE.Mesh(track(new THREE.BoxGeometry(2.15, 0.62, 1.0), shellMaterial), shellMaterial);
-  shell.position.y = 0.31;
-  const screenBezel = new THREE.Mesh(track(new THREE.BoxGeometry(1.3, 0.1, 0.82), bezelMaterial), bezelMaterial);
-  screenBezel.position.set(-0.28, 0.66, 0);
+  const body = new THREE.Mesh(track(new THREE.BoxGeometry(2.06, 0.12, 0.88), bodyMaterial), bodyMaterial);
+  body.position.y = 0.06;
+  const railLeft = new THREE.Mesh(track(new THREE.BoxGeometry(0.34, 0.155, 0.92), railLeftMaterial), railLeftMaterial);
+  railLeft.position.set(-0.86, 0.078, 0);
+  const railRight = new THREE.Mesh(track(new THREE.BoxGeometry(0.34, 0.155, 0.92), railRightMaterial), railRightMaterial);
+  railRight.position.set(0.86, 0.078, 0);
   // The screen is a small canvas the idle loop repaints at ~8fps: a bouncing invader
   // and a score ticker. Deliberately not a video texture — no codec, works everywhere.
-  const SCREEN_LOGICAL = 64;
   const screenCanvas = document.createElement("canvas");
-  screenCanvas.width = SCREEN_LOGICAL;
-  screenCanvas.height = Math.round(SCREEN_LOGICAL * 0.72);
+  screenCanvas.width = 128;
+  screenCanvas.height = 60;
   const screenCtx = screenCanvas.getContext("2d");
   const screenTexture = new THREE.CanvasTexture(screenCanvas);
   screenTexture.colorSpace = THREE.SRGBColorSpace;
@@ -173,22 +178,43 @@ export function createRoomProps(): RoomPropsRig {
   screenTexture.minFilter = THREE.NearestFilter;
   const screenMaterial = new THREE.MeshBasicMaterial({ map: screenTexture });
   const screenMesh = new THREE.Mesh(
-    track(new THREE.PlaneGeometry(1.18, 0.72), screenMaterial),
+    track(new THREE.PlaneGeometry(1.3, 0.6), screenMaterial),
     screenMaterial,
   );
   screenMesh.rotation.x = -Math.PI / 2;
-  screenMesh.position.set(-0.28, 0.72, 0);
-  const dpad = new THREE.Mesh(track(new THREE.BoxGeometry(0.52, 0.1, 0.16), buttonMaterial), buttonMaterial);
-  dpad.position.set(0.72, 0.64, -0.12);
-  const dpadVertical = new THREE.Mesh(track(new THREE.BoxGeometry(0.16, 0.1, 0.52), buttonMaterial), buttonMaterial);
-  dpadVertical.position.copy(dpad.position);
-  const buttonA = new THREE.Mesh(track(new THREE.CylinderGeometry(0.11, 0.11, 0.09, 14), buttonMaterial), buttonMaterial);
-  buttonA.position.set(0.68, 0.64, 0.24);
-  const buttonB = buttonA.clone();
-  buttonB.position.set(0.94, 0.64, 0.06);
+  screenMesh.position.set(0, 0.121, 0);
+  // Left rail: stick above, D-pad below. Right rail: four buttons in a diamond.
+  const stick = new THREE.Mesh(track(new THREE.CylinderGeometry(0.1, 0.11, 0.045, 16), bodyMaterial), bodyMaterial);
+  stick.position.set(-0.86, 0.175, 0.22);
+  const dpadBar = new THREE.Mesh(track(new THREE.BoxGeometry(0.2, 0.03, 0.07), buttonMaterial), buttonMaterial);
+  dpadBar.position.set(-0.86, 0.17, -0.18);
+  const dpadBarVertical = new THREE.Mesh(track(new THREE.BoxGeometry(0.07, 0.03, 0.2), buttonMaterial), buttonMaterial);
+  dpadBarVertical.position.copy(dpadBar.position);
+  const faceButtons: any[] = [];
+  [
+    [0.86, 0.15],
+    [0.86, -0.15],
+    [0.77, 0],
+    [0.95, 0],
+  ].forEach(([x, z]) => {
+    const button = new THREE.Mesh(track(new THREE.CylinderGeometry(0.055, 0.055, 0.035, 12), buttonMaterial), buttonMaterial);
+    button.position.set(x, 0.175, z);
+    faceButtons.push(button);
+  });
 
-  propGroups.handheld.add(shell, screenBezel, screenMesh, dpad, dpadVertical, buttonA, buttonB);
+  propGroups.handheld.add(
+    body,
+    railLeft,
+    railRight,
+    screenMesh,
+    stick,
+    dpadBar,
+    dpadBarVertical,
+    ...faceButtons,
+  );
   nodesByProp.handheld = [propGroups.handheld];
+  /** A touch of askew, because nobody places a console square to the desk edge. */
+  const handheldYaw = 0.35;
 
   let screenAccumulator = 0;
   let screenFrame = 0;
@@ -401,6 +427,10 @@ export function createRoomProps(): RoomPropsRig {
           );
           target.quaternion.multiply(yawQuat);
         }
+      } else if (id === "handheld") {
+        target.quaternion.multiply(
+          new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), handheldYaw),
+        );
       }
     },
     setVisible: (id, on) => { propGroups[id].visible = on; },
