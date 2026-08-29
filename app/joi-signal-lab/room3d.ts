@@ -2,7 +2,13 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { DRACOLoader } from "three/examples/jsm/loaders/DRACOLoader.js";
 import { ROOM_OBJECTS, type RoomObjectId } from "./roomObjects";
-import { createPlatterRig, type PlatterRig } from "./roomPlatter";
+import { retireCapturedDeck } from "./roomPlatter";
+import {
+  createRoomTurntable,
+  type DeckControlId,
+  type DeckRecordSide,
+  type DeckRig,
+} from "./roomTurntable";
 import {
   BASE_ATLAS_EXPOSURE,
   BASE_ATLAS_IDS,
@@ -11,7 +17,6 @@ import {
   BASE_NODE_UV,
   BASE_TRANSFORM,
   type BaseAtlasId,
-  sanitizeNodeName,
 } from "./roomBase";
 
 /**
@@ -34,6 +39,8 @@ export type RoomScene = {
   setFullAspect: (aspect: number) => void;
   update: (timeMs: number, pointer?: { x: number; y: number }) => void;
   raycastAt: (ndc: { x: number; y: number }) => RoomObjectId | null;
+  /** Pick one of the four physical deck controls while its close-up camera owns the room. */
+  raycastDeckControl: (ndc: { x: number; y: number }) => DeckControlId | null;
   setHover: (id: RoomObjectId | null) => void;
   focus: (id: RoomObjectId | null) => void;
   /**
@@ -54,6 +61,14 @@ export type RoomScene = {
   setPlatterRpm: (rpm: number) => void;
   /** Turn the platter, or stop it. */
   setPlatterSpinning: (spinning: boolean) => void;
+  /**
+   * Print the side that is playing onto the record's centre label. Safe to call before
+   * the room has loaded — the last one asked for is applied when the deck is built.
+   */
+  setRecordLabel: (side: DeckRecordSide) => void;
+  setDeckControlValue: (control: "volume" | "tone" | "speed", value: number) => void;
+  pressDeckStart: () => void;
+  setDeckControlHover: (control: DeckControlId | null) => void;
   dispose: () => void;
 };
 
@@ -124,27 +139,27 @@ const HOME_LOOK = new THREE.Vector3(4.2, 5.6, -4.4);
 const FOCUS_DISTANCE = 11.0;
 
 /*
- * Player mode, all measured off the capture rather than eyeballed.
+ * Player mode, measured off the capture rather than eyeballed.
  *
- * The platter's centre is (4.98, 5.49, -9.40) and the tonearm's bearing is at
- * (3.97, 5.91, -11.35) with a 2.28-long arm. Those three numbers are what set the two
- * stylus angles below: with the bearing 2.20 from the platter centre, the law of
- * cosines puts the outer groove (1.35 from centre) at 19.2 degrees off the parked
- * angle and the run-out (0.50 from centre) at 41.6. The mesh's own origin happens to
- * sit on the bearing, within 0.017, so the arm swings correctly on its own Y axis and
- * needs no reparenting.
+ * The fallback look point is the captured platter's centre. Once the procedural deck is
+ * standing in the slot, its world bounds replace both the look point and the fit radius.
+ * That keeps the complete plinth and its controls in frame instead of tuning one crop for
+ * a single desktop screenshot and losing the right-hand controls on a narrow display.
+ *
+ * The pair of stylus angles that used to live here are gone with the mesh they described.
+ * The captured tonearm was one rigid node swung between two hand-derived limits; the new
+ * arm solves its own tracking angle from its bearing offset and its length, so `setTonearm`
+ * hands it a progress and it works out where that is.
  */
 const PLAYER_LOOK = new THREE.Vector3(4.92, 5.48, -9.55);
-const PLAYER_RADIUS = 6.15;
+const PLAYER_MIN_RADIUS = 6.15;
 const PLAYER_AZIMUTH = THREE.MathUtils.degToRad(50.7);
-const PLAYER_ELEVATION = THREE.MathUtils.degToRad(41.9);
+const PLAYER_ELEVATION = THREE.MathUtils.degToRad(29.5);
 const PLAYER_FOV = 36;
 /** How far a drag can swing the deck before it stops. */
 const ORBIT_AZIMUTH_LIMIT = THREE.MathUtils.degToRad(62);
 const ORBIT_ELEVATION_MIN = THREE.MathUtils.degToRad(14);
 const ORBIT_ELEVATION_MAX = THREE.MathUtils.degToRad(72);
-const TONEARM_OUTER = -0.335;
-const TONEARM_INNER = -0.726;
 
 export function createRoomScene(): RoomScene {
   const reducedMotion =
@@ -187,7 +202,7 @@ export function createRoomScene(): RoomScene {
   const interactiveMeshes: any[] = [];
   const ownedTextures: any[] = [];
   let model: any = null;
-  let platter: PlatterRig | null = null;
+  let deck: DeckRig | null = null;
 
   const disposeObject = (root: any) => {
     const geometries = new Set<any>();
@@ -280,6 +295,65 @@ export function createRoomScene(): RoomScene {
       baseRoot.updateMatrixWorld(true);
 
       const worldUp = new THREE.Vector3(0, 1, 0);
+
+      /*
+       * Stand our own machine in the slot the captured one leaves.
+       *
+       * The deck goes under `model` rather than beside it, which buys three things for
+       * free: it inherits `BASE_TRANSFORM`, it is found by name like any other node so
+       * the hotspot loop below needs no special case, and it is disposed with the room.
+       */
+      const slot = retireCapturedDeck(model);
+      if (!slot) {
+        if (process.env.NODE_ENV !== "production") {
+          console.warn("[about-room] no captured turntable to replace; the deck is not built");
+        }
+      } else {
+        deck = createRoomTurntable();
+        const { platterCentre, bottomY, recordRadius } = deck.anchors;
+
+        // A twelve-inch record is the one dimension in this shot a reader already knows
+        // the size of, so it is what sets the scale rather than the plinth: match the
+        // pressing the capture had on the platter and everything else follows.
+        const scale = slot.recordRadius / recordRadius;
+
+        // The machine is authored facing +Z. The desk runs along Z with the chair pulled
+        // out at +X, so a quarter turn puts its front towards the chair — and takes the
+        // lid's hinge to the wall side, which is where the captured lid stood open.
+        const facing = Math.PI / 2;
+        deck.group.rotation.y = facing;
+        deck.group.scale.setScalar(scale);
+
+        // Feet on the table, platter centred on the slot. One conversion, so this stays
+        // correct if the base is ever moved or turned.
+        const anchor = model.worldToLocal(
+          new THREE.Vector3(slot.centre.x, slot.tableY, slot.centre.z),
+        );
+        const offset = platterCentre.clone().applyAxisAngle(worldUp, facing).multiplyScalar(scale);
+        deck.group.position.set(anchor.x - offset.x, anchor.y - bottomY * scale, anchor.z - offset.z);
+        model.add(deck.group);
+        deck.group.updateMatrixWorld(true);
+
+        // Fit the object that is actually here. The previous fixed 6.15-unit orbit was
+        // calibrated on the platter alone, so the plinth and its right-side controls fell
+        // outside the view as soon as the canvas became narrower than that calibration.
+        scene.updateMatrixWorld(true);
+        const playerBounds = new THREE.Box3().setFromObject(deck.group);
+        const playerSphere = playerBounds.getBoundingSphere(new THREE.Sphere());
+        PLAYER_LOOK.copy(playerSphere.center);
+        // The lower third belongs to the transport and record shelf. Moving the camera's
+        // orbit centre a little below the object's geometric centre places the complete
+        // machine in the clear upper field instead of technically fitting it behind the
+        // opaque console.
+        PLAYER_LOOK.y -= playerSphere.radius * 0.42;
+        // The lid is deliberately allowed to breathe just beyond the safe circle. Fitting
+        // its complete open plane made the playable chassis — and especially its three
+        // right-hand controls — too small. The DOM controls still reserve the lower field,
+        // while this radius keeps the whole plinth and every physical control prominent.
+        playerBoundsRadius = playerSphere.radius * 0.84;
+        if (pendingLabel) deck.setLabel(pendingLabel);
+      }
+
       Object.entries(BASE_HOTSPOT_NODES).forEach(([id, names]) => {
         const nodes = (names ?? []).map((name) => model.getObjectByName(name)).filter(Boolean);
         if (nodes.length === 0) {
@@ -314,16 +388,6 @@ export function createRoomScene(): RoomScene {
         }
       }
 
-      platter = createPlatterRig(model);
-      if (!platter && process.env.NODE_ENV !== "production") {
-        console.warn("[about-room] no turntable found; the platter will not turn");
-      }
-
-      tonearm = model.getObjectByName(sanitizeNodeName("turntable_needle")) ?? null;
-      if (!tonearm && process.env.NODE_ENV !== "production") {
-        console.warn("[about-room] no tonearm found; the arm will not drop");
-      }
-
       loaded = true;
     })
     .catch((error: unknown) => {
@@ -348,11 +412,37 @@ export function createRoomScene(): RoomScene {
   let playerAmount = 0;
   let orbitAzimuth = PLAYER_AZIMUTH;
   let orbitElevation = PLAYER_ELEVATION;
+  let playerBoundsRadius = 1.8;
   let tonearmTarget: number | null = null;
-  let tonearmAngle = 0;
-  let tonearm: any = null;
+  /**
+   * The label the deck asked for. Held rather than applied directly, because the console
+   * opens against a room that is still loading its GLB — a side chosen in that window
+   * would otherwise be printed on a record that does not exist yet, and lost.
+   */
+  let pendingLabel: DeckRecordSide | null = null;
   const playerHome = new THREE.Vector3();
   const baseHome = new THREE.Vector3();
+
+  const playerDistance = () => {
+    const verticalHalfFov = THREE.MathUtils.degToRad(PLAYER_FOV * 0.5);
+    const horizontalHalfFov = Math.atan(Math.tan(verticalHalfFov) * fullAspect);
+    const limitingHalfFov = Math.max(0.12, Math.min(verticalHalfFov, horizontalHalfFov));
+    // Keep the hardware large enough to read. The first responsive pass treated every
+    // almost-square desktop as a phone and pulled the camera back by nearly half again;
+    // that fitted the lid, but reduced the physical controls to decoration. Only truly
+    // narrow portrait screens need the larger horizontal-FOV allowance.
+    const consoleClearance = fullAspect < 0.72
+      ? 1.48
+      : fullAspect < 0.9
+        ? 1.32
+        : fullAspect < 1.2
+          ? 1.22
+          : 1.18;
+    return Math.max(
+      PLAYER_MIN_RADIUS,
+      (playerBoundsRadius / Math.sin(limitingHalfFov)) * consoleClearance,
+    );
+  };
 
   const updateResponsiveHome = () => {
     const portraitPullback = fullAspect < 1 ? THREE.MathUtils.lerp(1.42, 1.14, fullAspect) : 1;
@@ -376,7 +466,7 @@ export function createRoomScene(): RoomScene {
       ? Math.max(0, Math.min((timeMs - lastFrameMs) * 0.001, 0.05))
       : 0;
     lastFrameMs = timeMs;
-    platter?.update(delta);
+    deck?.update(delta);
 
     pickables.forEach((entry, id) => {
       const lift = hovered === id ? 0.28 : 0;
@@ -406,33 +496,31 @@ export function createRoomScene(): RoomScene {
     // Player mode rides on top of the ordinary room camera rather than replacing it, so
     // entering and leaving is one blend and the room never cuts.
     playerAmount += ((playerMode ? 1 : 0) - playerAmount) * (reducedMotion ? 1 : 0.09);
+    const roomFov = fullAspect < 1 ? 38 : 30;
+    let nextFullFov = THREE.MathUtils.lerp(roomFov, PLAYER_FOV, playerAmount);
     if (playerAmount > 0.001) {
       const cosE = Math.cos(orbitElevation);
+      const distance = playerDistance();
       playerHome.set(
-        PLAYER_LOOK.x + Math.cos(orbitAzimuth) * cosE * PLAYER_RADIUS,
-        PLAYER_LOOK.y + Math.sin(orbitElevation) * PLAYER_RADIUS,
-        PLAYER_LOOK.z + Math.sin(orbitAzimuth) * cosE * PLAYER_RADIUS,
+        PLAYER_LOOK.x + Math.cos(orbitAzimuth) * cosE * distance,
+        PLAYER_LOOK.y + Math.sin(orbitElevation) * distance,
+        PLAYER_LOOK.z + Math.sin(orbitAzimuth) * cosE * distance,
       );
       baseHome.lerp(playerHome, playerAmount);
       lookCurrent.lerp(PLAYER_LOOK, playerAmount);
-      const fov = THREE.MathUtils.lerp(fullAspect < 1 ? 38 : 30, PLAYER_FOV, playerAmount);
-      if (Math.abs(fullCamera.fov - fov) > 0.01) {
-        fullCamera.fov = fov;
-        fullCamera.updateProjectionMatrix();
-      }
+    }
+
+    if (Math.abs(fullCamera.fov - nextFullFov) > 0.01) {
+      fullCamera.fov = nextFullFov;
+      fullCamera.updateProjectionMatrix();
     }
 
     fullCamera.position.copy(baseHome);
     fullCamera.lookAt(lookCurrent);
 
-    // The arm parks itself when nothing is playing and tracks inward while it is. The
-    // ease is the same everywhere else in this room: a fixed fraction per frame, or an
-    // instant snap when the reader has asked for less motion.
-    const armTarget = tonearmTarget === null
-      ? 0
-      : THREE.MathUtils.lerp(TONEARM_OUTER, TONEARM_INNER, THREE.MathUtils.clamp(tonearmTarget, 0, 1));
-    tonearmAngle += (armTarget - tonearmAngle) * (reducedMotion ? 1 : 0.06);
-    if (tonearm) tonearm.rotation.y = tonearmAngle;
+    // The arm parks itself when nothing is playing and tracks inward while it is. Where
+    // it lands, and the lift-swing-drop on the way, belong to the deck.
+    deck?.setTonearm(tonearmTarget);
 
     if (!reducedMotion) {
       frameCamera.position.set(
@@ -466,6 +554,15 @@ export function createRoomScene(): RoomScene {
       const hit = raycaster.intersectObjects(interactiveMeshes, false)[0]?.object;
       return (hit?.userData.roomObject as RoomObjectId | undefined) ?? null;
     },
+    raycastDeckControl: (ndc) => {
+      if (!loaded || !deck || deck.controlNodes.length === 0) return null;
+      fullCamera.updateMatrixWorld();
+      deck.group.updateWorldMatrix(true, true);
+      pointerNdc.set(ndc.x, ndc.y);
+      raycaster.setFromCamera(pointerNdc, fullCamera);
+      const hit = raycaster.intersectObjects(deck.controlNodes, false)[0]?.object;
+      return (hit?.userData.deckControl as DeckControlId | undefined) ?? null;
+    },
     setHover: (id) => { hovered = id; },
     focus: (id) => { focused = id; },
     setPlayerMode: (on) => { playerMode = on; },
@@ -486,10 +583,18 @@ export function createRoomScene(): RoomScene {
       orbitElevation = PLAYER_ELEVATION;
     },
     setTonearm: (progress) => { tonearmTarget = progress; },
-    setPlatterRpm: (rpm) => platter?.setRpm(rpm),
-    setPlatterSpinning: (spinning) => platter?.setSpinning(spinning),
+    setPlatterRpm: (rpm) => deck?.setRpm(rpm),
+    setPlatterSpinning: (spinning) => deck?.setSpinning(spinning),
+    setRecordLabel: (side) => {
+      pendingLabel = side;
+      deck?.setLabel(side);
+    },
+    setDeckControlValue: (control, value) => deck?.setControlValue(control, value),
+    pressDeckStart: () => deck?.pressStart(),
+    setDeckControlHover: (control) => deck?.setControlHover(control),
     dispose: () => {
       disposed = true;
+      deck?.dispose();
       if (model) disposeObject(model);
       ownedTextures.forEach((texture) => texture.dispose());
       scene.clear();

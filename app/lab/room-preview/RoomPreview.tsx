@@ -25,7 +25,6 @@ export function RoomPreview() {
   // The deck console is DOM and the room is WebGL, so the only way to see whether the
   // console reads against the room is to put the real one over the real other one.
   const [deck, setDeck] = useState(false);
-  const [rpm, setRpm] = useState(33 + 1 / 3);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -305,10 +304,6 @@ export function RoomPreview() {
         <JoiMusicPlayer
           open
           onClose={() => setDeck(false)}
-          onPlayingChange={() => {}}
-          onProgressChange={() => {}}
-          rpm={rpm}
-          onRpmChange={setRpm}
           onResetView={() => {}}
         />
       ) : null}

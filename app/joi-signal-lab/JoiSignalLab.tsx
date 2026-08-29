@@ -4,26 +4,73 @@ import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from
 import { useRouter } from "next/navigation";
 import * as THREE from "three";
 import { createRoomScene } from "./room3d";
+import type { DeckControlId } from "./roomTurntable";
 import { createHeroScene } from "./heroScene";
 import { createOceanScene, SEA_STATES } from "./oceanScene";
 import { createPostChain } from "./postfx";
 import { detectQuality } from "./quality";
 import { LanyardBadge } from "./badge/LanyardBadge";
 import { JoiMusicPlayer } from "./JoiMusicPlayer";
+import { PageTurnCorner } from "./PageTurnCorner";
 import { createScrollSignal } from "./scrollSignal";
 import { ROOM_OBJECTS, type RoomObjectId } from "./roomObjects";
 import { projects, reelMotionSources, reelPosterSources, type ProjectSignal } from "./reelProjects";
 import { createReelMotion, modulo, type ReelMotion } from "./reelMotion";
 import { ATLAS_FRAME_HEIGHT, ATLAS_FRAME_WIDTH, buildAtlas, drawCoverImage } from "./reelArt";
 import { buildHandheldModel } from "./handheldModel";
+import { useGlobalMusic } from "../../components/global-music/GlobalMusic";
 
 const seaStateLabels = SEA_STATES.map((state) => state.label);
+
+/** Contact copy becomes legible shortly after the paper starts exposing it. */
+const contactPresenceFor = (turn: number) => smoothStep((turn - 0.18) / 0.62);
+
+/**
+ * One writer for both scroll and pointer-driven paper motion.
+ *
+ * The contact sheet grows as a diagonal polygon from the top-right corner. The separate
+ * curl follows the hand during a drag and follows a restrained diagonal during scroll,
+ * so the two inputs never produce two visibly different transitions.
+ */
+const applyPageTurnStyle = (
+  root: HTMLElement,
+  turn: number,
+  presence: number,
+  dragX = 0,
+  dragY = 0,
+  dragging = false,
+) => {
+  const amount = clamp01(turn);
+  const restingCorner = Math.min(116, Math.max(82, window.innerWidth * 0.075));
+  const defaultX = amount * Math.min(window.innerWidth * 0.82, 1180);
+  const defaultY = amount * Math.min(window.innerHeight * 0.82, 760);
+  const curlX = dragging ? Math.max(defaultX, dragX) : defaultX;
+  const curlY = dragging ? Math.max(defaultY, dragY) : defaultY;
+  // Reveal gently for the first four-fifths, then clear the last opposite corner.
+  const revealSize = amount < 0.8
+    ? amount * 140
+    : 112 + ((amount - 0.8) / 0.2) * 108;
+  const cornerOpacity = 1 - smoothStep((amount - 0.76) / 0.2);
+  const style = root.style;
+  style.setProperty("--contact-turn", amount.toFixed(4));
+  style.setProperty("--contact-turn-size", `${revealSize.toFixed(2)}%`);
+  // A zero-area polygon can still leave a one-pixel filtered seam in some browsers.
+  style.setProperty("--contact-page-opacity", smoothStep(amount / 0.035).toFixed(4));
+  style.setProperty("--contact-presence", clamp01(presence).toFixed(4));
+  style.setProperty("--page-curl-width", `${(restingCorner + curlX).toFixed(1)}px`);
+  style.setProperty("--page-curl-height", `${(restingCorner + curlY).toFixed(1)}px`);
+  style.setProperty("--page-fold-opacity", (1 - smoothStep((amount - 0.82) / 0.15)).toFixed(4));
+  style.setProperty("--page-under-opacity", (1 - smoothStep(amount / 0.32)).toFixed(4));
+  style.setProperty("--page-corner-opacity", cornerOpacity.toFixed(4));
+};
 import { SiteHUD } from "../../components/SiteHUD";
 import {
+  FOCAL_HANDOFFS,
   REEL_ANCHOR,
   SECTIONS,
   TOTAL_SCREENS,
   clamp01,
+  focalHandoffProgress,
   getSection,
   progressWithin,
   smoothStep,
@@ -153,6 +200,7 @@ function FilmCanvas({
   entryRef,
   exitRef,
   roomPresenceRef,
+  contactTurnRef,
   scrollVelocityRef,
   signalRef,
   onStepChange,
@@ -161,12 +209,19 @@ function FilmCanvas({
   onHeroReady,
   deckOpen,
   deckRpm,
+  deckVolume,
+  deckTone,
   deckProgress,
+  deckSide,
   resetDeckViewRef,
   onSeaStateChange,
   onRoomHover,
   onRoomPick,
   recordPlaying,
+  onDeckVolumeChange,
+  onDeckToneChange,
+  onDeckToggle,
+  onDeckRpmToggle,
   onDragStateChange,
 }: {
   step: number;
@@ -178,6 +233,8 @@ function FilmCanvas({
   exitRef: { current: number };
   /** The room belongs to About only and fades before Contact takes ownership. */
   roomPresenceRef: { current: number };
+  /** About → Contact paper turn, shared by scroll and the draggable corner. */
+  contactTurnRef: { current: number };
   /** Scroll speed in screens per second, signed. Drives the tube's grip on the signal. */
   scrollVelocityRef: { current: number };
   /**
@@ -192,8 +249,12 @@ function FilmCanvas({
   deckOpen: boolean;
   /** 33⅓ or 45; the platter follows it. */
   deckRpm: number;
+  deckVolume: number;
+  deckTone: number;
   /** How far through the side the music is, for the tonearm. Null when stopped. */
   deckProgress: number | null;
+  /** The record currently on the platter, for its live centre label. */
+  deckSide: { id?: string; title: string; artist: string; color: string; artwork?: string | null } | null;
   /** Filled in here so the deck's ROTATE button can reach the camera. */
   resetDeckViewRef: { current: () => void };
   onStepChange: (step: number) => void;
@@ -206,6 +267,10 @@ function FilmCanvas({
   onRoomPick: (id: RoomObjectId | null) => void;
   /** True while a mix is playing, so the platter turns. */
   recordPlaying: boolean;
+  onDeckVolumeChange: (value: number) => void;
+  onDeckToneChange: (value: number) => void;
+  onDeckToggle: () => void;
+  onDeckRpmToggle: () => void;
   /** Lets the scroll driver suspend snapping while the reader is dragging the reel. */
   onDragStateChange: (active: boolean) => void;
 }) {
@@ -219,16 +284,31 @@ function FilmCanvas({
   const onHeroReadyRef = useRef(onHeroReady);
   const deckOpenRef = useRef(deckOpen);
   const deckRpmRef = useRef(deckRpm);
+  const deckVolumeRef = useRef(deckVolume);
+  const deckToneRef = useRef(deckTone);
   const deckProgressRef = useRef(deckProgress);
+  const deckSideRef = useRef(deckSide);
+  const appliedSideRef = useRef<typeof deckSide>(null);
   useEffect(() => { deckOpenRef.current = deckOpen; }, [deckOpen]);
   useEffect(() => { deckRpmRef.current = deckRpm; }, [deckRpm]);
+  useEffect(() => { deckVolumeRef.current = deckVolume; }, [deckVolume]);
+  useEffect(() => { deckToneRef.current = deckTone; }, [deckTone]);
   useEffect(() => { deckProgressRef.current = deckProgress; }, [deckProgress]);
+  useEffect(() => { deckSideRef.current = deckSide; }, [deckSide]);
   const onSeaStateChangeRef = useRef(onSeaStateChange);
   const onRoomHoverRef = useRef(onRoomHover);
   const onRoomPickRef = useRef(onRoomPick);
+  const onDeckVolumeChangeRef = useRef(onDeckVolumeChange);
+  const onDeckToneChangeRef = useRef(onDeckToneChange);
+  const onDeckToggleRef = useRef(onDeckToggle);
+  const onDeckRpmToggleRef = useRef(onDeckRpmToggle);
   const recordPlayingRef = useRef(recordPlaying);
   useEffect(() => { onRoomHoverRef.current = onRoomHover; }, [onRoomHover]);
   useEffect(() => { onRoomPickRef.current = onRoomPick; }, [onRoomPick]);
+  useEffect(() => { onDeckVolumeChangeRef.current = onDeckVolumeChange; }, [onDeckVolumeChange]);
+  useEffect(() => { onDeckToneChangeRef.current = onDeckToneChange; }, [onDeckToneChange]);
+  useEffect(() => { onDeckToggleRef.current = onDeckToggle; }, [onDeckToggle]);
+  useEffect(() => { onDeckRpmToggleRef.current = onDeckRpmToggle; }, [onDeckRpmToggle]);
   useEffect(() => { recordPlayingRef.current = recordPlaying; }, [recordPlaying]);
   useEffect(() => { onDragStateChangeRef.current = onDragStateChange; }, [onDragStateChange]);
   useEffect(() => { onHeroReadyRef.current = onHeroReady; }, [onHeroReady]);
@@ -610,6 +690,17 @@ function FilmCanvas({
     const ribbon = new THREE.Mesh(geometry, material);
     scene.add(ribbon);
 
+    // The selected frame is aligned to the curve's front-most point by `uPhase` above.
+    // Keeping that point in world space gives the exit camera a real focal plane: it
+    // approaches whichever frame the visitor stopped on instead of zooming toward the
+    // canvas origin and letting the chosen frame slide off-axis.
+    const reelCameraHome = new THREE.Vector3(0, 0, 5);
+    const reelLookHome = new THREE.Vector3(0, 0, 0);
+    const reelFocusLocal = curve.getPointAt(frontT);
+    const reelFocusWorld = new THREE.Vector3();
+    const reelLook = new THREE.Vector3();
+    const reelDirection = new THREE.Vector3();
+
     let frame = 0;
     let readySent = false;
     let width = 1;
@@ -660,6 +751,9 @@ function FilmCanvas({
       const scale = sourceScale * 0.4;
       ribbon.position.y = 0.2 + reelY * 0.4;
       ribbon.scale.setScalar(scale);
+      ribbon.updateMatrixWorld(true);
+      reelFocusWorld.copy(reelFocusLocal);
+      ribbon.localToWorld(reelFocusWorld);
     };
 
     /** Normalised device coordinates, from the cached rect. */
@@ -680,12 +774,18 @@ function FilmCanvas({
     const heroOwnsPointer = () => entryRef.current < HERO_OWNS_POINTER_UNTIL;
     /** Once the room is the picture, it is also what the pointer is pointing at. */
     const roomOwnsPointer = () =>
-      exitRef.current > 0.55 && roomPresenceRef.current > 0.05;
+      exitRef.current > 0.55 &&
+      roomPresenceRef.current > 0.05 &&
+      contactTurnRef.current < 0.08;
     const roomPointer = { x: 0, y: 0 };
     resetDeckViewRef.current = () => roomScene.resetPlayerOrbit();
     let orbiting = false;
     let orbitX = 0;
     let orbitY = 0;
+    let activeDeckControl: DeckControlId | null = null;
+    let hoveredDeckControl: DeckControlId | null = null;
+    let knobStartY = 0;
+    let knobStartValue = 0;
     let hoveredRoomObject: RoomObjectId | null = null;
 
     const normalisedPointer = (event: PointerEvent | MouseEvent) => ({
@@ -710,7 +810,8 @@ function FilmCanvas({
      * playhead happened to be parked on. That is why a click anywhere down there went
      * to /work/joi.
      */
-    const reelOwnsPointer = () => !heroOwnsPointer() && !roomOwnsPointer();
+    const reelOwnsPointer = () =>
+      !heroOwnsPointer() && !roomOwnsPointer() && exitRef.current < 0.08;
 
     /** Set while the hero's light orb is being carried. */
     let carryingOrb = false;
@@ -724,6 +825,7 @@ function FilmCanvas({
       // selection across every panel behind the stage — which is what turned the whole
       // page coral the moment anyone tried to rotate the deck.
       event.preventDefault();
+      window.getSelection()?.removeAllRanges();
       // The orb is the hero's one grabbable thing, and it outranks the sea-state click
       // it is sitting in front of.
       if (heroOwnsPointer() && hero.grabOrb(normalisedPointer(event))) {
@@ -733,8 +835,23 @@ function FilmCanvas({
         return;
       }
       // At the deck the room's usual verbs are suspended: there is one object in shot
-      // and dragging turns it, the way you would turn it on a desk.
+      // and its four physical controls outrank the camera orbit behind them.
       if (deckOpenRef.current && roomOwnsPointer()) {
+        const hit = roomScene.raycastDeckControl(normalisedPointer(event));
+        if (hit) {
+          activeDeckControl = hit;
+          knobStartY = event.clientY;
+          knobStartValue = hit === "volume" ? deckVolumeRef.current : deckToneRef.current;
+          canvas.setPointerCapture(event.pointerId);
+          if (hit === "start") {
+            roomScene.pressDeckStart();
+            onDeckToggleRef.current();
+          } else if (hit === "speed") {
+            onDeckRpmToggleRef.current();
+          }
+          canvas.style.cursor = hit === "volume" || hit === "tone" ? "ns-resize" : "pointer";
+          return;
+        }
         orbiting = true;
         orbitX = event.clientX;
         orbitY = event.clientY;
@@ -757,6 +874,24 @@ function FilmCanvas({
         hero.moveOrb(normalisedPointer(event));
         return;
       }
+      if (activeDeckControl === "volume" || activeDeckControl === "tone") {
+        const value = THREE.MathUtils.clamp(
+          knobStartValue + (knobStartY - event.clientY) * 0.006,
+          0,
+          1,
+        );
+        if (activeDeckControl === "volume") {
+          deckVolumeRef.current = value;
+          roomScene.setDeckControlValue("volume", value);
+          onDeckVolumeChangeRef.current(value);
+        } else {
+          deckToneRef.current = value;
+          roomScene.setDeckControlValue("tone", value);
+          onDeckToneChangeRef.current(value);
+        }
+        return;
+      }
+      if (activeDeckControl) return;
       if (orbiting) {
         // Cached size, same as the NDC helpers — an orbit drag is a stream of moves.
         roomScene.orbitPlayer(
@@ -780,6 +915,19 @@ function FilmCanvas({
         const ndc = normalisedPointer(event);
         roomPointer.x = ndc.x;
         roomPointer.y = ndc.y;
+        if (deckOpenRef.current) {
+          const control = roomScene.raycastDeckControl(ndc);
+          if (control !== hoveredDeckControl) {
+            hoveredDeckControl = control;
+            roomScene.setDeckControlHover(control);
+          }
+          canvas.style.cursor = control === "volume" || control === "tone"
+            ? "ns-resize"
+            : control
+              ? "pointer"
+              : "grab";
+          return;
+        }
         const hit = roomScene.raycastAt(ndc);
         if (hit !== hoveredRoomObject) {
           hoveredRoomObject = hit;
@@ -796,6 +944,16 @@ function FilmCanvas({
       targetReelOffset = stepRef.current * FRAME_WIDTH - drag.offset / (0.05 * width);
     };
     const finishDrag = (event: PointerEvent, openOnTap: boolean) => {
+      if (activeDeckControl) {
+        activeDeckControl = null;
+        canvas.style.cursor = hoveredDeckControl === "volume" || hoveredDeckControl === "tone"
+          ? "ns-resize"
+          : hoveredDeckControl
+            ? "pointer"
+            : "grab";
+        try { canvas.releasePointerCapture(event.pointerId); } catch {}
+        return;
+      }
       if (orbiting) {
         orbiting = false;
         canvas.style.cursor = "";
@@ -848,6 +1006,11 @@ function FilmCanvas({
       }
       roomPointer.x = 0;
       roomPointer.y = 0;
+      if (hoveredDeckControl) {
+        hoveredDeckControl = null;
+        roomScene.setDeckControlHover(null);
+        if (!activeDeckControl && !orbiting) canvas.style.cursor = "";
+      }
       if (hoveredRoomObject) {
         hoveredRoomObject = null;
         roomScene.setHover(null);
@@ -988,9 +1151,12 @@ function FilmCanvas({
 
       uniforms.uInitialOffset.value = entryOffset;
       uniforms.uReelOffset.value = reelOffset;
-      uniforms.uFlex.value = flex;
+      // As a hand-off begins, parallax and flex settle back onto the chosen frame. The
+      // frame itself may still be moving on its spring, but pointer noise no longer
+      // knocks the focal object away from the approaching camera.
+      uniforms.uFlex.value = flex * (1 - exit);
       uniforms.uTime.value += delta * 60;
-      uniforms.uPointer.value.copy(pointer);
+      uniforms.uPointer.value.copy(pointer).multiplyScalar(1 - exit);
       // The Night Tide handheld is a whole second scene drawn into a 768×576 target. It only
       // feeds frame 03, so rendering it while the reader is three frames away was paying for
       // an offscreen pass sixty times a second to light a texture nobody was sampling.
@@ -1023,7 +1189,16 @@ function FilmCanvas({
       // The deck owns the camera, the platter speed and the tonearm while it is open.
       roomScene.setPlayerMode(deckOpenRef.current && roomIsStage);
       roomScene.setPlatterRpm(deckRpmRef.current);
+      roomScene.setDeckControlValue("volume", deckVolumeRef.current);
+      roomScene.setDeckControlValue("tone", deckToneRef.current);
+      roomScene.setDeckControlValue("speed", deckRpmRef.current);
       roomScene.setTonearm(deckProgressRef.current);
+      // Only on change: printing a label redraws a canvas and uploads a texture, which
+      // is a fine thing to do when the record changes and a terrible one to do at 60Hz.
+      if (deckSideRef.current && deckSideRef.current !== appliedSideRef.current) {
+        appliedSideRef.current = deckSideRef.current;
+        roomScene.setRecordLabel(deckSideRef.current);
+      }
       if (roomDistance <= 1 || roomIsStage) roomScene.update(performance.now(), roomPointer);
       if (roomDistance <= 1) {
         renderer.setRenderTarget(roomTarget);
@@ -1075,11 +1250,19 @@ function FilmCanvas({
        * moment the film is too close to read — you go through the picture rather
        * than watching it fade.
        */
-      camera.position.z = 5 - exit * 3.1;
+      const reelDolly = reducedMotion ? 0 : exit;
+      reelDirection.copy(reelCameraHome).sub(reelFocusWorld).normalize();
+      const reelHomeDistance = reelCameraHome.distanceTo(reelFocusWorld);
+      camera.position.copy(reelFocusWorld).addScaledVector(
+        reelDirection,
+        THREE.MathUtils.lerp(reelHomeDistance, 0.82, reelDolly),
+      );
+      reelLook.lerpVectors(reelLookHome, reelFocusWorld, reelDolly);
+      camera.lookAt(reelLook);
       // Only the fov feeds the projection, and it only moves while the reel is being
       // pushed through — which is a fraction of the scroll. Rebuilding the matrix on a
       // value that has not changed is a wasted matrix and a wasted dirty flag.
-      const nextFov = 65 + exit * 14;
+      const nextFov = 65 + reelDolly * 14;
       if (nextFov !== camera.fov) {
         camera.fov = nextFov;
         camera.updateProjectionMatrix();
@@ -1286,6 +1469,18 @@ const useBeforePaint = typeof window !== "undefined" ? useLayoutEffect : useEffe
 
 export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSignalLabProps) {
   const router = useRouter();
+  const {
+    loaded: deckSide,
+    isPlaying: recordPlaying,
+    rpm: deckRpm,
+    volume: deckVolume,
+    tone: deckTone,
+    tonearmProgress: deckProgress,
+    toggle: toggleDeck,
+    setVolume: setDeckVolume,
+    setTone: setDeckTone,
+    setRpm: setDeckRpm,
+  } = useGlobalMusic();
   const experienceRef = useRef<HTMLElement>(null);
   const filmActiveRef = useRef(false);
   const [step, setStep] = useState(0);
@@ -1293,10 +1488,6 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
   /** Which room object the reader picked — lights the matching interest chip. */
   const [hoveredInterest, setHoveredInterest] = useState<RoomObjectId | null>(null);
   const [musicPlayerOpen, setMusicPlayerOpen] = useState(false);
-  // Which mix the turntable has been loaded with, and whether it is actually sounding.
-  // The record on the deck turns off the second, not the first, so a paused deck sits
-  // still with the record still on it.
-  const [playingMixId, setPlayingMixId] = useState<string | null>(null);
   const [computerReady, setComputerReady] = useState(false);
   const [fontsReady, setFontsReady] = useState(false);
   /** True when this mount is the way back from a detail page rather than an arrival. */
@@ -1319,9 +1510,6 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
   /** Where the veil is on its way to, so it can say so. */
   const [leavingTo, setLeavingTo] = useState<string | null>(null);
   const [seaState, setSeaState] = useState(0);
-  /** 33⅓ by default, the way a deck is left. */
-  const [deckRpm, setDeckRpm] = useState(33 + 1 / 3);
-  const [deckProgress, setDeckProgress] = useState<number | null>(null);
   const resetDeckViewRef = useRef(() => {});
   /** The scroll driver runs outside React, so it closes the deck through a ref. */
   const closeDeckRef = useRef(() => {});
@@ -1462,6 +1650,11 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
   const reelExitRef = useRef(0);
   /** About's full-stage room fades out before Contact owns the address and copy. */
   const roomPresenceRef = useRef(0);
+  /** Scroll-driven paper turn from the room into Contact's black call sheet. */
+  const contactTurnRef = useRef(0);
+  /** Pointer drag temporarily owns the same variables the scroll callback normally writes. */
+  const pageTurnGestureRef = useRef(false);
+  const pageTurnSettleTimerRef = useRef<number | null>(null);
   const dragActiveRef = useRef(false);
 
   /*
@@ -1512,22 +1705,25 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
       // three times yesterday's window — and still completes before the anchor, so the
       // /selected-work deep link keeps landing on a fully arrived reel.
       const filmReveal = smoothStep((entry - 0.5) / 0.35);
-      const aboutStart = getSection("about-me").position;
-      const contactStart = getSection("contact").position;
-      const reelExit = smoothStep((screens - (aboutStart - 0.8)) / 0.8);
-      // `sectionAt` hands the route to Contact 0.35 screens before its anchor. Finish
-      // the room fade at that same boundary so a /contact landing never inherits the
-      // About scene, while the last stretch of About gets a deliberate exit.
-      const contactOwnership = contactStart - 0.35;
-      const roomExit = smoothStep((screens - (contactOwnership - 0.35)) / 0.35);
-      const roomPresence = reelExit * (1 - roomExit);
+      const reelExit = focalHandoffProgress(FOCAL_HANDOFFS.selectedToAbout, screens);
+      const contactTurn = focalHandoffProgress(FOCAL_HANDOFFS.aboutToContact, screens);
+
+      // The picture stays with its focal object for most of each move. Copy leaves
+      // early enough not to cross the paper edge, while the room releases only once
+      // Contact's black sheet covers most of it.
+      const aboutArrival = smoothStep((reelExit - 0.58) / 0.3);
+      const aboutDeparture = smoothStep((contactTurn - 0.18) / 0.46);
+      const aboutPresence = aboutArrival * (1 - aboutDeparture);
+      const contactPresence = contactPresenceFor(contactTurn);
+      const roomPresence = reelExit * (1 - contactPresence);
 
       entryRef.current = entry;
       filmRevealRef.current = filmReveal;
       reelExitRef.current = reelExit;
       roomPresenceRef.current = roomPresence;
+      contactTurnRef.current = contactTurn;
       if (roomPresence < 0.35) closeDeckRef.current();
-      filmActiveRef.current = filmReveal > 0.55 && screens < aboutStart - 0.4;
+      filmActiveRef.current = filmReveal > 0.55 && reelExit < 0.08;
 
       const style = experience.style;
       const cache = cssCacheRef.current;
@@ -1547,6 +1743,12 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
       write("--terminal-opacity", (1 - smoothStep(entry / 0.85)).toFixed(4));
       write("--terminal-shift", `${(entry * 18).toFixed(2)}px`);
       write("--reel-exit", reelExit.toFixed(4));
+      write("--about-presence", aboutPresence.toFixed(4));
+      write("--about-shift", `${((1 - aboutPresence) * 34).toFixed(2)}px`);
+      if (!pageTurnGestureRef.current) {
+        applyPageTurnStyle(experience, contactTurn, contactPresence);
+      }
+      write("--contact-shift", `${((1 - contactPresence) * 34).toFixed(2)}px`);
       write("--about-progress", progressWithin("about-me", screens).toFixed(4));
       write("--contact-progress", progressWithin("contact", screens).toFixed(4));
       // The same instability the post chain is using, for the type sitting over it.
@@ -1554,11 +1756,49 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
     },
     onSectionChange: setActiveSection,
     // Don't snap out from under someone who is dragging the reel.
-    isLocked: () => filmActiveRef.current && dragActiveRef.current,
+    isLocked: () => pageTurnGestureRef.current || (filmActiveRef.current && dragActiveRef.current),
     // The boot screen holds the page still until every system is warm.
     // The menu is modal, so the page behind it holds still — same pin the boot uses.
     bootLocked: () => !readyRef.current || menuOpen,
   });
+
+  const handlePageTurnProgress = (
+    progress: number,
+    dragX: number,
+    dragY: number,
+    dragging: boolean,
+  ) => {
+    const experience = experienceRef.current;
+    if (!experience) return;
+    if (pageTurnSettleTimerRef.current !== null) {
+      window.clearTimeout(pageTurnSettleTimerRef.current);
+      pageTurnSettleTimerRef.current = null;
+    }
+    pageTurnGestureRef.current = dragging;
+    if (dragging) {
+      experience.dataset.pageTurn = "dragging";
+    } else {
+      experience.dataset.pageTurn = "settling";
+      pageTurnSettleTimerRef.current = window.setTimeout(() => {
+        delete experience.dataset.pageTurn;
+        pageTurnSettleTimerRef.current = null;
+      }, 560);
+    }
+    applyPageTurnStyle(
+      experience,
+      progress,
+      contactPresenceFor(progress),
+      dragX,
+      dragY,
+      dragging,
+    );
+  };
+
+  useEffect(() => () => {
+    if (pageTurnSettleTimerRef.current !== null) {
+      window.clearTimeout(pageTurnSettleTimerRef.current);
+    }
+  }, []);
 
   // Keep the address bar in step with where the reader actually is, without adding history
   // entries — scrolling is not navigation.
@@ -1573,7 +1813,7 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
     <main
       ref={experienceRef}
       tabIndex={-1}
-      className={`${styles.experience} ${className}`}
+      className={`${styles.experience} ${musicPlayerOpen ? styles.experienceDeckOpen : ""} ${className}`}
       style={{
         // Scroll length comes from the section table, so adding a section extends the page.
         height: `${TOTAL_SCREENS * 100}svh`,
@@ -1632,11 +1872,15 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
             entryRef={entryRef}
             exitRef={reelExitRef}
             roomPresenceRef={roomPresenceRef}
+            contactTurnRef={contactTurnRef}
             scrollVelocityRef={scrollVelocityRef}
             signalRef={signalRef}
             deckOpen={musicPlayerOpen}
             deckRpm={deckRpm}
+            deckVolume={deckVolume}
+            deckTone={deckTone}
             deckProgress={deckProgress}
+            deckSide={deckSide}
             resetDeckViewRef={resetDeckViewRef}
             onHeroReady={() => setComputerReady(true)}
             onSeaStateChange={setSeaState}
@@ -1644,7 +1888,11 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
             onRoomPick={(id) => {
               if (id === "joi-music-box") setMusicPlayerOpen(true);
             }}
-            recordPlaying={playingMixId !== null}
+            recordPlaying={recordPlaying}
+            onDeckVolumeChange={setDeckVolume}
+            onDeckToneChange={setDeckTone}
+            onDeckToggle={() => { void toggleDeck(); }}
+            onDeckRpmToggle={() => setDeckRpm(deckRpm > 39 ? 33 + 1 / 3 : 45)}
             onStepChange={setStep}
             onProjectOpen={(href) => {
               // Frames whose destination is a section of this page scroll instead of
@@ -1673,10 +1921,6 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
         <JoiMusicPlayer
           open={musicPlayerOpen}
           onClose={() => setMusicPlayerOpen(false)}
-          onPlayingChange={setPlayingMixId}
-          onProgressChange={setDeckProgress}
-          rpm={deckRpm}
-          onRpmChange={setDeckRpm}
           onResetView={() => resetDeckViewRef.current()}
         />
 
@@ -1732,22 +1976,11 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
           )}
         </div>
 
-        {/*
-          The badge hangs over Contact, not over the room. It is a call sheet's object —
-          a name, a role, a way to reach someone — and on About it was competing with
-          the desk for the same corner of the frame.
-        */}
-        <div
-          className={`${styles.contactScene} ${activeSection === "contact" ? styles.contactSceneActive : ""}`}
-        >
-          <div className={styles.badgeBox}>
-            <LanyardBadge active={activeSection === "contact"} />
-          </div>
-        </div>
-
         <section
           className={`${styles.closingPanel} ${styles.aboutPanel} ${activeSection === "about-me" ? styles.closingPanelActive : ""}`}
           aria-label="About me"
+          aria-hidden={activeSection === "about-me" ? undefined : true}
+          inert={activeSection === "about-me" ? undefined : true}
         >
           {/*
             The About copy has been taken out on purpose. It is being rewritten as labels
@@ -1765,22 +1998,44 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
           </div>
         </section>
 
-        <section
-          className={`${styles.closingPanel} ${styles.contactPanel} ${activeSection === "contact" ? styles.closingPanelActive : ""}`}
-          aria-label="Contact"
+        {/* Contact is a black call sheet underneath the room's draggable paper corner. */}
+        <div
+          className={styles.contactPage}
+          aria-hidden={activeSection === "contact" ? undefined : true}
         >
-          <p className={styles.closingKicker}>04 / CONTACT — CALL SHEET</p>
-          <h2>Let&rsquo;s make technology people can live with.</h2>
-          <div className={styles.closingBody}>
-            <p lang="zh-CN">在找 AI 产品 / 产品设计的机会，也接有意思的项目。来聊。</p>
+          <div
+            className={`${styles.contactScene} ${activeSection === "contact" ? styles.contactSceneActive : ""}`}
+          >
+            <div className={styles.badgeBox}>
+              <LanyardBadge active={activeSection === "contact"} />
+            </div>
           </div>
-          <div className={styles.closingActions}>
-            <a href="mailto:18520455682@163.com">18520455682@163.COM</a>
-            <a href="https://github.com/Gallo233" target="_blank" rel="noreferrer">GITHUB / GALLO233</a>
-            <a href="/resume/gallo-liu-resume-cn.pdf" download>RESUME / PDF</a>
-          </div>
-          <p className={styles.closingMeta}>GUANGZHOU · GMT+8 · 2026</p>
-        </section>
+
+          <section
+            className={`${styles.closingPanel} ${styles.contactPanel} ${activeSection === "contact" ? styles.closingPanelActive : ""}`}
+            aria-label="Contact"
+            inert={activeSection === "contact" ? undefined : true}
+          >
+            <p className={styles.closingKicker}>04 / CONTACT — CALL SHEET</p>
+            <h2>Let&rsquo;s make technology people can live with.</h2>
+            <div className={styles.closingBody}>
+              <p lang="zh-CN">在找 AI 产品 / 产品设计的机会，也接有意思的项目。来聊。</p>
+            </div>
+            <div className={styles.closingActions}>
+              <a href="mailto:18520455682@163.com">18520455682@163.COM</a>
+              <a href="https://github.com/Gallo233" target="_blank" rel="noreferrer">GITHUB / GALLO233</a>
+              <a href="/resume/gallo-liu-resume-cn.pdf" download>RESUME / PDF</a>
+            </div>
+            <p className={styles.closingMeta}>GUANGZHOU · GMT+8 · 2026</p>
+          </section>
+        </div>
+
+        <PageTurnCorner
+          active={activeSection === "about-me"}
+          progressRef={contactTurnRef}
+          onProgress={handlePageTurnProgress}
+          onCommit={() => scrollToSection.current("contact")}
+        />
 
         <header className={styles.header}>
           <a className={styles.brand} href="/" aria-label="Back to Gallo home">

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useGlobalMusic } from "../../../components/global-music/GlobalMusic";
 import { JoiMusicPlayer } from "../../joi-signal-lab/JoiMusicPlayer";
 
 /**
@@ -11,8 +12,7 @@ import { JoiMusicPlayer } from "../../joi-signal-lab/JoiMusicPlayer";
  * turntable-shaped.
  */
 export function DeckPreview() {
-  const [rpm, setRpm] = useState(33 + 1 / 3);
-  const [progress, setProgress] = useState<number | null>(null);
+  const { rpm, progress } = useGlobalMusic();
   const [open, setOpen] = useState(true);
 
   return (
@@ -38,10 +38,6 @@ export function DeckPreview() {
       <JoiMusicPlayer
         open={open}
         onClose={() => setOpen(false)}
-        onPlayingChange={() => {}}
-        onProgressChange={setProgress}
-        rpm={rpm}
-        onRpmChange={setRpm}
         onResetView={() => {}}
       />
     </div>

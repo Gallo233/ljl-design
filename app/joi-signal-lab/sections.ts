@@ -24,8 +24,6 @@ export type SnapWindow = {
 export type SnapConfig = {
   forward: SnapWindow;
   backward: SnapWindow;
-  /** Arrow-key snap durations in ms. */
-  keyboard?: { toNext?: number; toPrevious?: number };
 };
 
 export type Section = {
@@ -37,6 +35,8 @@ export type Section = {
   position: number;
   /** Null means "nav target, not a snap target" — the reference does the same. */
   snap: SnapConfig | null;
+  /** Navigation / up-down key travel time from this section, in milliseconds. */
+  travel?: { toNext?: number; toPrevious?: number };
 };
 
 /**
@@ -68,8 +68,8 @@ export const SECTIONS: Section[] = [
     snap: {
       forward: { range: [-10000, 0.1], multiplier: 1 },
       backward: { range: [-10000, 1.6], multiplier: 1 },
-      keyboard: { toNext: 2000 },
     },
+    travel: { toNext: 2000 },
   },
   {
     id: "selected-work",
@@ -80,11 +80,27 @@ export const SECTIONS: Section[] = [
     snap: {
       forward: { range: [-1.8, 0.6], multiplier: 1 },
       backward: { range: [-0.44, 1.2], multiplier: [3, 0.3] },
-      keyboard: { toPrevious: 2000, toNext: 3000 },
     },
+    travel: { toPrevious: 2000, toNext: 3000 },
   },
-  { id: "about-me", path: "/about-me", label: "ABOUT ME", title: "About Me", position: 5.2, snap: null },
-  { id: "contact", path: "/contact", label: "CONTACT", title: "Contact", position: 7.6, snap: null },
+  {
+    id: "about-me",
+    path: "/about-me",
+    label: "ABOUT ME",
+    title: "About Me",
+    position: 5.2,
+    snap: null,
+    travel: { toPrevious: 3000, toNext: 2400 },
+  },
+  {
+    id: "contact",
+    path: "/contact",
+    label: "CONTACT",
+    title: "Contact",
+    position: 7.6,
+    snap: null,
+    travel: { toPrevious: 2400 },
+  },
 ];
 
 /** Total scroll length in screens: the last section plus a screen to read it in. */
@@ -125,6 +141,19 @@ export const smoothStep = (value: number) => {
 };
 
 /**
+ * The two later hand-offs use the same grammar as the CRT entrance: one object owns
+ * the focal plane for a measured lead-in before the next section arrives.
+ *
+ * `lead` is in viewport heights, like every other distance in this file. Keeping these
+ * beside the section table prevents the camera code and the DOM copy from quietly
+ * drifting onto different scroll windows.
+ */
+export const FOCAL_HANDOFFS = {
+  selectedToAbout: { target: "about-me", lead: 0.95 },
+  aboutToContact: { target: "contact", lead: 1.05 },
+} as const satisfies Record<string, { target: SectionId; lead: number }>;
+
+/**
  * The table, indexed once.
  *
  * Both lookups below run on the scroll driver's frame callback — four linear scans of
@@ -136,6 +165,15 @@ const BY_ID = new Map(
 
 export function getSection(id: SectionId) {
   return BY_ID.get(id)?.section ?? SECTIONS[0];
+}
+
+/** 0 before a focal hand-off begins, 1 at its destination section's anchor. */
+export function focalHandoffProgress(
+  handoff: (typeof FOCAL_HANDOFFS)[keyof typeof FOCAL_HANDOFFS],
+  screens: number,
+) {
+  const end = getSection(handoff.target).position;
+  return smoothStep((screens - (end - handoff.lead)) / handoff.lead);
 }
 
 /** 0 at the section's position, 1 at the next one's. */
@@ -191,7 +229,7 @@ export function snapTarget(screens: number, direction: number): Section | null {
 export function keyboardDuration(from: SectionId, to: SectionId) {
   const fromIndex = SECTIONS.findIndex((s) => s.id === from);
   const toIndex = SECTIONS.findIndex((s) => s.id === to);
-  const source = SECTIONS[toIndex]?.snap?.keyboard;
+  const source = SECTIONS[fromIndex]?.travel;
   if (!source) return 1000;
   return (toIndex > fromIndex ? source.toNext : source.toPrevious) ?? 1000;
 }

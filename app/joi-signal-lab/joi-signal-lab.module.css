@@ -39,6 +39,14 @@
 .experience a { color: inherit; text-decoration: none; }
 .experience button { color: inherit; font: inherit; }
 
+/* Orbiting the deck is a direct-manipulation gesture, never a text-selection gesture. */
+.experienceDeckOpen,
+.experienceDeckOpen * {
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
 .heroField,
 .filmLayer,
 .filmUi,
@@ -350,9 +358,9 @@
 }
 
 /*
- * Closing sections — About Me and Contact. Each one owns a stretch of the shared scroll and has
- * its own route. Skeleton only: structure and timing are here, the real copy and the 3D room
- * land with the assets.
+ * Closing sections — About Me and Contact. Each owns a stretch of the shared scroll and
+ * its own route; their opacity and travel are written from the same focal hand-off
+ * progress that drives the WebGL cameras underneath them.
  */
 .closingPanel {
   position: absolute;
@@ -362,16 +370,14 @@
   justify-items: start;
   gap: 22px;
   max-width: min(88vw, 880px);
-  opacity: 0;
+  opacity: var(--closing-presence, 0);
   pointer-events: none;
-  transform: translateY(34px);
-  transition: opacity .5s ease, transform .5s ease;
+  transform: translateY(var(--closing-shift, 34px));
+  will-change: opacity, transform;
 }
 
 .closingPanelActive {
-  opacity: 1;
   pointer-events: auto;
-  transform: translateY(0);
 }
 
 .closingKicker {
@@ -433,6 +439,11 @@
   gap: clamp(18px, 2.4vw, 38px);
 }
 
+.contactPanel {
+  --closing-presence: var(--contact-presence, 0);
+  --closing-shift: var(--contact-shift, 34px);
+}
+
 .contactPanel h2 { max-width: 20ch; }
 
 /*
@@ -458,21 +469,18 @@
   opacity: .5;
 }
 
-/* Staggered entrance: the panel fades as one, then its children land one beat apart. */
+/*
+ * Scroll owns the entrance in both directions. A second time-based stagger here would
+ * keep running after the visitor stopped dragging, so the copy travels as one focal unit.
+ */
 .closingPanel > * {
-  opacity: 0;
-  transform: translateY(16px);
-  transition: opacity .55s ease, transform .55s ease;
+  opacity: 1;
+  transform: none;
 }
 
-.closingPanelActive > * { opacity: 1; transform: none; }
-.closingPanelActive > *:nth-child(2) { transition-delay: .07s; }
-.closingPanelActive > *:nth-child(3) { transition-delay: .14s; }
-.closingPanelActive > *:nth-child(4) { transition-delay: .21s; }
-.closingPanelActive > *:nth-child(5) { transition-delay: .28s; }
-.closingPanelActive > *:nth-child(6) { transition-delay: .35s; }
-
 .aboutPanel {
+  --closing-presence: var(--about-presence, 0);
+  --closing-shift: var(--about-shift, 34px);
   right: auto;
   left: clamp(34px, 6vw, 96px);
   bottom: clamp(72px, 11svh, 118px);
@@ -598,50 +606,204 @@
   100% { transform: scale(1); }
 }
 
-/* ── the About scene layer: room + badge under the copy panel ────────────── */
+/* ── scroll-driven scene furniture over the shared room stage ───────────── */
 
 .aboutScene {
   position: absolute;
   inset: 0;
   z-index: 11;
-  opacity: 0;
-  visibility: hidden;
-  transition: opacity .6s ease, visibility 0s linear .6s;
+  opacity: var(--about-presence, 0);
+  visibility: visible;
   pointer-events: none;
+  will-change: opacity;
 }
 
-.aboutSceneActive {
-  opacity: 1;
-  visibility: visible;
-  transition: opacity .6s ease;
+.aboutSceneActive { visibility: visible; }
+
+/*
+ * Contact is a physical black call sheet under About, exposed from the top-right.
+ * `--contact-turn-size` is written by both scroll and the draggable corner, so neither
+ * route gets a second, canned transition. At 220% the diagonal has travelled beyond
+ * both opposite edges and the sheet owns the full viewport.
+ */
+.contactPage {
+  position: absolute;
+  inset: 0;
+  z-index: 13;
+  overflow: hidden;
+  color: #f2eee8;
+  background:
+    radial-gradient(circle at 78% 12%, rgba(255, 255, 255, .035), transparent 30%),
+    repeating-linear-gradient(96deg, rgba(255, 255, 255, .012) 0 1px, transparent 1px 7px),
+    #090a0c;
+  clip-path: polygon(
+    calc(100% - var(--contact-turn-size, 0%)) 0,
+    100% 0,
+    100% var(--contact-turn-size, 0%)
+  );
+  opacity: var(--contact-page-opacity, 0);
+  pointer-events: none;
+  will-change: clip-path, opacity;
+  filter: drop-shadow(-12px 16px 22px rgba(0, 0, 0, .28));
+}
+
+.contactPage::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  opacity: .22;
+  pointer-events: none;
+  background: radial-gradient(circle at 30% 70%, rgba(224, 115, 63, .035), transparent 36%);
 }
 
 /*
- * The Contact scene layer carries one thing: the badge. It sits above the closing
- * panel rather than under it, because the badge is the only object on this section a
- * reader can pick up, and it shares `.aboutSceneActive` for the fade so the two
- * sections appear and leave the same way.
+ * The corner is small enough to coexist with the header links, but it is a real 52px+
+ * pointer target. It follows the hand down-left; click and keyboard activation only
+ * lift it as a hint. The header remains one layer above it, so CONTACT in the nav is never
+ * sacrificed for the decorative route.
  */
+.pageTurnCorner {
+  position: absolute;
+  /* Below the persistent navigation strip: visually upper-right, without stealing its
+     CONTACT link as a pointer target. */
+  top: clamp(88px, 15.2svh, 122px);
+  right: 0;
+  z-index: 13;
+  width: clamp(88px, 8vw, 116px);
+  height: clamp(88px, 8vw, 116px);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  appearance: none;
+  color: #f2eee8;
+  background: transparent;
+  opacity: 0;
+  overflow: visible;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: grab;
+  will-change: opacity;
+}
+
+.pageTurnCorner[data-active="true"] {
+  opacity: var(--page-corner-opacity, 1);
+}
+
+.pageTurnCorner:disabled { pointer-events: none; }
+.pageTurnCorner:active { cursor: grabbing; }
+
+.pageCurlUnder,
+.pageCurlFold {
+  position: absolute;
+  top: 0;
+  right: 0;
+  display: block;
+  width: var(--page-curl-width, clamp(88px, 8vw, 116px));
+  height: var(--page-curl-height, clamp(88px, 8vw, 116px));
+  transform-origin: 100% 0;
+  will-change: width, height, transform, opacity;
+}
+
+/* The lower-left triangle is the page back visible under the lifted dark face. */
+.pageCurlUnder {
+  clip-path: polygon(0 0, 100% 100%, 0 100%);
+  opacity: var(--page-under-opacity, 1);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, .16), transparent 54%),
+    #747371;
+  filter: drop-shadow(-4px 7px 10px rgba(0, 0, 0, .16));
+}
+
+/* The upper-right triangle is the lifted page face, with light catching the crease. */
+.pageCurlFold {
+  clip-path: polygon(0 0, 100% 0, 100% 100%);
+  opacity: var(--page-fold-opacity, 1);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, .13), transparent 42%),
+    linear-gradient(140deg, #474541, #242426 72%);
+  filter: drop-shadow(-8px 9px 12px rgba(0, 0, 0, .3));
+}
+
+.pageCurlHint {
+  position: absolute;
+  top: 18px;
+  right: 8px;
+  width: 58px;
+  opacity: 0;
+  color: rgba(242, 238, 232, .74);
+  font-family: var(--font-signal-mono), monospace;
+  font-size: 7px;
+  line-height: 1.35;
+  letter-spacing: .13em;
+  text-align: center;
+  rotate: 42deg;
+  pointer-events: none;
+}
+
+.pageTurnCorner[data-hinting="true"] .pageCurlFold {
+  animation: pageCurlLift 880ms cubic-bezier(.2, .75, .2, 1) both;
+}
+
+.pageTurnCorner[data-hinting="true"] .pageCurlUnder {
+  animation: pageCurlUnderLift 880ms cubic-bezier(.2, .75, .2, 1) both;
+}
+
+.pageTurnCorner[data-hinting="true"] .pageCurlHint {
+  animation: pageCurlHint 880ms ease both;
+}
+
+.pageTurnCorner:focus-visible {
+  outline: 1px solid rgba(242, 238, 232, .9);
+  outline-offset: -18px;
+}
+
+.experience[data-page-turn="settling"] .contactPage {
+  transition:
+    clip-path 540ms cubic-bezier(.2, .8, .2, 1),
+    opacity 180ms ease;
+}
+
+.experience[data-page-turn="settling"] .pageTurnCorner {
+  transition: opacity 360ms ease;
+}
+
+.experience[data-page-turn="settling"] .pageCurlUnder,
+.experience[data-page-turn="settling"] .pageCurlFold {
+  transition:
+    width 540ms cubic-bezier(.2, .8, .2, 1),
+    height 540ms cubic-bezier(.2, .8, .2, 1),
+    opacity 420ms ease;
+}
+
+@keyframes pageCurlLift {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  38% { transform: translate3d(-11px, 11px, 0) rotate(-1.5deg); }
+  62% { transform: translate3d(-7px, 7px, 0) rotate(-.7deg); }
+}
+
+@keyframes pageCurlUnderLift {
+  0%, 100% { transform: scale(1); filter: drop-shadow(-4px 7px 10px rgba(0, 0, 0, .16)); }
+  38% { transform: scale(1.06); filter: drop-shadow(-9px 13px 17px rgba(0, 0, 0, .25)); }
+}
+
+@keyframes pageCurlHint {
+  0%, 18%, 100% { opacity: 0; transform: translate(0, 0); }
+  38%, 68% { opacity: .82; transform: translate(-6px, 6px); }
+}
+
+/* The Contact scene layer carries one thing: the badge, now inside the black sheet. */
 .contactScene {
   position: absolute;
   inset: 0;
   z-index: 13;
-  opacity: 0;
-  visibility: hidden;
-  transition: opacity .6s ease, visibility 0s linear .6s;
+  opacity: var(--contact-presence, 0);
+  visibility: visible;
   pointer-events: none;
+  will-change: opacity;
 }
 
-/*
- * Its own active rule rather than sharing `.aboutSceneActive`: at equal specificity the
- * later rule wins, and `.contactScene` is declared after it, so the shared class was
- * being overridden by the hidden state it was meant to replace.
- */
-.contactSceneActive {
-  opacity: 1;
-  visibility: visible;
-  transition: opacity .6s ease;
-}
+.contactSceneActive { visibility: visible; }
 
 /*
  * The room is the stage now, not a box on the panel, so what lives on this layer is
@@ -688,12 +850,30 @@
  * empty middle is how the deck is turned.
  */
 .deckLayer {
+  /*
+   * The console's palette, which is the light half of the site's: `--cream`, `--ink` and
+   * `--coral` as `app/lab/lab.module.css` sets them, keyed for a panel rather than a page.
+   *
+   * These were literals before, a warm-neutral set invented here and drifting from the
+   * editorial one it was reaching for — and its accent was a brass `#c2a06a` that appears
+   * nowhere else on the site. The accent is coral now, which is the accent this site has.
+   */
+  --deck-panel: #fff6e8;
+  --deck-well: #f2e8d6;
+  --deck-ink: #191714;
+  --deck-ink-soft: rgba(25, 23, 20, .84);
+  --deck-muted: rgba(25, 23, 20, .66);
+  --deck-line: rgba(25, 23, 20, .14);
+  --deck-accent: #e0733f;
+
   position: absolute;
   inset: 0;
   z-index: 32;
   pointer-events: none;
-  color: #2b2621;
+  color: var(--deck-ink);
   animation: deckLayerIn .28s ease both;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .deckLayer button,
@@ -703,9 +883,9 @@
 .deckLayer span,
 .deckLayer p {
   font-family: var(--font-signal-mono), monospace;
-  font-size: 8px;
-  letter-spacing: .18em;
-  color: #6d6157;
+  font-size: 9px;
+  letter-spacing: .15em;
+  color: var(--deck-muted);
 }
 
 /* --- speed, floating at the deck's left shoulder --- */
@@ -718,22 +898,24 @@
   gap: 9px;
   padding: 14px 16px 13px;
   border-radius: 14px;
-  background: #faf6ec;
-  box-shadow: 0 14px 40px rgba(58, 44, 30, .16), 0 1px 0 rgba(255, 255, 255, .9) inset;
+  background: var(--deck-panel);
+  box-shadow: 0 14px 40px rgba(25, 23, 20, .16), 0 1px 0 rgba(255, 255, 255, .9) inset;
 }
 
 .deckSpeed > div {
   display: flex;
   padding: 4px;
   border-radius: 999px;
-  background: #efe7d8;
+  background: var(--deck-well);
 }
 
 .deckSpeed button {
-  padding: 8px 17px;
+  min-width: 46px;
+  min-height: 42px;
+  padding: 8px 15px;
   border: 0;
   border-radius: 999px;
-  color: #6d6157;
+  color: var(--deck-muted);
   background: transparent;
   font-family: var(--font-signal-mono), monospace;
   font-size: 11px;
@@ -743,9 +925,9 @@
 }
 
 .deckSpeedOn {
-  color: #fdfaf3 !important;
-  background: #c2a06a !important;
-  box-shadow: 0 2px 8px rgba(140, 108, 60, .34);
+  color: var(--deck-panel) !important;
+  background: var(--deck-accent) !important;
+  box-shadow: 0 2px 8px rgba(224, 115, 63, .34);
 }
 
 /* --- rotate, at the deck's right shoulder --- */
@@ -760,13 +942,13 @@
 }
 
 .deckAside button {
-  width: 54px;
-  height: 54px;
+  width: 58px;
+  height: 58px;
   border: 0;
   border-radius: 15px;
-  color: #4a4038;
-  background: #faf6ec;
-  box-shadow: 0 12px 32px rgba(58, 44, 30, .16);
+  color: var(--deck-ink-soft);
+  background: var(--deck-panel);
+  box-shadow: 0 12px 32px rgba(25, 23, 20, .16);
   font-size: 19px;
   cursor: pointer;
 }
@@ -775,13 +957,13 @@
   position: absolute;
   top: clamp(14px, 3vw, 34px);
   right: clamp(14px, 5vw, 74px);
-  width: 40px;
-  height: 40px;
+  width: 46px;
+  height: 46px;
   border: 0;
   border-radius: 50%;
-  color: #4a4038;
-  background: #faf6ec;
-  box-shadow: 0 8px 24px rgba(58, 44, 30, .16);
+  color: var(--deck-ink-soft);
+  background: var(--deck-panel);
+  box-shadow: 0 8px 24px rgba(25, 23, 20, .16);
   font-size: 21px;
   line-height: 1;
   cursor: pointer;
@@ -790,7 +972,7 @@
 .deckTray {
   position: absolute;
   inset: auto 0 0 0;
-  height: 268px;
+  height: 370px;
   pointer-events: none;
   background: linear-gradient(180deg, rgba(244, 238, 226, 0) 0%, rgba(244, 238, 226, .72) 26%, rgba(244, 238, 226, .95) 52%);
 }
@@ -798,11 +980,11 @@
 .deckHint {
   position: absolute;
   left: 50%;
-  bottom: 232px;
+  bottom: 310px;
   margin: 0;
   translate: -50% 0;
   white-space: nowrap;
-  color: #4a4038;
+  color: var(--deck-ink-soft);
   text-shadow: 0 1px 10px rgba(244, 238, 226, .9);
 }
 
@@ -810,16 +992,16 @@
 .deckBar {
   position: absolute;
   left: 50%;
-  bottom: 146px;
+  bottom: 194px;
   translate: -50% 0;
-  width: min(720px, calc(100% - 32px));
+  width: min(860px, calc(100% - 32px));
   display: grid;
-  grid-template-columns: minmax(0, 1.25fr) auto minmax(0, 1fr) auto;
+  grid-template-columns: minmax(160px, 1.15fr) auto minmax(170px, 1fr) minmax(160px, .9fr);
   align-items: center;
-  gap: 20px;
-  padding: 13px 22px;
+  gap: 16px;
+  padding: 14px 20px;
   border-radius: 16px;
-  background: #faf6ec;
+  background: var(--deck-panel);
   box-shadow: 0 18px 52px rgba(58, 44, 30, .18);
 }
 
@@ -834,12 +1016,12 @@
 
 .deckNow i {
   flex: none;
-  width: 42px;
-  height: 42px;
+  width: 46px;
+  height: 46px;
   border-radius: 7px;
   background:
     radial-gradient(circle at 34% 28%, rgba(255, 255, 255, .5), transparent 58%),
-    linear-gradient(150deg, var(--record-color), #2b2621);
+    linear-gradient(150deg, var(--record-color), var(--deck-ink));
   box-shadow: 0 3px 10px rgba(58, 44, 30, .22);
 }
 
@@ -848,10 +1030,10 @@
 .deckNow strong {
   display: block;
   font-family: var(--font-signal-display), Georgia, serif;
-  font-size: 16px;
+  font-size: 17px;
   font-weight: 400;
   letter-spacing: 0;
-  color: #2b2621;
+  color: var(--deck-ink);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -867,13 +1049,13 @@
   white-space: nowrap;
 }
 
-.deckTransport { display: flex; align-items: center; gap: 13px; }
+.deckTransport { display: flex; align-items: center; gap: 5px; }
 
 .deckTransport button {
-  width: 26px;
-  height: 26px;
+  width: 40px;
+  height: 40px;
   border: 0;
-  color: #4a4038;
+  color: var(--deck-ink-soft);
   background: transparent;
   font-size: 12px;
   cursor: pointer;
@@ -883,18 +1065,18 @@
 .deckTransport button:hover { opacity: 1; }
 
 .deckPlay {
-  width: 50px !important;
-  height: 50px !important;
+  width: 54px !important;
+  height: 54px !important;
   border-radius: 50%;
-  color: #faf6ec !important;
-  background: #3a2f27 !important;
+  color: var(--deck-panel) !important;
+  background: var(--deck-ink) !important;
   font-size: 15px !important;
   opacity: 1 !important;
   box-shadow: 0 8px 20px rgba(58, 44, 30, .3);
 }
 
 .deckSeek { display: flex; align-items: center; gap: 12px; min-width: 0; }
-.deckSeek span { font-size: 10px; letter-spacing: .04em; }
+.deckSeek span { font-size: 10px; letter-spacing: .025em; white-space: nowrap; }
 
 .deckTrack {
   position: relative;
@@ -909,7 +1091,7 @@
   display: block;
   height: 100%;
   border-radius: 999px;
-  background: #3a2f27;
+  background: var(--deck-ink);
 }
 
 .deckTrack i::after {
@@ -921,11 +1103,77 @@
   height: 9px;
   translate: -50% -50%;
   border-radius: 50%;
-  background: #3a2f27;
+  background: var(--deck-ink);
 }
 
-.deckVolume { display: flex; align-items: center; gap: 9px; color: #4a4038; }
-.deckVolume input { width: 74px; accent-color: #3a2f27; }
+.deckDials {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+.deckDial {
+  display: grid;
+  grid-template-columns: 34px minmax(76px, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  color: var(--deck-ink-soft);
+}
+
+.deckDial span {
+  font-size: 9px;
+  letter-spacing: .1em;
+}
+
+.deckDial input {
+  width: 100%;
+  min-width: 0;
+  height: 32px;
+  margin: 0;
+  accent-color: var(--deck-ink);
+  cursor: ew-resize;
+}
+
+@media (min-width: 941px) {
+  .deckBar {
+    width: min(960px, calc(100% - 32px));
+    grid-template-columns: minmax(180px, 1.15fr) auto minmax(180px, 1fr) minmax(250px, 1.15fr);
+  }
+  .deckDials {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+  .deckDial { grid-template-columns: 32px minmax(76px, 1fr); }
+}
+
+/*
+ * Where the records came from.
+ *
+ * Small, and it earns its place: the shelf shows real tracks when the previews resolve
+ * and Gallo's own synthesised sides when they do not, and those are different enough
+ * that a reader should be able to tell which one they are hearing.
+ */
+.deckSource {
+  margin: 0;
+  justify-self: end;
+  grid-row: 1;
+  color: var(--deck-muted);
+}
+
+.deckSource[data-state="loading"] { opacity: .5; }
+.deckSource[data-state="itunes"]::before,
+.deckSource[data-state="offline"]::before {
+  content: "";
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  margin-right: 7px;
+  border-radius: 50%;
+  vertical-align: middle;
+  background: var(--deck-accent);
+}
+.deckSource[data-state="offline"]::before { background: var(--deck-muted); }
 
 /* --- the shelf --- */
 .deckShelf {
@@ -933,17 +1181,22 @@
   left: 50%;
   bottom: 26px;
   translate: -50% 0;
-  width: min(720px, calc(100% - 32px));
+  width: min(860px, calc(100% - 32px));
   display: grid;
   gap: 11px;
 }
+
+.deckShelf { grid-template-columns: 1fr auto; }
 
 .deckShelf > span {
   display: flex;
   align-items: center;
   gap: 14px;
+  grid-row: 1;
   font-size: 9px;
 }
+
+.deckShelf > div { grid-column: 1 / -1; }
 
 .deckShelf > span::after {
   content: "";
@@ -952,7 +1205,11 @@
   background: rgba(109, 97, 87, .22);
 }
 
-.deckShelf > div { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.deckShelf > div {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 13px 14px;
+}
 
 /* Sleeve in front, record peeking out behind it — the reference's nicest detail. */
 .deckShelf button {
@@ -962,11 +1219,14 @@
   grid-template-columns: 54px 1fr;
   align-items: center;
   gap: 3px 34px;
-  padding: 0 0 0 0;
+  min-height: 64px;
+  padding: 5px 8px 5px 3px;
+  border-radius: 9px;
   text-align: left;
   border: 0;
-  background: none;
+  background: transparent;
   cursor: pointer;
+  transition: background .2s ease;
 }
 
 .deckShelf i {
@@ -978,10 +1238,11 @@
   height: 54px;
   border-radius: 4px;
   background:
+    var(--record-art, none) center / cover no-repeat,
     radial-gradient(circle at 32% 26%, rgba(255, 255, 255, .5), transparent 60%),
-    linear-gradient(150deg, var(--record-color), #2b2621);
+    linear-gradient(150deg, var(--record-color), var(--deck-ink));
   box-shadow: 0 6px 18px rgba(58, 44, 30, .22);
-  outline: 3px solid #faf6ec;
+  outline: 3px solid var(--deck-panel);
   transition: translate .24s ease;
 }
 
@@ -1006,19 +1267,36 @@
 
 .deckShelf button:hover i,
 .deckSleeveOn i { translate: 0 -3px; }
-.deckSleeveOn i { outline-color: #c2a06a; }
+.deckShelf button:hover,
+.deckShelf button:focus-visible,
+.deckSleeveOn { background: rgba(255, 246, 232, .62); }
+.deckSleeveOn i { outline-color: var(--deck-accent); }
 
 .deckShelf strong {
   font-family: var(--font-signal-display), Georgia, serif;
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 400;
-  color: #2b2621;
+  color: var(--deck-ink);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.deckShelf button > span { font-size: 8px; }
+.deckShelf button > span { font-size: 8.5px; line-height: 1.3; }
+
+.deckLayer button:focus-visible,
+.deckDial input:focus-visible {
+  outline: 2px solid var(--deck-accent);
+  outline-offset: 3px;
+}
+
+.deckTransport button:active,
+.deckAside button:active,
+.deckClose:active,
+.deckSpeed button:active,
+.deckShelf button:active {
+  transform: translateY(1px);
+}
 
 @keyframes deckLayerIn {
   from { opacity: 0; }
@@ -1026,18 +1304,124 @@
 }
 
 
-@media (max-width: 760px) {
+/* The wide console becomes two shallow rows before any label needs to be clipped. */
+@media (max-width: 940px) {
   .deckBar {
-    grid-template-columns: auto 1fr;
-    row-gap: 12px;
-    bottom: 168px;
+    grid-template-columns: minmax(180px, 1fr) auto minmax(150px, 1fr);
+    gap: 9px 14px;
   }
-  .deckNow { border-right: 0; padding-right: 0; }
-  .deckSeek, .deckVolume { grid-column: 1 / -1; }
-  .deckShelf > div { grid-template-columns: 1fr; }
-  .deckShelf button:nth-child(n + 2) { display: none; }
-  .deckHint { bottom: 250px; }
-  .deckSpeed, .deckAside { top: auto; bottom: 300px; translate: 0 0; }
+  .deckDials {
+    grid-column: 1 / -1;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+  }
+}
+
+/*
+ * On a phone the shelf becomes a thumb-scroll rail, while every playback adjustment
+ * remains in the fixed console. The physical controls are still live in the scene; these
+ * larger mirrors mean nobody has to hit a tiny 3D knob at the right edge to use them.
+ */
+@media (max-width: 760px) {
+  .deckTray { height: 430px; }
+  .deckBar {
+    bottom: 118px;
+    width: calc(100% - 20px);
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 7px 10px;
+    padding: 11px 13px;
+    border-radius: 14px;
+  }
+  .deckNow {
+    padding-right: 8px;
+    border-right: 0;
+  }
+  .deckNow i { width: 42px; height: 42px; }
+  .deckNow strong { font-size: 15px; }
+  .deckTransport button { width: 44px; height: 44px; }
+  .deckPlay { width: 52px !important; height: 52px !important; }
+  .deckSeek,
+  .deckDials { grid-column: 1 / -1; }
+  .deckSeek { gap: 9px; }
+  .deckDials {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+  .deckDial {
+    grid-template-columns: 34px minmax(0, 1fr);
+    min-height: 44px;
+  }
+  .deckDial input { height: 44px; }
+  .deckShelf {
+    bottom: 8px;
+    width: calc(100% - 20px);
+    gap: 4px;
+  }
+  .deckShelf > span { font-size: 8px; }
+  .deckSource { font-size: 7.5px !important; letter-spacing: .1em !important; }
+  .deckShelf > div {
+    display: flex;
+    gap: 9px;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
+    padding: 2px 18px 4px 2px;
+  }
+  .deckShelf > div::-webkit-scrollbar { display: none; }
+  .deckShelf button {
+    flex: 0 0 min(210px, calc(100vw - 66px));
+    min-height: 62px;
+    scroll-snap-align: start;
+  }
+  .deckHint { bottom: 286px; }
+  .deckSpeed,
+  .deckAside {
+    top: auto;
+    bottom: 312px;
+    translate: 0 0;
+  }
+  .deckSpeed {
+    left: 10px;
+    padding: 9px 10px 8px;
+    gap: 5px;
+  }
+  .deckSpeed button {
+    min-width: 44px;
+    min-height: 44px;
+    padding: 7px 11px;
+  }
+  .deckAside { right: 10px; }
+  .deckAside button { width: 50px; height: 50px; }
+  .deckClose { top: 12px; right: 12px; }
+}
+
+@media (max-width: 430px) {
+  .deckNow { gap: 9px; }
+  .deckNow i { width: 38px; height: 38px; }
+  .deckNow strong { font-size: 14px; }
+  .deckNow span { font-size: 8px; }
+  .deckTransport { gap: 1px; }
+  .deckTransport button { width: 44px; height: 44px; }
+  .deckPlay { width: 50px !important; height: 50px !important; }
+  .deckSeek span { font-size: 9px; }
+}
+
+/* Landscape phones cannot afford a two-row record shelf. Keep a compact, usable rail. */
+@media (max-height: 620px) and (max-width: 760px) {
+  .deckTray { height: 300px; }
+  .deckBar { bottom: 76px; }
+  .deckShelf > span,
+  .deckSource { display: none; }
+  .deckShelf { bottom: 3px; }
+  .deckShelf button {
+    grid-template-columns: 48px 1fr;
+    min-height: 56px;
+  }
+  .deckShelf i { width: 48px; height: 48px; }
+  .deckHint { display: none; }
+  .deckSpeed,
+  .deckAside { bottom: 246px; }
 }
 
 @keyframes roomLabelIn {
@@ -1637,6 +2021,11 @@
   .dots button { transition: none; }
   .deckShelf i { transition: none; }
   .leaveVeil span { transition: none; }
+  .contactPage,
+  .pageTurnCorner { transition: none !important; }
+  .pageCurlFold,
+  .pageCurlUnder,
+  .pageCurlHint { animation: none !important; transition: none !important; }
   /*
    * The canvas already pins `--velocity` to 0 for a reader who asked for less motion,
    * so this is belt and braces — and it is also what keeps the skew off if the stage

@@ -99,7 +99,7 @@ export function JoiMobileIPhoneShowcase({ poster, label, caption }: Props) {
           <h2 id="joi-mobile-device-title">THE LINK, INSIDE THE OBJECT.</h2>
         </div>
         <p>
-          Rotate the Deep Blue iPhone 17 Pro. Its Home Screen is captured directly from the working simulator; tap it to open the uploaded SwiftUI build.
+          Rotate Apple&apos;s official iPhone 17 Pro product-viewer model. The screen is intentionally left untouched so the hardware and materials can be reviewed without a soft simulator capture.
         </p>
       </header>
 
@@ -134,13 +134,14 @@ export function JoiMobileIPhoneShowcase({ poster, label, caption }: Props) {
       <figcaption className={styles.caption}>
         <p>{caption}</p>
         <dl>
+          <div><dt>MODEL</dt><dd>APPLE PRODUCT VIEWER</dd></div>
           <div><dt>BODY</dt><dd>150 × 71.9 × 8.75 MM</dd></div>
-          <div><dt>FINISH</dt><dd>DEEP BLUE</dd></div>
-          <div><dt>SCREEN</dt><dd>SIMULATOR CAPTURE</dd></div>
+          <div><dt>FINISH</dt><dd>COSMIC ORANGE</dd></div>
+          <div><dt>SCREEN</dt><dd>APPLE ORIGINAL / NO OVERLAY</dd></div>
           <div><dt>ACTION</dt><dd>EXTERNAL NATIVE LINK</dd></div>
         </dl>
         <small>
-          The page itself does not imitate the product. It presents a real iPhone Home Screen capture and links to the uploaded iOS Simulator build hosted by Appetize.
+          The phone geometry, display surface and PBR maps come from Apple&apos;s product viewer. The transparent screen hit-area still opens the uploaded iOS Simulator build in a new tab.
         </small>
       </figcaption>
     </figure>

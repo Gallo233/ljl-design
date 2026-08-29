@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 // The legacy light-site stylesheets load per-route now (see app/classic and app/work/[slug]).
 // Loading them globally made body a scroll container and broke the CRT experience.
 import "./globals.css";
+import { GlobalMusicProvider } from "../components/global-music/GlobalMusic";
 import { SITE_URL } from "./site";
 
 export const metadata: Metadata = {
@@ -36,7 +37,9 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <GlobalMusicProvider>{children}</GlobalMusicProvider>
+      </body>
     </html>
   );
 }

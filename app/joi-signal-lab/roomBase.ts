@@ -192,17 +192,15 @@ const AUTHORED_HOTSPOT_NODES: Partial<Record<RoomObjectId, string[]>> = {
     ...Array.from({ length: 10 }, (_, i) => `book${i + 1}`),
     ...Array.from({ length: 10 }, (_, i) => `book${i + 1} outer`),
   ],
-  "joi-music-box": [
-    "turntable body 1",
-    "turntable body 2",
-    "turntable body 3",
-    "turntable buttons 1",
-    "turntable_needle",
-    "turntable cover",
-    "headphones",
-    ...Array.from({ length: 4 }, (_, i) => `Vinyl ${i + 1}`),
-    ...Array.from({ length: 4 }, (_, i) => `Vinyl face ${i + 1}`),
-  ],
+  /*
+   * The deck is not the capture's any more. `roomPlatter.ts` hides the machine that came
+   * in the file and `room3d.ts` stands `about-room-deck` in its place, under `model` and
+   * so findable by name exactly like a captured node — which is the whole reason it goes
+   * there rather than beside it. The captured meshes are deliberately absent from this
+   * list: hidden geometry still answers a raycast, so naming them here would leave an
+   * invisible machine catching every click meant for the real one.
+   */
+  "joi-music-box": ["about-room-deck", "headphones"],
 };
 
 /** Same lists, sanitized to the names `getObjectByName` will actually see. */

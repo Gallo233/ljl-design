@@ -72,6 +72,35 @@
   content: "";
 }
 
+.stage:has(.sceneHost[data-review-view]) {
+  background: #fff;
+}
+
+.stage:has(.sceneHost[data-review-view])::before,
+.stage:has(.sceneHost[data-review-view]) .status,
+.stage:has(.sceneHost[data-review-view]) .controls {
+  display: none;
+}
+
+:global(html[data-model-review]) .showcase {
+  margin: 0;
+  border: 0;
+}
+
+:global(html[data-model-review]) .header,
+:global(html[data-model-review]) .caption {
+  display: none;
+}
+
+:global(html[data-model-review]) .stage {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  width: 100vw;
+  height: 100vh;
+  min-height: 0;
+}
+
 .sceneHost {
   position: absolute;
   inset: 0;

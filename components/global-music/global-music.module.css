@@ -1,0 +1,154 @@
+.sticker {
+  --sticker-paper: #fff6e8;
+  --sticker-ink: #191714;
+  --sticker-coral: #e0733f;
+
+  position: fixed;
+  z-index: 80;
+  top: 16px;
+  left: 50%;
+  width: min(214px, calc(100vw - 176px));
+  min-width: 176px;
+  height: 48px;
+  margin: 0;
+  padding: 6px 27px 6px 58px;
+  border: 1px solid rgba(25, 23, 20, .18);
+  border-radius: 17px 20px 16px 21px;
+  appearance: none;
+  color: var(--sticker-ink);
+  background: var(--sticker-paper);
+  box-shadow:
+    3px 4px 0 var(--sticker-coral),
+    0 8px 24px rgba(5, 7, 11, .18);
+  transform: translateX(-50%) rotate(-2deg);
+  transform-origin: center;
+  cursor: pointer;
+  isolation: isolate;
+  transition: transform .2s ease, box-shadow .2s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.sticker::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: -4px;
+  border: 3px solid rgba(255, 250, 241, .96);
+  border-radius: 21px 24px 19px 25px;
+  pointer-events: none;
+}
+
+.sticker:hover {
+  transform: translateX(-50%) rotate(.5deg) translateY(-1px);
+  box-shadow: 2px 3px 0 var(--sticker-coral), 0 10px 28px rgba(5, 7, 11, .2);
+}
+
+.sticker:active { transform: translateX(-50%) rotate(.5deg) translateY(2px); }
+
+.sticker:focus-visible {
+  outline: 2px solid var(--sticker-ink);
+  outline-offset: 5px;
+}
+
+.disc {
+  position: absolute;
+  left: 6px;
+  top: 4px;
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: var(--sticker-paper);
+  background:
+    repeating-radial-gradient(circle, transparent 0 2px, rgba(255,255,255,.075) 2px 3px),
+    #171513;
+  box-shadow: 0 2px 0 rgba(255,255,255,.28) inset, 0 3px 8px rgba(25,23,20,.28);
+}
+
+.disc::before {
+  content: "";
+  position: absolute;
+  inset: 13px;
+  border-radius: 50%;
+  background: var(--sticker-coral);
+}
+
+.disc i {
+  position: absolute;
+  inset: 18px;
+  border-radius: 50%;
+  background: var(--sticker-paper);
+}
+
+.disc b {
+  position: relative;
+  z-index: 1;
+  margin-left: 1px;
+  font: 700 8px/1 Georgia, serif;
+}
+
+.sticker[data-playing="true"] .disc,
+.sticker[data-switching="true"] .disc {
+  animation: sticker-record-spin 2.2s linear infinite;
+}
+
+.copy {
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+  text-align: left;
+}
+
+.copy strong,
+.copy small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.copy strong {
+  font: 400 13px/1.15 Georgia, "Times New Roman", serif;
+  letter-spacing: -.01em;
+}
+
+.copy small {
+  opacity: .62;
+  font: 600 6px/1.2 ui-monospace, "SFMono-Regular", Menlo, monospace;
+  letter-spacing: .11em;
+  text-transform: uppercase;
+}
+
+.spark {
+  position: absolute;
+  top: 5px;
+  right: 7px;
+  color: var(--sticker-coral);
+  font: 700 13px/1 Georgia, serif;
+  transform: rotate(12deg);
+}
+
+@keyframes sticker-record-spin {
+  to { rotate: 360deg; }
+}
+
+@media (max-width: 620px) {
+  .sticker {
+    top: 15px;
+    width: 46px;
+    min-width: 46px;
+    height: 46px;
+    padding: 0;
+    border-radius: 15px 18px 14px 19px;
+  }
+
+  .disc { left: 3px; top: 2px; }
+  .copy, .spark { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sticker { transition: none; }
+  .sticker[data-playing="true"] .disc,
+  .sticker[data-switching="true"] .disc { animation: none; }
+}
