@@ -19,6 +19,7 @@ import {
   BooksSheet,
   CartridgeSheet,
   FilmsSheet,
+  OrbitButtons,
   PosterSheet,
   RoomAppSheet,
   RoomTimeSwitch,
@@ -44,6 +45,8 @@ type RoomApi = {
   setBookSelected: (nodeIndex: number | null) => void;
   pokeProp: (id: "cat" | "balls") => void;
   terminal: RoomTerminalRig;
+  orbitZoom: (factor: number) => void;
+  orbitReset: () => void;
 };
 
 /** Objects whose click opens a reading surface — they get the close-up camera. */
@@ -323,7 +326,8 @@ function FilmCanvas({
   /** Fired when the sea moves to a new state, for the HUD readout. */
   onSeaStateChange: (index: number) => void;
   onRoomHover: (id: RoomObjectId | null) => void;
-  onRoomPick: (id: RoomObjectId | null) => void;
+  /** bookIndex is set when the pick landed on one of the shelf's data books. */
+  onRoomPick: (id: RoomObjectId | null, bookIndex?: number | null) => void;
   /** True while a mix is playing, so the platter turns. */
   recordPlaying: boolean;
   onDeckVolumeChange: (value: number) => void;
@@ -625,6 +629,8 @@ function FilmCanvas({
       setBookSelected: roomScene.setBookSelected,
       pokeProp: roomScene.pokeProp,
       terminal: roomScene.terminal,
+      orbitZoom: roomScene.orbitZoom,
+      orbitReset: roomScene.orbitReset,
     };
 
     const material = new THREE.ShaderMaterial({
@@ -864,6 +870,15 @@ function FilmCanvas({
     let knobStartY = 0;
     let knobStartValue = 0;
     let hoveredRoomObject: RoomObjectId | null = null;
+    /*
+     * The room's free orbit. One finger (or the mouse) turns it; two walk the
+     * distance. A drag that actually moved suppresses the click that follows it, so
+     * orbiting never focuses whatever happens to be under the release point.
+     */
+    const roomPointers = new Map<number, { x: number; y: number }>();
+    let roomOrbitDrag: { x: number; y: number; travelled: number } | null = null;
+    let roomPinch: { startSpan: number; startDistance: number } | null = null;
+    let roomOrbitMoved = false;
 
     const normalisedPointer = (event: PointerEvent | MouseEvent) => ({
       x: ndcX(event.clientX),
@@ -936,7 +951,25 @@ function FilmCanvas({
         canvas.style.cursor = "grabbing";
         return;
       }
+      if (roomOwnsPointer() && !deckOpenRef.current) {
+        roomPointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+        if (roomPointers.size === 2) {
+          const [a, b] = [...roomPointers.values()];
+          roomPinch = {
+            startSpan: Math.max(20, Math.hypot(a.x - b.x, a.y - b.y)),
+            startDistance: roomScene.orbitDistance(),
+          };
+          roomOrbitDrag = null;
+        } else {
+          roomOrbitDrag = { x: event.clientX, y: event.clientY, travelled: 0 };
+        }
+        canvas.setPointerCapture(event.pointerId);
+        canvas.style.cursor = "grabbing";
+        return;
+      }
       if (!reelOwnsPointer()) return;
+      // At About the drag is the reader's orbit, not the reel's — this branch only
+      // runs past the reel's region, so an empty fallthrough is fine.
       pointerPosition(event);
       drag.active = true;
       onDragStateChangeRef.current(true);
@@ -979,6 +1012,24 @@ function FilmCanvas({
         orbitY = event.clientY;
         return;
       }
+      if (roomPointers.has(event.pointerId)) {
+        roomPointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+      }
+      if (roomPinch && roomPointers.size === 2) {
+        const [a, b] = [...roomPointers.values()];
+        const span = Math.max(20, Math.hypot(a.x - b.x, a.y - b.y));
+        roomScene.orbitZoomTo((roomPinch.startDistance * roomPinch.startSpan) / span);
+        return;
+      }
+      if (roomOrbitDrag) {
+        const dx = event.clientX - roomOrbitDrag.x;
+        const dy = event.clientY - roomOrbitDrag.y;
+        roomOrbitDrag.x = event.clientX;
+        roomOrbitDrag.y = event.clientY;
+        roomOrbitDrag.travelled += Math.abs(dx) + Math.abs(dy);
+        roomScene.orbitRotate(dx, dy);
+        return;
+      }
       if (heroOwnsPointer()) {
         heroPointerFromEvent(event);
         const overOrb = hero.orbHitTest(normalisedPointer(event));
@@ -1006,6 +1057,7 @@ function FilmCanvas({
           return;
         }
         const hit = roomScene.raycastAt(ndc);
+        roomScene.setHoverBook(hit === "bookshelf" ? roomScene.bookAt(ndc) : null);
         if (hit !== hoveredRoomObject) {
           hoveredRoomObject = hit;
           roomScene.setHover(hit);
@@ -1066,17 +1118,35 @@ function FilmCanvas({
       orbMoved = hero.releaseOrb();
       return true;
     };
+    const endRoomDrag = (event: PointerEvent) => {
+      if (!roomPointers.has(event.pointerId)) return false;
+      roomPointers.delete(event.pointerId);
+      if (roomPinch && roomPointers.size < 2) roomPinch = null;
+      if (roomOrbitDrag) {
+        if (roomOrbitDrag.travelled > 6) roomOrbitMoved = true;
+        roomOrbitDrag = null;
+      }
+      if (roomPointers.size === 0 && !hoveredRoomObject && !orbiting && !activeDeckControl) {
+        canvas.style.cursor = "";
+      }
+      return true;
+    };
     const handlePointerUp = (event: PointerEvent) => {
       if (dropOrb(event)) return;
+      if (endRoomDrag(event)) return;
       finishDrag(event, true);
     };
     const handlePointerCancel = (event: PointerEvent) => {
       if (dropOrb(event)) return;
+      if (endRoomDrag(event)) return;
       finishDrag(event, false);
     };
     const handleLeave = () => {
       hero.setPointer(0, 0);
       ocean.setPointer(0, 0);
+      roomPointers.clear();
+      roomPinch = null;
+      roomOrbitDrag = null;
       if (orbHovered) {
         orbHovered = false;
         if (!carryingOrb) canvas.style.cursor = "";
@@ -1112,11 +1182,18 @@ function FilmCanvas({
         return;
       }
       if (!roomOwnsPointer() || deckOpenRef.current) return;
-      const hit = roomScene.raycastAt(normalisedPointer(event));
+      // An orbit that actually moved is not a pick, whatever ended up under the cursor.
+      if (roomOrbitMoved) {
+        roomOrbitMoved = false;
+        return;
+      }
+      const ndc = normalisedPointer(event);
+      const hit = roomScene.raycastAt(ndc);
+      const bookIndex = hit === "bookshelf" ? roomScene.bookAt(ndc) : null;
       // Objects that open a reading surface get the close-up; the cat and the balls
       // are pokes, not reads, so the camera keeps its seat.
       roomScene.focus(hit, hit !== null && CLOSE_FOCUS_IDS.has(hit));
-      onRoomPickRef.current(hit);
+      onRoomPickRef.current(hit, bookIndex);
     };
     const handleWheel = (event: WheelEvent) => {
       if (Math.abs(event.deltaX) <= Math.abs(event.deltaY)) return;
@@ -2095,7 +2172,7 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
             onHeroReady={() => setComputerReady(true)}
             onSeaStateChange={setSeaState}
             onRoomHover={setHoveredInterest}
-            onRoomPick={(id) => {
+            onRoomPick={(id, bookIndex) => {
               if (!id) return;
               // Picking anything other than the screen puts the terminal away first —
               // the keyboard belongs to one surface at a time.
@@ -2113,7 +2190,7 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
                 return;
               }
               if (id === "bookshelf") {
-                const first = ROOM_BOOKS[0].nodeIndex;
+                const first = bookIndex ?? ROOM_BOOKS[0].nodeIndex;
                 setSelectedBook(first);
                 roomApiRef.current?.setBookSelected(first);
                 setActiveRoomApp("books");
@@ -2210,6 +2287,7 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
             </p>
           )}
           <RoomTimeSwitch value={roomLight} onChange={setRoomLight} />
+          <OrbitButtons apiRef={roomApiRef} />
         </div>
 
         {/*

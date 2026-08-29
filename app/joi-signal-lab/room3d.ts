@@ -63,6 +63,16 @@ export type RoomScene = {
   pokeProp: (id: RoomPropId) => void;
   /** The terminal painted on the screen. Created with the scene, wired after load. */
   terminal: RoomTerminalRig;
+  /** The reader's free orbit. dx/dy are pixel deltas; zoom takes an absolute distance. */
+  orbitRotate: (dx: number, dy: number) => void;
+  orbitZoomTo: (distance: number) => void;
+  orbitZoom: (factor: number) => void;
+  orbitReset: () => void;
+  /** Where the orbit currently stands, for pinch gestures that zoom from a start point. */
+  orbitDistance: () => number;
+  /** Which shelf book (node index) sits under this point, if any. */
+  bookAt: (ndc: { x: number; y: number }) => number | null;
+  setHoverBook: (nodeIndex: number | null) => void;
   /**
    * Player mode: the camera leaves its seat at the desk and composes on the turntable,
    * close enough that the platter and the tonearm are the picture. Everything else in
@@ -289,6 +299,34 @@ const FULL_HOME = new THREE.Vector3(36.0, 17.5, 26.0);
 const HOME_LOOK = new THREE.Vector3(4.2, 5.6, -4.4);
 /** How close the camera pulls in when a chip focuses one object. */
 const FOCUS_DISTANCE = 11.0;
+
+/*
+ * The reader's orbit, measured off the default view. Drag turns the room around its
+ * anchor; pinch and the corner buttons walk the distance. Focus temporarily walks the
+ * target and distance to an object, and hands both back when it closes.
+ */
+const ORBIT = (() => {
+  const offset = FULL_HOME.clone().sub(HOME_LOOK);
+  const distance = offset.length();
+  return {
+    azimuth0: Math.atan2(offset.x, offset.z),
+    elevation0: Math.asin(THREE.MathUtils.clamp(offset.y / distance, -1, 1)),
+    distance0: distance,
+    azimuthSpan: THREE.MathUtils.degToRad(70),
+    elevationMin: THREE.MathUtils.degToRad(5),
+    elevationMax: THREE.MathUtils.degToRad(50),
+    distanceMin: 18,
+    distanceMax: 55,
+  };
+})();
+
+/** Close-up framing for the objects the reader opens into, measured off the capture. */
+const FOCUS_POSES: Partial<Record<RoomObjectId, { look: any; distance: number }>> = {
+  // The terminal read is the screen, not the whole laptop-plus-desk kit.
+  "crt-monitor": { look: new THREE.Vector3(3.07, 5.8, -4.06), distance: 5.2 },
+  bookshelf: { look: new THREE.Vector3(1.78, 14.3, -5.2), distance: 8.5 },
+  camera: { look: new THREE.Vector3(5.6, 4.9, 2.0), distance: 6 },
+};
 
 /*
  * Player mode, measured off the capture rather than eyeballed.
@@ -882,11 +920,9 @@ export function createRoomScene(filmSources?: RoomFilmSources): RoomScene {
   const pointerNdc = new THREE.Vector2();
   const lookCurrent = HOME_LOOK.clone();
   const focusPoint = HOME_LOOK.clone();
-  const responsiveHome = FULL_HOME.clone();
   const cameraTarget = new THREE.Vector3();
   const cameraHome = new THREE.Vector3();
-  const focusHome = new THREE.Vector3();
-  const cameraDirection = new THREE.Vector3();
+  const baseHome = new THREE.Vector3();
   const liftStep = new THREE.Vector3();
   const handoffStart = new THREE.Vector3();
   const handoffPosition = new THREE.Vector3();
@@ -896,11 +932,19 @@ export function createRoomScene(filmSources?: RoomFilmSources): RoomScene {
   let focusAmount = 0;
   /** The app-opening read: full pull, not the hover chips' half-step. */
   let focusClose = false;
+  /** The reader's orbit. Touched turns off the aspect-driven default distance. */
+  let orbitAzimuth = ORBIT.azimuth0;
+  let orbitElevation = ORBIT.elevation0;
+  let orbitDistance = ORBIT.distance0;
+  let orbitTouched = false;
+  let azimuthCurrent = ORBIT.azimuth0;
+  let elevationCurrent = ORBIT.elevation0;
+  let distanceCurrent = ORBIT.distance0;
   let lastFrameMs = 0;
   let playerMode = false;
   let playerAmount = 0;
-  let orbitAzimuth = PLAYER_AZIMUTH;
-  let orbitElevation = PLAYER_ELEVATION;
+  let playerAzimuth = PLAYER_AZIMUTH;
+  let playerElevation = PLAYER_ELEVATION;
   let playerBoundsRadius = 1.8;
   let tonearmTarget: number | null = null;
   /**
@@ -910,7 +954,10 @@ export function createRoomScene(filmSources?: RoomFilmSources): RoomScene {
    */
   let pendingLabel: DeckRecordSide | null = null;
   const playerHome = new THREE.Vector3();
-  const baseHome = new THREE.Vector3();
+
+  /** Aspect-aware default distance — the old portrait pullback, in orbit terms. */
+  const defaultDistance = () =>
+    ORBIT.distance0 * (fullAspect < 1 ? THREE.MathUtils.lerp(1.42, 1.14, fullAspect) : 1);
 
   const playerDistance = () => {
     const verticalHalfFov = THREE.MathUtils.degToRad(PLAYER_FOV * 0.5);
@@ -932,14 +979,6 @@ export function createRoomScene(filmSources?: RoomFilmSources): RoomScene {
       (playerBoundsRadius / Math.sin(limitingHalfFov)) * consoleClearance,
     );
   };
-
-  const updateResponsiveHome = () => {
-    const portraitPullback = fullAspect < 1 ? THREE.MathUtils.lerp(1.42, 1.14, fullAspect) : 1;
-    responsiveHome.copy(HOME_LOOK).add(
-      FULL_HOME.clone().sub(HOME_LOOK).multiplyScalar(portraitPullback),
-    );
-  };
-  updateResponsiveHome();
 
   const update = (timeMs: number, pointer?: { x: number; y: number }) => {
     const t = timeMs * 0.001;
@@ -996,23 +1035,46 @@ export function createRoomScene(filmSources?: RoomFilmSources): RoomScene {
       });
     });
 
-    const nextFocus = focused ? pickables.get(focused)?.focus : null;
-    if (nextFocus) focusPoint.copy(nextFocus);
-    focusAmount += ((nextFocus ? 1 : 0) - focusAmount) * (reducedMotion ? 1 : 0.075);
-    cameraTarget.copy(nextFocus ?? HOME_LOOK);
+    /*
+     * The reader's orbit. The target sits at the room's anchor and walks to a focused
+     * object; the distance walks to the object's framing. Both hand back when the
+     * focus clears, so the reader returns to the angle they chose, not the default.
+     */
+    const orbitLerp = reducedMotion ? 1 : Math.min(1, delta * 8);
+    azimuthCurrent += (orbitAzimuth - azimuthCurrent) * orbitLerp;
+    elevationCurrent += (orbitElevation - elevationCurrent) * orbitLerp;
+    distanceCurrent += (orbitDistance - distanceCurrent) * orbitLerp;
+
+    const override = focused ? FOCUS_POSES[focused] : undefined;
+    const focusedEntry = focused ? pickables.get(focused) : null;
+    const nextFocus = override
+      ? override.look
+      : focusedEntry
+        ? focusedEntry.focus
+        : HOME_LOOK;
+    focusPoint.copy(nextFocus);
+    focusAmount += ((focused ? 1 : 0) - focusAmount) * (reducedMotion ? 1 : 0.075);
+    cameraTarget.copy(nextFocus);
     lookCurrent.lerp(cameraTarget, reducedMotion ? 1 : 0.075);
 
-    cameraDirection.copy(responsiveHome).sub(HOME_LOOK).normalize();
-    const focusedEntry = focused ? pickables.get(focused) : null;
-    const focusDistance = focusedEntry
-      ? THREE.MathUtils.clamp(
-          focusedEntry.viewDistance * (focusClose ? 0.78 : 1),
-          6.5,
-          30,
-        )
-      : FOCUS_DISTANCE;
-    focusHome.copy(focusPoint).addScaledVector(cameraDirection, focusDistance);
-    cameraHome.copy(responsiveHome).lerp(focusHome, focusAmount * (focusClose ? 0.92 : 0.58));
+    const focusDistance = override
+      ? override.distance
+      : focusedEntry
+        ? THREE.MathUtils.clamp(
+            focusedEntry.viewDistance * (focusClose ? 0.78 : 1),
+            6.5,
+            30,
+          )
+        : 0;
+    const distance = focusAmount > 0 && focused
+      ? THREE.MathUtils.lerp(distanceCurrent, focusDistance, focusAmount)
+      : distanceCurrent;
+    const cosElevation = Math.cos(elevationCurrent);
+    cameraHome.set(
+      lookCurrent.x + Math.sin(azimuthCurrent) * cosElevation * distance,
+      lookCurrent.y + Math.sin(elevationCurrent) * distance,
+      lookCurrent.z + Math.cos(azimuthCurrent) * cosElevation * distance,
+    );
     const px = pointer?.x ?? 0;
     const py = pointer?.y ?? 0;
     baseHome.set(
@@ -1027,12 +1089,12 @@ export function createRoomScene(filmSources?: RoomFilmSources): RoomScene {
     const roomFov = fullAspect < 1 ? 38 : 30;
     let nextFullFov = THREE.MathUtils.lerp(roomFov, PLAYER_FOV, playerAmount);
     if (playerAmount > 0.001) {
-      const cosE = Math.cos(orbitElevation);
+      const cosE = Math.cos(playerElevation);
       const distance = playerDistance();
       playerHome.set(
-        PLAYER_LOOK.x + Math.cos(orbitAzimuth) * cosE * distance,
-        PLAYER_LOOK.y + Math.sin(orbitElevation) * distance,
-        PLAYER_LOOK.z + Math.sin(orbitAzimuth) * cosE * distance,
+        PLAYER_LOOK.x + Math.cos(playerAzimuth) * cosE * distance,
+        PLAYER_LOOK.y + Math.sin(playerElevation) * distance,
+        PLAYER_LOOK.z + Math.sin(playerAzimuth) * cosE * distance,
       );
       baseHome.lerp(playerHome, playerAmount);
       lookCurrent.lerp(PLAYER_LOOK, playerAmount);
@@ -1112,8 +1174,46 @@ export function createRoomScene(filmSources?: RoomFilmSources): RoomScene {
       fullCamera.aspect = fullAspect;
       fullCamera.fov = fullAspect < 1 ? 38 : 30;
       fullCamera.updateProjectionMatrix();
-      updateResponsiveHome();
+      if (!orbitTouched) {
+        orbitDistance = defaultDistance();
+        distanceCurrent = orbitDistance;
+      }
     },
+    orbitRotate: (dx, dy) => {
+      orbitTouched = true;
+      orbitAzimuth = THREE.MathUtils.clamp(
+        orbitAzimuth - dx * 2.2,
+        ORBIT.azimuth0 - ORBIT.azimuthSpan,
+        ORBIT.azimuth0 + ORBIT.azimuthSpan,
+      );
+      orbitElevation = THREE.MathUtils.clamp(
+        orbitElevation + dy * 1.6,
+        ORBIT.elevationMin,
+        ORBIT.elevationMax,
+      );
+    },
+    orbitZoomTo: (distance) => {
+      orbitTouched = true;
+      orbitDistance = THREE.MathUtils.clamp(distance, ORBIT.distanceMin, ORBIT.distanceMax);
+    },
+    orbitZoom: (factor) => {
+      orbitTouched = true;
+      orbitDistance = THREE.MathUtils.clamp(
+        distanceCurrent * factor,
+        ORBIT.distanceMin,
+        ORBIT.distanceMax,
+      );
+    },
+    orbitReset: () => {
+      orbitTouched = false;
+      orbitAzimuth = ORBIT.azimuth0;
+      orbitElevation = ORBIT.elevation0;
+      orbitDistance = defaultDistance();
+    },
+    orbitDistance: () => distanceCurrent,
+    // Filled in with the data books (roomBooks.ts); absent until then.
+    bookAt: () => null,
+    setHoverBook: () => {},
     setFilmHandoff: (progress, projectIndex) => {
       handoffProgress = THREE.MathUtils.clamp(progress, 0, 1);
       if (handoffMaterial) handoffMaterial.uniforms.uActiveFrame.value = projectIndex;
@@ -1149,20 +1249,20 @@ export function createRoomScene(filmSources?: RoomFilmSources): RoomScene {
     terminal,
     setPlayerMode: (on) => { playerMode = on; },
     orbitPlayer: (dx, dy) => {
-      orbitAzimuth = THREE.MathUtils.clamp(
-        orbitAzimuth + dx * 2.4,
+      playerAzimuth = THREE.MathUtils.clamp(
+        playerAzimuth + dx * 2.4,
         PLAYER_AZIMUTH - ORBIT_AZIMUTH_LIMIT,
         PLAYER_AZIMUTH + ORBIT_AZIMUTH_LIMIT,
       );
-      orbitElevation = THREE.MathUtils.clamp(
-        orbitElevation + dy * 1.6,
+      playerElevation = THREE.MathUtils.clamp(
+        playerElevation + dy * 1.6,
         ORBIT_ELEVATION_MIN,
         ORBIT_ELEVATION_MAX,
       );
     },
     resetPlayerOrbit: () => {
-      orbitAzimuth = PLAYER_AZIMUTH;
-      orbitElevation = PLAYER_ELEVATION;
+      playerAzimuth = PLAYER_AZIMUTH;
+      playerElevation = PLAYER_ELEVATION;
     },
     setTonearm: (progress) => { tonearmTarget = progress; },
     setPlatterRpm: (rpm) => deck?.setRpm(rpm),

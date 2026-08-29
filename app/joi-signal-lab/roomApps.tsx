@@ -381,6 +381,30 @@ export function TerminalInputBridge({ active, rig }: { active: boolean; rig: Roo
 }
 
 /* ------------------------------------------------------------------ */
+/* Orbit buttons: zoom in/out and reset, next to the moment switch     */
+/* ------------------------------------------------------------------ */
+
+export function OrbitButtons({
+  apiRef,
+}: {
+  apiRef: { current: { orbitZoom: (factor: number) => void; orbitReset: () => void } | null };
+}) {
+  return (
+    <div className={styles.roomOrbitControls} role="group" aria-label="房间视角">
+      <button type="button" onClick={() => apiRef.current?.orbitZoom(0.82)} aria-label="拉近">
+        +
+      </button>
+      <button type="button" onClick={() => apiRef.current?.orbitZoom(1.22)} aria-label="拉远">
+        −
+      </button>
+      <button type="button" onClick={() => apiRef.current?.orbitReset()} aria-label="复位视角">
+        RESET
+      </button>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /* The three moments                                                   */
 /* ------------------------------------------------------------------ */
 

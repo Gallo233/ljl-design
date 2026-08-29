@@ -2660,3 +2660,38 @@
   .roomFilmTrack,
   .roomFilmProgress i { transition: none; }
 }
+
+/* Orbit buttons: zoom and reset, stacked above the moment switch. */
+
+.roomOrbitControls {
+  position: absolute;
+  right: clamp(14px, 2.6vw, 30px);
+  bottom: calc(clamp(14px, 3vh, 30px) + 44px);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  pointer-events: auto;
+}
+
+.roomOrbitControls button {
+  padding: 7px 10px;
+  border: 1px solid rgba(238, 244, 250, .16);
+  border-radius: 8px;
+  background: rgba(9, 11, 16, .55);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  color: rgba(242, 238, 232, .72);
+  font: 500 10px/1 var(--font-signal-mono, monospace);
+  letter-spacing: .18em;
+  cursor: pointer;
+  transition: color .2s ease, border-color .2s ease;
+}
+
+.roomOrbitControls button:hover {
+  color: #f2eee8;
+  border-color: rgba(237, 101, 74, .55);
+}
+
+@media (max-width: 760px) {
+  .roomOrbitControls { right: 10px; bottom: calc(10px + env(safe-area-inset-bottom) + 40px); }
+}
