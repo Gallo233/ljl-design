@@ -18,18 +18,38 @@ import * as THREE from "three";
 
 export type RoomPropId = "cat" | "handheld" | "balls";
 
+/** One probe: where a prop (or one half of one) wants to stand, in room coordinates. */
+export type RoomPropPlacement = {
+  id: RoomPropId;
+  /** For a prop with independently placed parts. */
+  part?: "basketball" | "glove";
+  x: number;
+  z: number;
+  minY: number;
+  maxY: number;
+  /** World point the prop should face (yaw only), e.g. Nick watches the screen. */
+  faceTo?: [number, number, number];
+  /** Where to stand if the probe finds nothing — props are never left unplaced. */
+  fallbackY: number;
+};
+
 export type RoomPropsRig = {
   group: any;
   /** Idle life: breathing, tail, screen loop, ball physics. Called every frame. */
   update: (delta: number, timeMs: number) => void;
   /** A click landed on this prop. Returns the name for anyone keeping score. */
   poke: (id: RoomPropId) => void;
-  /** Drop a prop group so its origin sits on a found surface point. */
-  place: (id: RoomPropId, surfacePoint: any, surfaceNormal: any) => void;
+  /** Drop a prop (or one part of one) so its origin sits on a found surface point. */
+  place: (
+    id: RoomPropId,
+    surfacePoint: any,
+    surfaceNormal: any,
+    part?: "basketball" | "glove",
+    faceTo?: [number, number, number],
+  ) => void;
   /** Hide a prop whose probe found no surface. */
   setVisible: (id: RoomPropId, on: boolean) => void;
-  /** Where to probe for each prop's surface, in room coordinates. */
-  probeSpots: Record<RoomPropId, { x: number; z: number; minY: number; maxY: number }>;
+  probeSpots: RoomPropPlacement[];
   nodesByProp: Record<RoomPropId, any[]>;
   dispose: () => void;
 };
@@ -248,13 +268,16 @@ export function createRoomProps(): RoomPropsRig {
   });
   const baseballMaterial = new THREE.MeshStandardMaterial({ map: baseballTexture, roughness: 0.7 });
   const baseball = new THREE.Mesh(track(new THREE.SphereGeometry(0.3, 16, 12), baseballMaterial), baseballMaterial);
-  baseball.position.set(0, 0.62, 0.1);
+  baseball.position.set(0, 0.62, 0.08);
 
+  // The glove is one placement (desk), the basketball another (floor), so each gets
+  // its own subgroup under the shared "balls" hotspot.
   const glove = new THREE.Group();
-  glove.add(glovePalm, ...gloveStalls, gloveThumb);
-  glove.position.set(-1.6, 0, 0);
+  glove.add(glovePalm, ...gloveStalls, gloveThumb, baseball);
   glove.rotation.y = 0.5;
-  propGroups.balls.add(basketball, glove, baseball);
+  const basketballGroup = new THREE.Group();
+  basketballGroup.add(basketball);
+  propGroups.balls.add(basketballGroup, glove);
   nodesByProp.balls = [propGroups.balls];
 
   // The ball rolls a little when poked, then settles back into the pocket.
@@ -263,14 +286,22 @@ export function createRoomProps(): RoomPropsRig {
 
   /* ------------------------------------------------------------------ */
 
-  const probeSpots: RoomPropsRig["probeSpots"] = {
-    // The chair is where the room says the person isn't; Nick disagrees.
-    cat: { x: 9.2, z: -2.4, minY: 2.0, maxY: 6.5 },
-    // Desk surface, short side nearest the reader, clear of the film's landing spot.
-    handheld: { x: 4.1, z: 0.9, minY: 4.5, maxY: 8.5 },
-    // Floor patch beside the chair.
-    balls: { x: 10.5, z: -7.0, minY: -0.5, maxY: 2.0 },
-  };
+  /*
+   * Placements read off the capture's real geometry (scripts/dev/inspect-room-glb.mjs):
+   * the office chair stands at (10.42, -4.25), the desk surface sits near y 5.7, the
+   * floor near y 0. The chair probe looks for the seat between seat and backrest bands;
+   * the desk spots look between desk and shelf bands.
+   */
+  const probeSpots: RoomPropPlacement[] = [
+    // Nick takes the chair and watches whoever the screen is for.
+    { id: "cat", x: 10.42, z: -4.25, minY: 3.2, maxY: 5.6, faceTo: [3.07, 5.8, -4.06], fallbackY: 4.3 },
+    // Desk surface, front-right quadrant, clear of the film's landing spot.
+    { id: "handheld", x: 4.2, z: 0.4, minY: 4.5, maxY: 8.5, fallbackY: 5.72 },
+    // The basketball lives on the floor beside the chair.
+    { id: "balls", part: "basketball", x: 12.2, z: -6.5, minY: -0.5, maxY: 2.0, fallbackY: 0 },
+    // The glove rests on the desk's near corner, between pen and camera.
+    { id: "balls", part: "glove", x: 3.4, z: 2.0, minY: 4.5, maxY: 8.5, fallbackY: 5.72 },
+  ];
 
   const update = (delta: number, timeMs: number) => {
     const t = timeMs * 0.001;
@@ -316,7 +347,7 @@ export function createRoomProps(): RoomPropsRig {
     if (baseballSpinRate > 0.01) {
       baseballSpin += baseballSpinRate * delta;
       baseballSpinRate *= Math.max(0, 1 - delta * 2.2);
-      baseball.position.x = 0.1 + Math.sin(baseballSpin) * 0.12;
+      baseball.position.x = Math.sin(baseballSpin) * 0.1;
       baseball.rotation.z = baseballSpin * 0.5;
     }
     // Basketball bounce.
@@ -348,13 +379,29 @@ export function createRoomProps(): RoomPropsRig {
         baseballSpinRate = 5.5;
       }
     },
-    place: (id, surfacePoint, surfaceNormal) => {
-      const prop = propGroups[id];
-      prop.position.copy(surfacePoint);
+    place: (id, surfacePoint, surfaceNormal, part, faceTo) => {
+      // A prop with parts moves just that part; the rest of the prop stays put.
+      const target =
+        part === "basketball" ? basketballGroup : part === "glove" ? glove : propGroups[id];
+      target.position.copy(surfacePoint);
       // Stand the prop on the surface: origin at the contact patch, upright along the
       // surface normal, plus a small lift so nothing z-fights the bake.
-      prop.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), surfaceNormal);
-      prop.position.addScaledVector(surfaceNormal, 0.02);
+      target.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), surfaceNormal);
+      target.position.addScaledVector(surfaceNormal, 0.02);
+      if (faceTo) {
+        // Yaw the prop towards a world point, applied after the upright alignment.
+        const direction = new THREE.Vector3(faceTo[0], 0, faceTo[2])
+          .sub(new THREE.Vector3(target.position.x, 0, target.position.z));
+        if (direction.lengthSq() > 1e-6) {
+          // The cat's nose points down local -Z; solve the yaw that aims it.
+          const yaw = Math.atan2(-direction.x, -direction.z);
+          const yawQuat = new THREE.Quaternion().setFromAxisAngle(
+            new THREE.Vector3(0, 1, 0),
+            yaw,
+          );
+          target.quaternion.multiply(yawQuat);
+        }
+      }
     },
     setVisible: (id, on) => { propGroups[id].visible = on; },
     probeSpots,

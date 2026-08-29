@@ -106,17 +106,27 @@ export type RoomFilmSources = {
 /** The three graded moments. The bake stays one capture; the grade is applied live. */
 export type RoomLightPreset = "day" | "blue" | "night";
 
+/*
+ * Grading follows the reference room's own numbers: a state is mostly an exposure,
+ * not a colour cast — their light-night is 0.42 exposure against light-day's 0.9.
+ * "Lights off" reads as dimmed with a faint cool bias plus real practical glows;
+ * it does not read as a saturated wash over everything.
+ */
 const LIGHT_PRESETS: Record<
   RoomLightPreset,
-  { tint: [number, number, number]; lamp: number; screen: number }
+  { tint: [number, number, number]; exposure: number; lamp: number; desk: number; screen: number }
 > = {
-  // The bake as captured.
-  day: { tint: [1, 1, 1], lamp: 0, screen: 0 },
-  // Blue hour outside; the tungsten interior fights back.
-  blue: { tint: [0.74, 0.82, 1.05], lamp: 1.0, screen: 0.55 },
-  // Deep night. The room keeps only what it can switch on itself.
-  night: { tint: [0.44, 0.53, 0.85], lamp: 1.5, screen: 0.9 },
+  day: { tint: [1, 1, 1], exposure: 1, lamp: 0, desk: 0, screen: 0 },
+  blue: { tint: [0.82, 0.86, 1.02], exposure: 0.75, lamp: 0.5, desk: 0.55, screen: 0.35 },
+  night: { tint: [0.66, 0.7, 0.86], exposure: 0.45, lamp: 0.9, desk: 0.9, screen: 0.5 },
 };
+
+/** Practical glows, measured off the capture: floor-lamp shade, desk lamp, the screen. */
+const GLOWS: { position: [number, number, number]; scale: number; channel: "lamp" | "desk" | "screen"; colour: number }[] = [
+  { position: [2.89, 8.0, 8.59], scale: 2.6, channel: "lamp", colour: 0xffc27a },
+  { position: [2.3, 7.1, -1.6], scale: 2.2, channel: "desk", colour: 0xffc27a },
+  { position: [3.07, 5.8, -4.06], scale: 2.4, channel: "screen", colour: 0xcfe0ff },
+];
 
 const ASSET_VERSION = "desk-base-20260825-1";
 const MODEL_URL = `/models/about-room-base.glb?v=${ASSET_VERSION}`;
@@ -160,12 +170,13 @@ const BAKED_FRAGMENT_SHADER = /* glsl */ `
   precision highp float;
   uniform sampler2D uBake;
   uniform float uExposure;
+  uniform float uExposureMul;
   uniform float uLift;
   uniform vec3 uTint;
   varying vec2 vBakeUv;
   void main() {
     vec3 baked = max(texture2D(uBake, vBakeUv).rgb, vec3(0.0));
-    gl_FragColor = vec4(baked * uExposure * uTint + uLift, 1.0);
+    gl_FragColor = vec4(baked * uExposure * uExposureMul * uTint + uLift, 1.0);
   }
 `;
 
@@ -303,14 +314,15 @@ const ORBIT_ELEVATION_MIN = THREE.MathUtils.degToRad(14);
 const ORBIT_ELEVATION_MAX = THREE.MathUtils.degToRad(72);
 
 /** A soft radial gradient on a small canvas — the practical glow's only texture. */
-function createGlowTexture(colour: string): any {
+function createGlowTexture(colour: number): any {
+  const hex = `#${colour.toString(16).padStart(6, "0")}`;
   const canvas = document.createElement("canvas");
   canvas.width = 128;
   canvas.height = 128;
   const ctx = canvas.getContext("2d");
   if (ctx) {
     const gradient = ctx.createRadialGradient(64, 64, 4, 64, 64, 62);
-    gradient.addColorStop(0, colour);
+    gradient.addColorStop(0, hex);
     gradient.addColorStop(1, "rgba(0,0,0,0)");
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, 128, 128);
@@ -432,43 +444,35 @@ export function createRoomScene(filmSources?: RoomFilmSources): RoomScene {
   let deck: DeckRig | null = null;
 
   /*
-   * The three moments. One tint uniform object is shared by every baked material, so
-   * grading the room is one colour lerp no matter how many atlases are in it. The
-   * practical glows (desk lamp, screen) ride along so the lamp-lit patches survive
-   * their tint being pushed down.
+   * The three moments. Shared uniform objects (tint colour, exposure multiplier) go
+   * into every baked material, so grading the room is two lerps no matter how many
+   * atlases are in it. The practical glows are small sprites seated *inside* the lamp
+   * shade and on the screen — never bigger than the fixture they belong to.
    */
   const tintUniform = { value: new THREE.Color(1, 1, 1) };
+  const exposureUniform = { value: 1 };
   let lightPreset: RoomLightPreset = "day";
-  const lampGlowMaterial = new THREE.SpriteMaterial({
-    map: createGlowTexture("#ffb45e"),
-    color: 0xffb45e,
-    transparent: true,
-    opacity: 0,
-    blending: THREE.AdditiveBlending,
-    depthWrite: false,
-    toneMapped: false,
+  const glowSprites = GLOWS.map((glow) => {
+    const material = new THREE.SpriteMaterial({
+      map: createGlowTexture(glow.colour),
+      color: glow.colour,
+      transparent: true,
+      opacity: 0,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      toneMapped: false,
+    });
+    const sprite = new THREE.Sprite(material);
+    sprite.position.set(...glow.position);
+    sprite.scale.setScalar(glow.scale);
+    scene.add(sprite);
+    return { material, channel: glow.channel, amount: 0 };
   });
-  const screenGlowMaterial = new THREE.SpriteMaterial({
-    map: createGlowTexture("#9fd0ff"),
-    color: 0x9fd0ff,
-    transparent: true,
-    opacity: 0,
-    blending: THREE.AdditiveBlending,
-    depthWrite: false,
-    toneMapped: false,
-  });
-  const lampGlow = new THREE.Sprite(lampGlowMaterial);
-  const screenGlow = new THREE.Sprite(screenGlowMaterial);
-  lampGlow.scale.setScalar(9);
-  screenGlow.scale.setScalar(7);
-  let lampGlowTarget = 0;
-  let screenGlowTarget = 0;
-  let lampGlowAmount = 0;
-  let screenGlowAmount = 0;
+  let glowTargets: Record<"lamp" | "desk" | "screen", number> = { lamp: 0, desk: 0, screen: 0 };
 
   const terminal = createRoomTerminal();
   let terminalMix = 0;
-  let screenMaterial: any = null;
+  const screenMaterials: any[] = [];
   let screenNodes: any[] = [];
 
   const props = createRoomProps();
@@ -701,94 +705,134 @@ export function createRoomScene(filmSources?: RoomFilmSources): RoomScene {
 
       /*
        * The terminal screen: the capture's own screen meshes get a material that mixes
-       * the baked wallpaper with the live terminal canvas. Created once; the mix eases
-       * in `update` when the terminal is asked for.
+       * the baked wallpaper with the live terminal canvas. The trap this guards against
+       * is the bake's UV space: those coordinates address the atlas's packed layout,
+       * not the screen, so the terminal sample is remapped through the mesh's own uv
+       * bounds first — one material per mesh, because two screens rarely share a rect.
        */
+      const uvRectOf = (mesh: any) => {
+        const uv = mesh.geometry?.attributes?.uv;
+        if (!uv || uv.count === 0) return null;
+        let minX = Infinity;
+        let minY = Infinity;
+        let maxX = -Infinity;
+        let maxY = -Infinity;
+        for (let i = 0; i < uv.count; i += 1) {
+          minX = Math.min(minX, uv.getX(i));
+          maxX = Math.max(maxX, uv.getX(i));
+          minY = Math.min(minY, uv.getY(i));
+          maxY = Math.max(maxY, uv.getY(i));
+        }
+        return Number.isFinite(minX) && maxX - minX > 1e-4 && maxY - minY > 1e-4
+          ? { minX, minY, maxX, maxY }
+          : null;
+      };
       screenNodes = ["screen", "screen001"]
         .map((name) => model.getObjectByName(name))
         .filter(Boolean);
       if (screenNodes.length === 0 && process.env.NODE_ENV !== "production") {
         console.warn("[about-room] no screen node found; the terminal has no glass");
       } else {
-        screenMaterial = new THREE.ShaderMaterial({
-          name: "About room · terminal screen",
-          uniforms: {
-            uBake: { value: atlases.get("group3") },
-            uTerminal: { value: terminal.canvasTexture },
-            uMix: { value: 0 },
-            uExposure: { value: BASE_ATLAS_EXPOSURE.group3 },
-            uLift: { value: BAKE_LIFT },
-            uTint: tintUniform,
-          },
-          vertexShader: BAKED_VERTEX_SHADER[0],
-          fragmentShader: /* glsl */ `
-            precision highp float;
-            uniform sampler2D uBake;
-            uniform sampler2D uTerminal;
-            uniform float uMix;
-            uniform float uExposure;
-            uniform float uLift;
-            uniform vec3 uTint;
-            varying vec2 vBakeUv;
-            void main() {
-              vec3 baked = max(texture2D(uBake, vBakeUv).rgb, vec3(0.0)) * uExposure * uTint + uLift;
-              vec3 terminal = texture2D(uTerminal, vBakeUv).rgb;
-              gl_FragColor = vec4(mix(baked, terminal, uMix), 1.0);
-            }
-          `,
+        const makeScreenMaterial = (rect: { minX: number; minY: number; maxX: number; maxY: number }) =>
+          new THREE.ShaderMaterial({
+            name: "About room · terminal screen",
+            uniforms: {
+              uBake: { value: atlases.get("group3") },
+              uTerminal: { value: terminal.canvasTexture },
+              uMix: { value: 0 },
+              uExposure: { value: BASE_ATLAS_EXPOSURE.group3 },
+              uLift: { value: BAKE_LIFT },
+              uTint: tintUniform,
+              uExposureMul: exposureUniform,
+              uUvMin: { value: new THREE.Vector2(rect.minX, rect.minY) },
+              uUvSize: { value: new THREE.Vector2(rect.maxX - rect.minX, rect.maxY - rect.minY) },
+            },
+            vertexShader: BAKED_VERTEX_SHADER[0],
+            fragmentShader: /* glsl */ `
+              precision highp float;
+              uniform sampler2D uBake;
+              uniform sampler2D uTerminal;
+              uniform float uMix;
+              uniform float uExposure;
+              uniform float uExposureMul;
+              uniform float uLift;
+              uniform vec3 uTint;
+              uniform vec2 uUvMin;
+              uniform vec2 uUvSize;
+              varying vec2 vBakeUv;
+              void main() {
+                vec3 baked = max(texture2D(uBake, vBakeUv).rgb, vec3(0.0))
+                  * uExposure * uExposureMul * uTint + uLift;
+                vec2 termUv = clamp((vBakeUv - uUvMin) / uUvSize, 0.0, 1.0);
+                vec3 terminal = texture2D(uTerminal, termUv).rgb;
+                gl_FragColor = vec4(mix(baked, terminal, uMix), 1.0);
+              }
+            `,
+          });
+        screenNodes.forEach((node: any) => {
+          const material = makeScreenMaterial(uvRectOf(node) ?? { minX: 0, minY: 0, maxX: 1, maxY: 1 });
+          material.toneMapped = false;
+          screenMaterials.push(material);
+          node.material = material;
         });
-        screenMaterial.toneMapped = false;
-        screenNodes.forEach((node: any) => { node.material = screenMaterial; });
       }
 
       /*
        * The props land where the capture actually has surfaces. Each probe looks
        * straight down at the spot the prop asked for and takes the first up-facing
-       * face in its height band — the same trick that put the film hand-off on the
-       * desk without a hardcoded table top.
+       * face in its height band — coordinates measured off the capture
+       * (scripts/dev/inspect-room-glb.mjs). A probe that finds nothing still places
+       * its prop, on the fallback height and upright: a prop that vanishes is worse
+       * than a prop floating a little.
        */
       const propProbe = new THREE.Raycaster();
       const propDown = new THREE.Vector3(0, -1, 0);
-      const propUp = new THREE.Vector3(0, 1, 0);
       const propNormalMatrix = new THREE.Matrix3();
-      (Object.entries(props.probeSpots) as [RoomPropId, { x: number; z: number; minY: number; maxY: number }][])
-        .forEach(([id, spot]) => {
-          propProbe.set(new THREE.Vector3(spot.x, 30, spot.z), propDown);
-          propProbe.far = 60;
-          const hit = propProbe.intersectObject(model, true).find((entry: any) => {
-            if (!entry.face || entry.point.y < spot.minY || entry.point.y > spot.maxY) return false;
-            const normal = entry.face.normal
-              .clone()
-              .applyMatrix3(propNormalMatrix.getNormalMatrix(entry.object.matrixWorld))
-              .normalize();
-            return normal.y > 0.72;
-          });
-          if (!hit) {
-            if (process.env.NODE_ENV !== "production") {
-              console.warn(`[about-room] prop "${id}" found no surface; it is not placed`);
-            }
-            props.setVisible(id, false);
-            return;
-          }
-          const normal = hit.face.normal
+      const registeredProps = new Set<RoomPropId>();
+      props.probeSpots.forEach((spot) => {
+        propProbe.set(new THREE.Vector3(spot.x, 30, spot.z), propDown);
+        propProbe.far = 60;
+        const hit = propProbe.intersectObject(model, true).find((entry: any) => {
+          if (!entry.face || entry.point.y < spot.minY || entry.point.y > spot.maxY) return false;
+          const normal = entry.face.normal
+            .clone()
+            .applyMatrix3(propNormalMatrix.getNormalMatrix(entry.object.matrixWorld))
+            .normalize();
+          return normal.y > 0.72;
+        });
+        let point: any;
+        let normal: any;
+        if (hit?.face) {
+          normal = hit.face.normal
             .clone()
             .applyMatrix3(propNormalMatrix.getNormalMatrix(hit.object.matrixWorld))
             .normalize();
-          props.place(id, hit.point, normal);
-          const propNode = props.nodesByProp[id][0];
-          if (!propNode) return;
-          const bounds = new THREE.Box3().setFromObject(propNode);
-          const up = new THREE.Vector3(0, 1, 0);
-          pickables.set(id as RoomObjectId, {
-            nodes: [{ node: propNode, home: propNode.position.clone(), up }],
-            focus: bounds.getCenter(new THREE.Vector3()),
-            viewDistance: viewDistanceFor(bounds),
-          });
-          propNode.traverse((child: any) => {
-            child.userData.roomObject = id;
-            if (child.isMesh) interactiveMeshes.push(child);
-          });
+          point = hit.point;
+        } else {
+          if (process.env.NODE_ENV !== "production") {
+            console.warn(`[about-room] prop "${spot.id}${spot.part ? `:${spot.part}` : ""}" found no surface; placed on the fallback height`);
+          }
+          normal = new THREE.Vector3(0, 1, 0);
+          point = new THREE.Vector3(spot.x, spot.fallbackY, spot.z);
+        }
+        props.place(spot.id, point, normal, spot.part, spot.faceTo);
+
+        if (registeredProps.has(spot.id)) return;
+        const propNode = props.nodesByProp[spot.id][0];
+        if (!propNode) return;
+        registeredProps.add(spot.id);
+        const bounds = new THREE.Box3().setFromObject(propNode);
+        const up = new THREE.Vector3(0, 1, 0);
+        pickables.set(spot.id as RoomObjectId, {
+          nodes: [{ node: propNode, home: propNode.position.clone(), up }],
+          focus: bounds.getCenter(new THREE.Vector3()),
+          viewDistance: viewDistanceFor(bounds),
         });
+        propNode.traverse((child: any) => {
+          child.userData.roomObject = spot.id;
+          if (child.isMesh) interactiveMeshes.push(child);
+        });
+      });
 
       /*
        * The reading timeline's half of the deal: remember where every shelved book
@@ -823,17 +867,8 @@ export function createRoomScene(filmSources?: RoomFilmSources): RoomScene {
         });
       }
 
-      // Practical glows sit where the capture's lamp and screen actually are.
-      const lampHead = model.getObjectByName("Lamphead_Circle007");
-      if (lampHead) {
-        lampGlow.position.copy(lampHead.getWorldPosition(new THREE.Vector3()));
-        scene.add(lampGlow);
-      }
-      if (screenNodes[0]) {
-        const bounds = new THREE.Box3().setFromObject(screenNodes[0]);
-        bounds.getCenter(screenGlow.position);
-        scene.add(screenGlow);
-      }
+      // The practical glows sit at coordinates measured off this capture
+      // (scripts/dev/inspect-room-glb.mjs); nothing to look up at runtime.
 
       loaded = true;
     })
@@ -923,21 +958,25 @@ export function createRoomScene(filmSources?: RoomFilmSources): RoomScene {
     deck?.update(delta);
     props.update(delta, timeMs);
 
-    // The room's moment. One shared tint uniform moves all atlases together; the
-    // practical glows ride their own targets so the lamp patch survives its tint.
+    // The room's moment. Shared tint + exposure uniforms move every atlas together;
+    // the practical glows fade in per channel so the lamp patches survive the dim.
     const grade = reducedMotion ? 1 : Math.min(1, delta * 3.2);
     const presetTarget = LIGHT_PRESETS[lightPreset];
     tintUniform.value.r += (presetTarget.tint[0] - tintUniform.value.r) * grade;
     tintUniform.value.g += (presetTarget.tint[1] - tintUniform.value.g) * grade;
     tintUniform.value.b += (presetTarget.tint[2] - tintUniform.value.b) * grade;
+    exposureUniform.value += (presetTarget.exposure - exposureUniform.value) * grade;
     const terminalTarget = terminal.isActive() ? 1 : 0;
     terminalMix += (terminalTarget - terminalMix) * (reducedMotion ? 1 : Math.min(1, delta * 6));
-    if (screenMaterial) screenMaterial.uniforms.uMix.value = terminalMix;
+    screenMaterials.forEach((material) => {
+      material.uniforms.uMix.value = terminalMix;
+    });
     if (terminalMix > 0.001) terminal.update(delta);
-    lampGlowAmount += (presetTarget.lamp - lampGlowAmount) * grade;
-    screenGlowAmount += (presetTarget.screen + terminalMix * 0.5 - screenGlowAmount) * grade;
-    lampGlowMaterial.opacity = lampGlowAmount * 0.38;
-    screenGlowMaterial.opacity = screenGlowAmount * 0.34;
+    glowSprites.forEach((glow) => {
+      const target = glowTargets[glow.channel] + (glow.channel === "screen" ? terminalMix * 0.3 : 0);
+      glow.amount += (target - glow.amount) * grade;
+      glow.material.opacity = glow.amount * 0.35;
+    });
 
     pickables.forEach((entry, id) => {
       const lift = hovered === id ? 0.28 : 0;
@@ -1140,11 +1179,11 @@ export function createRoomScene(filmSources?: RoomFilmSources): RoomScene {
       deck?.dispose();
       props.dispose();
       terminal.canvasTexture.dispose();
-      lampGlowMaterial.map?.dispose();
-      screenGlowMaterial.map?.dispose();
-      lampGlowMaterial.dispose();
-      screenGlowMaterial.dispose();
-      screenMaterial?.dispose();
+      glowSprites.forEach((glow) => {
+        glow.material.map?.dispose();
+        glow.material.dispose();
+      });
+      screenMaterials.forEach((material) => material.dispose());
       if (model) disposeObject(model);
       handoffGeometry?.dispose();
       handoffMaterial?.dispose();
