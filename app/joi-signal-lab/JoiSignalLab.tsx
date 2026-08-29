@@ -70,6 +70,7 @@ import {
   SECTIONS,
   TOTAL_SCREENS,
   clamp01,
+  focalHandoffLinearProgress,
   focalHandoffProgress,
   getSection,
   progressWithin,
@@ -700,15 +701,22 @@ function FilmCanvas({
     scene.add(ribbon);
 
     // The selected frame is aligned to the curve's front-most point by `uPhase` above.
-    // Keeping that point in world space gives the exit camera a real focal plane: it
-    // approaches whichever frame the visitor stopped on instead of zooming toward the
-    // canvas origin and letting the chosen frame slide off-axis.
+    // Its projected centre and height are measured every frame during the hand-off, so
+    // the relay negative in the room starts on the exact same screen-space rectangle.
     const reelCameraHome = new THREE.Vector3(0, 0, 5);
     const reelLookHome = new THREE.Vector3(0, 0, 0);
     const reelFocusLocal = curve.getPointAt(frontT);
+    const frameHalfT = (FRAME_WIDTH * 0.5) / curveLength;
+    const reelLeftLocal = curve.getPointAt(THREE.MathUtils.clamp(frontT - frameHalfT, 0, 1));
+    const reelRightLocal = curve.getPointAt(THREE.MathUtils.clamp(frontT + frameHalfT, 0, 1));
+    const reelTopWorld = new THREE.Vector3();
+    const reelBottomWorld = new THREE.Vector3();
+    const reelLeftWorld = new THREE.Vector3();
+    const reelRightWorld = new THREE.Vector3();
     const reelFocusWorld = new THREE.Vector3();
-    const reelLook = new THREE.Vector3();
-    const reelDirection = new THREE.Vector3();
+    const reelZoomCamera = new THREE.Vector3();
+    const reelZoomLook = new THREE.Vector3();
+    const reelZoomDirection = new THREE.Vector3();
 
     let frame = 0;
     let readySent = false;
@@ -763,8 +771,6 @@ function FilmCanvas({
       ribbon.position.y = ribbonHomeY;
       ribbon.scale.setScalar(scale);
       ribbon.updateMatrixWorld(true);
-      reelFocusWorld.copy(reelFocusLocal);
-      ribbon.localToWorld(reelFocusWorld);
     };
 
     /** Normalised device coordinates, from the cached rect. */
@@ -1096,6 +1102,15 @@ function FilmCanvas({
       const reelVisible = reveal > 0.001;
       const heroVisible = entry < HERO_OWNS_POINTER_UNTIL;
 
+      // Establish the source lens before any scene asks where the selected frame is.
+      camera.position.copy(reelCameraHome);
+      camera.lookAt(reelLookHome);
+      if (camera.fov !== 65) {
+        camera.fov = 65;
+        camera.updateProjectionMatrix();
+      }
+      camera.updateMatrixWorld(true);
+
       // A hidden tab suspends nothing by itself, and the reel sits at reveal 0 for the
       // whole hero section. The first pass always runs: `onReady` fires from inside it
       // and the boot loader waits on that.
@@ -1175,11 +1190,74 @@ function FilmCanvas({
        * dragging the visitor's point of attention with it. Reversing the scroll runs
        * the same physical relay backwards — no second entrance animation to desynchronise.
        */
-      const ribbonRelease = smoothStep((exit - 0.06) / 0.26);
+      const ribbonRelease = smoothStep((exit - 0.28) / 0.24);
       ribbon.position.x = -2.25 * ribbonRelease;
       ribbon.position.y = ribbonHomeY + 0.82 * ribbonRelease;
       ribbon.rotation.z = -0.065 * ribbonRelease;
       ribbon.updateMatrixWorld(true);
+
+      /*
+       * One object, one camera move. During the first fifth of the hand-off the
+       * original reel — neighbours, sprockets and selected frame together — advances
+       * to the focal plane with heroScene's exact .8 / 1.4 camera curve. The room's
+       * relay is still absent here, so there is never a second negative over the strip.
+       */
+      const reelZoomProgressBase = Math.min(exit / 0.2, 1);
+      const reelZoomProgress = reducedMotion
+        ? 0
+        : 1 - Math.pow(1 - reelZoomProgressBase, 1.4);
+      const homeScale = ribbon.scale.x;
+      reelFocusWorld.copy(reelFocusLocal).multiplyScalar(homeScale);
+      reelFocusWorld.y += ribbonHomeY;
+      const frameWidthWorld = FRAME_WIDTH * homeScale;
+      const frameHeightWorld = 7.5 * homeScale;
+      const frameAspect = frameWidthWorld / Math.max(0.001, frameHeightWorld);
+      const reelFovTangent = Math.tan(THREE.MathUtils.degToRad(camera.fov) * 0.5);
+      const reelFitDistance = (camera.aspect < frameAspect
+        ? frameHeightWorld / 2 / reelFovTangent
+        : frameWidthWorld / 2 / (reelFovTangent * camera.aspect)) * 0.9;
+      reelZoomDirection
+        .copy(reelCameraHome)
+        .sub(reelFocusWorld)
+        .normalize();
+      reelZoomCamera
+        .copy(reelFocusWorld)
+        .addScaledVector(reelZoomDirection, reelFitDistance);
+      camera.position.lerpVectors(reelCameraHome, reelZoomCamera, reelZoomProgress);
+      reelZoomLook.lerpVectors(reelLookHome, reelFocusWorld, reelZoomProgress);
+      camera.lookAt(reelZoomLook);
+      camera.updateMatrixWorld(true);
+
+      // Project the still-unreleased frame rather than the already moving ribbon. This
+      // is the missing registration in the old cross-fade: both images now share one
+      // centre and one height while ownership moves from slot B to slot A.
+      reelTopWorld.copy(reelFocusLocal).multiplyScalar(homeScale);
+      reelTopWorld.y += ribbonHomeY + 3.75 * homeScale;
+      reelBottomWorld.copy(reelFocusLocal).multiplyScalar(homeScale);
+      reelBottomWorld.y += ribbonHomeY - 3.75 * homeScale;
+      reelLeftWorld.copy(reelLeftLocal).multiplyScalar(homeScale);
+      reelLeftWorld.y += ribbonHomeY;
+      reelRightWorld.copy(reelRightLocal).multiplyScalar(homeScale);
+      reelRightWorld.y += ribbonHomeY;
+      reelTopWorld.project(camera);
+      reelBottomWorld.project(camera);
+      reelLeftWorld.project(camera);
+      reelRightWorld.project(camera);
+      const frameScreenDx = (reelRightWorld.x - reelLeftWorld.x) * camera.aspect;
+      const frameScreenDy = reelRightWorld.y - reelLeftWorld.y;
+      const frameScreenWidth = Math.hypot(frameScreenDx, frameScreenDy);
+      const frameVerticalDx = (reelTopWorld.x - reelBottomWorld.x) * camera.aspect;
+      const frameVerticalDy = reelTopWorld.y - reelBottomWorld.y;
+      const handoffSourcePose = {
+        centerX: (reelLeftWorld.x + reelRightWorld.x + reelTopWorld.x + reelBottomWorld.x) * 0.25,
+        centerY: (reelLeftWorld.y + reelRightWorld.y + reelTopWorld.y + reelBottomWorld.y) * 0.25,
+        width: frameScreenWidth,
+        height: Math.hypot(frameVerticalDx, frameVerticalDy),
+        // The curve's tangent includes the neighbouring bend; the selected image itself
+        // is authored upright at the focal point. Feeding that tangent into the relay
+        // tilted the replacement even while the source frame remained level.
+        angle: 0,
+      };
       // The Night Tide handheld is a whole second scene drawn into a 768×576 target. It only
       // feeds frame 03, so rendering it while the reader is three frames away was paying for
       // an offscreen pass sixty times a second to light a texture nobody was sampling.
@@ -1209,7 +1287,7 @@ function FilmCanvas({
       );
       const roomPresence = roomPresenceRef.current;
       const roomIsStage = roomPresence > 0.001;
-      roomScene.setFilmHandoff(exit, activeProject);
+      roomScene.setFilmHandoff(exit, activeProject, handoffSourcePose);
       // The deck owns the camera, the platter speed and the tonearm while it is open.
       roomScene.setPlayerMode(deckOpenRef.current && roomIsStage);
       roomScene.setPlatterRpm(deckRpmRef.current);
@@ -1232,8 +1310,9 @@ function FilmCanvas({
       }
 
       /*
-       * The stage, in order: hero into slot A, reel into slot B, then one chain over
-       * both. A scene that is not on screen is not drawn — but its slot is cleared,
+       * The stage, in order: hero/room into slot A, reel into slot B, the selected
+       * negative into the transparent overlay, then one chain over all three. A scene
+       * that is not on screen is not drawn — but its slot is cleared,
        * because a stale slot blended at even a hundredth would show yesterday's frame
        * ghosted behind today's.
        */
@@ -1260,6 +1339,10 @@ function FilmCanvas({
       renderer.setRenderTarget(post.slotB);
       renderer.clear();
       if (reelVisible || !readySent) renderer.render(scene, camera);
+
+      renderer.setRenderTarget(post.slotOverlay);
+      renderer.clear();
+      if (roomIsStage) renderer.render(roomScene.handoffScene, roomScene.fullCamera);
       renderer.setRenderTarget(null);
 
       /*
@@ -1274,89 +1357,88 @@ function FilmCanvas({
        * look like an arbitrary portal. The relay negative supplies continuity, so a
        * nearly still lens is both calmer and more legible.
        */
-      camera.position.copy(reelCameraHome);
-      camera.lookAt(reelLookHome);
-      const nextFov = 65;
-      if (nextFov !== camera.fov) {
-        camera.fov = nextFov;
-        camera.updateProjectionMatrix();
-      }
-
       // How much of the frame the reel still owns. The reel arrives on `reveal` and
       // leaves on `exit`; `reveal` saturates at the anchor and never comes back down on
       // its own, which is what used to leave the film hanging behind About and Contact.
       // Slot A first reproduces the selected frame at the same focal position. Only
       // after that match is established does the reel release the picture to the room.
-      const reelOwnsFrame = reveal * (1 - smoothStep((exit - 0.06) / 0.26));
-      const roomGrade = smoothStep((exit - 0.06) / 0.38);
+      // The independent negative is opaque before the worlds begin changing beneath
+      // it. This lets the surrounding ribbon recede over a long, quiet interval without
+      // ever exposing two copies of the selected moving image.
+      const reelOwnsFrame = reveal * (1 - smoothStep((exit - 0.22) / 0.12));
+      // Registration happens under one display treatment. Letting the CRT lens and the
+      // room grade change during the source blend bends the two otherwise aligned cards
+      // differently and reads as a ghost image. The glass releases only after slot A
+      // has inherited the frame, in parallel with the physical flight.
+      const glassPresence = reveal * (1 - smoothStep((exit - 0.3) / 0.34));
+      const roomGrade = smoothStep((exit - 0.3) / 0.42);
 
       // The curved glass belongs to the reel and to nothing else.
       //
       // It used to be on everywhere — 0.42 under the hero before the reel had even
       // arrived, 0.2 still bending the room afterwards — which put a lens on two
       // sections that are not looking through one. The hero is a scene and the room is
-      // a room; only the reel is footage inside a tube. So both the distortion and the
-      // colour split it drags with it now ride `reelOwnsFrame`, the same term the
-      // composite blend uses, and reach zero the moment the reel hands the frame over.
+      // a room; only the reel is footage inside a tube. Both effects therefore ride
+      // `glassPresence`: it holds through registration, then releases while the physical
+      // negative leaves the screen plane.
       // Note that the bezel radius and feather are already `mix(0, …, uLensDistortion)`
       // in the shader, so zeroing this takes the rounded corners with it.
       /*
        * How badly the signal is holding together, 0 when the page is still.
        *
-       * It rides `reelOwnsFrame` with everything else here: the hero is a scene and
-       * the room is a room, and neither is being watched through a tube, so speed
-       * costs them nothing. Grain is deliberately not among the knobs — see the note
-       * in `scrollSignal.ts`.
+       * It rides `glassPresence` with everything else here: the hero is a scene and the
+       * room is a room, and neither is being watched through a tube, so speed costs them
+       * nothing. Grain is deliberately not among the knobs — see `scrollSignal.ts`.
        */
       const instability = scrollSignal.update(scrollVelocityRef.current, delta);
       signalRef.current = instability;
 
       post.uniforms.uLensDistortion.value =
-        (THREE.MathUtils.lerp(0.32, 0.72, reveal) + instability * 0.08) * reelOwnsFrame;
+        (THREE.MathUtils.lerp(0.32, 0.72, reveal) + instability * 0.08) * glassPresence;
       post.uniforms.uChromaticAberrationStrength.value =
-        (THREE.MathUtils.lerp(0.18, 0.34, reveal) + instability * 0.22) * reelOwnsFrame;
+        (THREE.MathUtils.lerp(0.18, 0.34, reveal) + instability * 0.22) * glassPresence;
 
       // Bright application screens need a much tighter CRT response than the dark
       // hero. The old settings added a broad 32% bloom to already relit whites, then
       // split their edges by more than a pixel. Preserve the tube in highlights and
       // sprockets while letting UI text and the original video pixels stay readable.
       post.uniforms.uBloomIntensity.value = THREE.MathUtils.lerp(
-        THREE.MathUtils.lerp(0.32, 0.08, reelOwnsFrame),
+        THREE.MathUtils.lerp(0.32, 0.08, glassPresence),
         0.32,
         roomGrade,
       );
       post.uniforms.uBloomThreshold.value = THREE.MathUtils.lerp(
-        THREE.MathUtils.lerp(0.62, 0.78, reelOwnsFrame),
+        THREE.MathUtils.lerp(0.62, 0.78, glassPresence),
         0.62,
         roomGrade,
       );
       post.uniforms.uBloomSmoothing.value = THREE.MathUtils.lerp(
-        THREE.MathUtils.lerp(0.28, 0.16, reelOwnsFrame),
+        THREE.MathUtils.lerp(0.28, 0.16, glassPresence),
         0.28,
         roomGrade,
       );
       post.uniforms.uBloomRadius.value = THREE.MathUtils.lerp(
-        THREE.MathUtils.lerp(0.5, 0.28, reelOwnsFrame),
+        THREE.MathUtils.lerp(0.5, 0.28, glassPresence),
         0.5,
         roomGrade,
       );
       post.uniforms.uPhosphorAmount.value = THREE.MathUtils.lerp(
-        THREE.MathUtils.lerp(0.1, 0.035, reelOwnsFrame),
+        THREE.MathUtils.lerp(0.1, 0.035, glassPresence),
         0.1,
         roomGrade,
       );
       post.uniforms.uPow.value = THREE.MathUtils.lerp(
-        THREE.MathUtils.lerp(1, 1.1, reelOwnsFrame),
+        THREE.MathUtils.lerp(1, 1.1, glassPresence),
         1,
         roomGrade,
       );
       post.uniforms.uSharpness.value = THREE.MathUtils.lerp(
-        THREE.MathUtils.lerp(0, 0.28, reelOwnsFrame),
+        THREE.MathUtils.lerp(0, 0.28, glassPresence),
         0,
         roomGrade,
       );
       post.uniforms.uSepiaIntensity.value = THREE.MathUtils.lerp(
-        THREE.MathUtils.lerp(0.18, 0.035, reelOwnsFrame),
+        THREE.MathUtils.lerp(0.18, 0.035, glassPresence),
         0.025,
         roomGrade,
       );
@@ -1364,12 +1446,12 @@ function FilmCanvas({
       // Blender. A gentler display grade keeps the dark oak, black upholstery and
       // small hardware legible without washing out the window or monitor whites.
       post.uniforms.uBrightness.value = THREE.MathUtils.lerp(
-        THREE.MathUtils.lerp(1, 0.9, reelOwnsFrame),
+        THREE.MathUtils.lerp(1, 0.9, glassPresence),
         1.18,
         roomGrade,
       );
       post.uniforms.uContrast.value = THREE.MathUtils.lerp(
-        THREE.MathUtils.lerp(1.04, 1, reelOwnsFrame),
+        THREE.MathUtils.lerp(1.04, 1, glassPresence),
         0.86,
         roomGrade,
       );
@@ -1377,7 +1459,7 @@ function FilmCanvas({
       // when the picture is still — persistence on a static frame is just softness.
       post.uniforms.uPersistence.value = Math.min(
         0.2,
-        Math.abs(reelVelocity) * 0.008 + instability * 0.09 * reelOwnsFrame,
+        Math.abs(reelVelocity) * 0.008 + instability * 0.09 * glassPresence,
       ) * (1 - roomGrade);
 
       elapsed += delta;
@@ -1387,7 +1469,7 @@ function FilmCanvas({
         // away before Contact becomes active, revealing the stage's dark call-sheet
         // field instead of leaking About's desk into the next section.
         slotAOpacity: exit > 0.001
-          ? smoothStep(exit / 0.22) * THREE.MathUtils.clamp(roomPresence / exit, 0, 1)
+          ? smoothStep((exit - 0.12) / 0.1) * THREE.MathUtils.clamp(roomPresence / exit, 0, 1)
           : 1,
         // Only the hero was authored under Neutral tone mapping, which a render
         // target drops. The room in the same slot never had it.
@@ -1743,13 +1825,19 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
       // three times yesterday's window — and still completes before the anchor, so the
       // /selected-work deep link keeps landing on a fully arrived reel.
       const filmReveal = smoothStep((entry - 0.5) / 0.35);
-      const reelExit = focalHandoffProgress(FOCAL_HANDOFFS.selectedToAbout, screens);
+      // The room scene owns the same easing equation as heroScene, so it needs the
+      // unshaped scroll distance. Feeding it the generic smoothStep here was the first
+      // of two eases and made the camera rush through the middle of the hand-off.
+      const reelExit = focalHandoffLinearProgress(
+        FOCAL_HANDOFFS.selectedToAbout,
+        screens,
+      );
       const contactTurn = focalHandoffProgress(FOCAL_HANDOFFS.aboutToContact, screens);
 
       // The picture stays with its focal object for most of each move. Copy leaves
       // early enough not to cross the paper edge, while the room releases only once
       // Contact's black sheet covers most of it.
-      const aboutArrival = smoothStep((reelExit - 0.58) / 0.3);
+      const aboutArrival = smoothStep((reelExit - 0.5) / 0.46);
       const aboutDeparture = smoothStep((contactTurn - 0.18) / 0.46);
       const aboutPresence = aboutArrival * (1 - aboutDeparture);
       const contactPresence = contactPresenceFor(contactTurn);

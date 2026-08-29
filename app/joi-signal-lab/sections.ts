@@ -52,8 +52,8 @@ export type Section = {
 /**
  * The 8.6-screen map (gap-report §4 asked for 8–12). Positions carry the pacing:
  * the hero flight + film entrance stretch across 0→2 automatically because both are
- * calibrated to `screens / REEL_ANCHOR`; the reel then holds 2→~4.4 of interactive
- * dwell, hands off across 4.4→5.2, and the closing sections read at leisure.
+ * calibrated to `screens / REEL_ANCHOR`; the reel then holds 2→3.2 of interactive
+ * dwell and hands off across 3.2→5.2 on the hero's same two-screen duration.
  *
  * Snap windows are the source ratios scaled to the doubled anchor (hand-tuned from
  * shader.se's `mainPage.snapPoints`, not copied verbatim any more).
@@ -149,7 +149,12 @@ export const smoothStep = (value: number) => {
  * drifting onto different scroll windows.
  */
 export const FOCAL_HANDOFFS = {
-  selectedToAbout: { target: "about-me", lead: 0.95 },
+  // The frame relay has three readable beats — register, release, settle beside the
+  // camera — and needs more than one viewport of travel to keep them from collapsing
+  // into the double-exposure the shorter hand-off produced.
+  // Hero → Selected Work owns two viewport heights. Matching that distance is part
+  // of copying its motion speed, not just its easing equation.
+  selectedToAbout: { target: "about-me", lead: REEL_ANCHOR },
   aboutToContact: { target: "contact", lead: 1.05 },
 } as const satisfies Record<string, { target: SectionId; lead: number }>;
 
@@ -172,8 +177,16 @@ export function focalHandoffProgress(
   handoff: (typeof FOCAL_HANDOFFS)[keyof typeof FOCAL_HANDOFFS],
   screens: number,
 ) {
+  return smoothStep(focalHandoffLinearProgress(handoff, screens));
+}
+
+/** Unsmoothed 0→1 travel for scene cameras that own their easing internally. */
+export function focalHandoffLinearProgress(
+  handoff: (typeof FOCAL_HANDOFFS)[keyof typeof FOCAL_HANDOFFS],
+  screens: number,
+) {
   const end = getSection(handoff.target).position;
-  return smoothStep((screens - (end - handoff.lead)) / handoff.lead);
+  return clamp01((screens - (end - handoff.lead)) / handoff.lead);
 }
 
 /** 0 at the section's position, 1 at the next one's. */

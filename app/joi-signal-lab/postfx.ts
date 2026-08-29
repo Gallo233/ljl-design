@@ -80,6 +80,7 @@ const BLEND_FRAGMENT = /* glsl */ `
   precision highp float;
   uniform sampler2D uSlotA;
   uniform sampler2D uSlotB;
+  uniform sampler2D uOverlay;
   uniform float uBlend;
   uniform float uSlotAOpacity;
   uniform float uToneMapA;
@@ -91,11 +92,22 @@ const BLEND_FRAGMENT = /* glsl */ `
   void main() {
     vec4 a = texture2D(uSlotA, vUv);
     vec4 b = texture2D(uSlotB, vUv);
+    vec4 overlay = texture2D(uOverlay, vUv);
     // Slot A carries the hero early and the room late; only the hero was ever
     // tone-mapped, and through a render target three would have dropped it.
     a.rgb = mix(a.rgb, neutralToneMapping(a.rgb, uExposure), uToneMapA);
     a *= clamp(uSlotAOpacity, 0.0, 1.0);
     vec4 mixed = mix(a, b, clamp(uBlend, 0.0, 1.0));
+    // The selected film frame is a physical relay above both source worlds. Keeping
+    // it out of the A/B dissolve prevents moving video from being readable twice while
+    // the surrounding ribbon gives way to the room.
+    // WebGL's normal alpha blending stores the transparent target premultiplied, so
+    // add its RGB directly. Multiplying it by alpha again would darken the negative
+    // during the first few frames of its lift-off.
+    mixed = vec4(
+      overlay.rgb + mixed.rgb * (1.0 - overlay.a),
+      overlay.a + mixed.a * (1.0 - overlay.a)
+    );
     gl_FragColor = vec4(mixed.rgb * (1.0 - uDim), mixed.a * (1.0 - uDim * 0.35));
   }
 `;
@@ -405,6 +417,8 @@ export type PostChain = {
   /** Scene slots. Hero occupies A early, the room occupies it late; the reel is B. */
   slotA: any;
   slotB: any;
+  /** Alpha-composited physical relay above both scene slots. */
+  slotOverlay: any;
   /** Live knobs, written from the scroll callback. */
   uniforms: Record<string, { value: any }>;
   setSize: (width: number, height: number, pixelRatio: number) => void;
@@ -460,6 +474,7 @@ export function createPostChain(renderer: any, tier: QualityTier): PostChain {
   const sceneSamples = tier.antialias && renderer.capabilities.isWebGL2 ? 2 : 0;
   const slotA = makeTarget(2, 2, true, sceneSamples);
   const slotB = makeTarget(2, 2, true, sceneSamples);
+  const slotOverlay = makeTarget(2, 2, true, sceneSamples);
   const sceneTarget = makeTarget(2, 2, false);
   const baseTargets = [makeTarget(2, 2, false), makeTarget(2, 2, false)];
   let baseIndex = 0;
@@ -532,6 +547,7 @@ export function createPostChain(renderer: any, tier: QualityTier): PostChain {
   const blendMaterial = passMaterial(BLEND_FRAGMENT, {
     uSlotA: { value: slotA.texture },
     uSlotB: { value: slotB.texture },
+    uOverlay: { value: slotOverlay.texture },
     uBlend: { value: 0 },
     uSlotAOpacity: { value: 1 },
     uToneMapA: { value: 1 },
@@ -609,6 +625,7 @@ export function createPostChain(renderer: any, tier: QualityTier): PostChain {
     const h = Math.max(1, Math.floor(height * pixelRatio));
     slotA.setSize(w, h);
     slotB.setSize(w, h);
+    slotOverlay.setSize(w, h);
     sceneTarget.setSize(w, h);
     baseTargets.forEach((target) => target.setSize(w, h));
     let levelWidth = Math.max(1, Math.ceil(w / 2));
@@ -691,11 +708,13 @@ export function createPostChain(renderer: any, tier: QualityTier): PostChain {
   return {
     slotA,
     slotB,
+    slotOverlay,
     uniforms,
     setSize,
     render,
     dispose: () => {
-      [slotA, slotB, sceneTarget, ...baseTargets, ...bloomTargets].forEach((target) => target.dispose());
+      [slotA, slotB, slotOverlay, sceneTarget, ...baseTargets, ...bloomTargets]
+        .forEach((target) => target.dispose());
       [blendMaterial, prefilterMaterial, downsampleMaterial, upsampleMaterial, baseMaterial, composeMaterial]
         .forEach((material) => material.dispose());
       quadGeometry.dispose();
