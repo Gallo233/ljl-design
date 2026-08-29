@@ -9,6 +9,7 @@ import {
   snapTarget,
   type SectionId,
 } from "./sections";
+import { isRoomTerminalActive } from "./roomTerminalGate";
 
 /**
  * Scroll model ported from shader.se. Facts and constants:
@@ -141,6 +142,12 @@ export function useScrollDriver({ onFrame, onSectionChange, isLocked, bootLocked
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.metaKey || event.ctrlKey || event.altKey) return;
       if (optionsRef.current.bootLocked?.() && SCROLL_KEYS.has(event.key)) {
+        event.preventDefault();
+        return;
+      }
+      // The room's terminal owns the keyboard while it is up — arrows are shell
+      // history there, not section navigation.
+      if (isRoomTerminalActive() && SCROLL_KEYS.has(event.key)) {
         event.preventDefault();
         return;
       }

@@ -3,6 +3,8 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { DRACOLoader } from "three/examples/jsm/loaders/DRACOLoader.js";
 import { ROOM_OBJECTS, type RoomObjectId } from "./roomObjects";
 import { retireCapturedDeck } from "./roomPlatter";
+import { createRoomTerminal, type RoomTerminalRig } from "./roomTerminal";
+import { createRoomProps, type RoomPropId } from "./roomProps";
 import {
   createRoomTurntable,
   type DeckControlId,
@@ -48,7 +50,19 @@ export type RoomScene = {
   /** Pick one of the four physical deck controls while its close-up camera owns the room. */
   raycastDeckControl: (ndc: { x: number; y: number }) => DeckControlId | null;
   setHover: (id: RoomObjectId | null) => void;
-  focus: (id: RoomObjectId | null) => void;
+  /**
+   * Pull the camera towards one object. `close` is the app-opening read: the full
+   * distance goes, not the half-step the hover chips use.
+   */
+  focus: (id: RoomObjectId | null, close?: boolean) => void;
+  /** One of three graded moments for the baked room. Tint and practical glows move together. */
+  setLightPreset: (preset: RoomLightPreset) => void;
+  /** Slide one shelf book out of the rack. `null` seats them all again. */
+  setBookSelected: (nodeIndex: number | null) => void;
+  /** A click landed on a prop. */
+  pokeProp: (id: RoomPropId) => void;
+  /** The terminal painted on the screen. Created with the scene, wired after load. */
+  terminal: RoomTerminalRig;
   /**
    * Player mode: the camera leaves its seat at the desk and composes on the turntable,
    * close enough that the platter and the tonearm are the picture. Everything else in
@@ -87,6 +101,21 @@ export type RoomFilmSources = {
   joiMapVideoReady: { value: number };
   nightTide: { value: any };
   room: { value: any };
+};
+
+/** The three graded moments. The bake stays one capture; the grade is applied live. */
+export type RoomLightPreset = "day" | "blue" | "night";
+
+const LIGHT_PRESETS: Record<
+  RoomLightPreset,
+  { tint: [number, number, number]; lamp: number; screen: number }
+> = {
+  // The bake as captured.
+  day: { tint: [1, 1, 1], lamp: 0, screen: 0 },
+  // Blue hour outside; the tungsten interior fights back.
+  blue: { tint: [0.74, 0.82, 1.05], lamp: 1.0, screen: 0.55 },
+  // Deep night. The room keeps only what it can switch on itself.
+  night: { tint: [0.44, 0.53, 0.85], lamp: 1.5, screen: 0.9 },
 };
 
 const ASSET_VERSION = "desk-base-20260825-1";
@@ -132,10 +161,11 @@ const BAKED_FRAGMENT_SHADER = /* glsl */ `
   uniform sampler2D uBake;
   uniform float uExposure;
   uniform float uLift;
+  uniform vec3 uTint;
   varying vec2 vBakeUv;
   void main() {
     vec3 baked = max(texture2D(uBake, vBakeUv).rgb, vec3(0.0));
-    gl_FragColor = vec4(baked * uExposure + uLift, 1.0);
+    gl_FragColor = vec4(baked * uExposure * uTint + uLift, 1.0);
   }
 `;
 
@@ -272,6 +302,24 @@ const ORBIT_AZIMUTH_LIMIT = THREE.MathUtils.degToRad(62);
 const ORBIT_ELEVATION_MIN = THREE.MathUtils.degToRad(14);
 const ORBIT_ELEVATION_MAX = THREE.MathUtils.degToRad(72);
 
+/** A soft radial gradient on a small canvas — the practical glow's only texture. */
+function createGlowTexture(colour: string): any {
+  const canvas = document.createElement("canvas");
+  canvas.width = 128;
+  canvas.height = 128;
+  const ctx = canvas.getContext("2d");
+  if (ctx) {
+    const gradient = ctx.createRadialGradient(64, 64, 4, 64, 64, 62);
+    gradient.addColorStop(0, colour);
+    gradient.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, 128, 128);
+  }
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
+
 export function createRoomScene(filmSources?: RoomFilmSources): RoomScene {
   const reducedMotion =
     typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -374,11 +422,61 @@ export function createRoomScene(filmSources?: RoomFilmSources): RoomScene {
 
   /** One node that lifts on hover, and the parent-space axis that is world "up" for it. */
   type PickableNode = { node: any; home: any; up: any };
-  const pickables = new Map<RoomObjectId, { nodes: PickableNode[]; focus: any }>();
+  const pickables = new Map<RoomObjectId, { nodes: PickableNode[]; focus: any; viewDistance: number }>();
+  /** Camera stand-off for a focused object, read off how big the object actually is. */
+  const viewDistanceFor = (bounds: any) =>
+    THREE.MathUtils.clamp(bounds.getBoundingSphere(new THREE.Sphere()).radius * 2.4, 8, 30);
   const interactiveMeshes: any[] = [];
   const ownedTextures: any[] = [];
   let model: any = null;
   let deck: DeckRig | null = null;
+
+  /*
+   * The three moments. One tint uniform object is shared by every baked material, so
+   * grading the room is one colour lerp no matter how many atlases are in it. The
+   * practical glows (desk lamp, screen) ride along so the lamp-lit patches survive
+   * their tint being pushed down.
+   */
+  const tintUniform = { value: new THREE.Color(1, 1, 1) };
+  let lightPreset: RoomLightPreset = "day";
+  const lampGlowMaterial = new THREE.SpriteMaterial({
+    map: createGlowTexture("#ffb45e"),
+    color: 0xffb45e,
+    transparent: true,
+    opacity: 0,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    toneMapped: false,
+  });
+  const screenGlowMaterial = new THREE.SpriteMaterial({
+    map: createGlowTexture("#9fd0ff"),
+    color: 0x9fd0ff,
+    transparent: true,
+    opacity: 0,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    toneMapped: false,
+  });
+  const lampGlow = new THREE.Sprite(lampGlowMaterial);
+  const screenGlow = new THREE.Sprite(screenGlowMaterial);
+  lampGlow.scale.setScalar(9);
+  screenGlow.scale.setScalar(7);
+  let lampGlowTarget = 0;
+  let screenGlowTarget = 0;
+  let lampGlowAmount = 0;
+  let screenGlowAmount = 0;
+
+  const terminal = createRoomTerminal();
+  let terminalMix = 0;
+  let screenMaterial: any = null;
+  let screenNodes: any[] = [];
+
+  const props = createRoomProps();
+  scene.add(props.group);
+
+  /** The shelf books that answer the reading timeline. */
+  const bookRigs: Map<number, { nodes: any[]; homes: any[]; direction: any; progress: number }> = new Map();
+  let selectedBook: number | null = null;
 
   const disposeObject = (root: any) => {
     const geometries = new Set<any>();
@@ -437,6 +535,7 @@ export function createRoomScene(filmSources?: RoomFilmSources): RoomScene {
               uBake: { value: atlases.get(id) },
               uExposure: { value: BASE_ATLAS_EXPOSURE[id] },
               uLift: { value: BAKE_LIFT },
+              uTint: tintUniform,
             },
             vertexShader: BAKED_VERTEX_SHADER[uvChannel],
             fragmentShader: BAKED_FRAGMENT_SHADER,
@@ -584,6 +683,7 @@ export function createRoomScene(filmSources?: RoomFilmSources): RoomScene {
             return { node, home: node.position.clone(), up: up.normalize() };
           }),
           focus: bounds.getCenter(new THREE.Vector3()),
+          viewDistance: viewDistanceFor(bounds),
         });
         nodes.forEach((node: any) =>
           node.traverse((child: any) => {
@@ -597,6 +697,142 @@ export function createRoomScene(filmSources?: RoomFilmSources): RoomScene {
         if (!pickables.has(object.id) && process.env.NODE_ENV !== "production") {
           console.warn(`[about-room] no geometry bound to hotspot: ${object.id}`);
         }
+      }
+
+      /*
+       * The terminal screen: the capture's own screen meshes get a material that mixes
+       * the baked wallpaper with the live terminal canvas. Created once; the mix eases
+       * in `update` when the terminal is asked for.
+       */
+      screenNodes = ["screen", "screen001"]
+        .map((name) => model.getObjectByName(name))
+        .filter(Boolean);
+      if (screenNodes.length === 0 && process.env.NODE_ENV !== "production") {
+        console.warn("[about-room] no screen node found; the terminal has no glass");
+      } else {
+        screenMaterial = new THREE.ShaderMaterial({
+          name: "About room · terminal screen",
+          uniforms: {
+            uBake: { value: atlases.get("group3") },
+            uTerminal: { value: terminal.canvasTexture },
+            uMix: { value: 0 },
+            uExposure: { value: BASE_ATLAS_EXPOSURE.group3 },
+            uLift: { value: BAKE_LIFT },
+            uTint: tintUniform,
+          },
+          vertexShader: BAKED_VERTEX_SHADER[0],
+          fragmentShader: /* glsl */ `
+            precision highp float;
+            uniform sampler2D uBake;
+            uniform sampler2D uTerminal;
+            uniform float uMix;
+            uniform float uExposure;
+            uniform float uLift;
+            uniform vec3 uTint;
+            varying vec2 vBakeUv;
+            void main() {
+              vec3 baked = max(texture2D(uBake, vBakeUv).rgb, vec3(0.0)) * uExposure * uTint + uLift;
+              vec3 terminal = texture2D(uTerminal, vBakeUv).rgb;
+              gl_FragColor = vec4(mix(baked, terminal, uMix), 1.0);
+            }
+          `,
+        });
+        screenMaterial.toneMapped = false;
+        screenNodes.forEach((node: any) => { node.material = screenMaterial; });
+      }
+
+      /*
+       * The props land where the capture actually has surfaces. Each probe looks
+       * straight down at the spot the prop asked for and takes the first up-facing
+       * face in its height band — the same trick that put the film hand-off on the
+       * desk without a hardcoded table top.
+       */
+      const propProbe = new THREE.Raycaster();
+      const propDown = new THREE.Vector3(0, -1, 0);
+      const propUp = new THREE.Vector3(0, 1, 0);
+      const propNormalMatrix = new THREE.Matrix3();
+      (Object.entries(props.probeSpots) as [RoomPropId, { x: number; z: number; minY: number; maxY: number }][])
+        .forEach(([id, spot]) => {
+          propProbe.set(new THREE.Vector3(spot.x, 30, spot.z), propDown);
+          propProbe.far = 60;
+          const hit = propProbe.intersectObject(model, true).find((entry: any) => {
+            if (!entry.face || entry.point.y < spot.minY || entry.point.y > spot.maxY) return false;
+            const normal = entry.face.normal
+              .clone()
+              .applyMatrix3(propNormalMatrix.getNormalMatrix(entry.object.matrixWorld))
+              .normalize();
+            return normal.y > 0.72;
+          });
+          if (!hit) {
+            if (process.env.NODE_ENV !== "production") {
+              console.warn(`[about-room] prop "${id}" found no surface; it is not placed`);
+            }
+            props.setVisible(id, false);
+            return;
+          }
+          const normal = hit.face.normal
+            .clone()
+            .applyMatrix3(propNormalMatrix.getNormalMatrix(hit.object.matrixWorld))
+            .normalize();
+          props.place(id, hit.point, normal);
+          const propNode = props.nodesByProp[id][0];
+          if (!propNode) return;
+          const bounds = new THREE.Box3().setFromObject(propNode);
+          const up = new THREE.Vector3(0, 1, 0);
+          pickables.set(id as RoomObjectId, {
+            nodes: [{ node: propNode, home: propNode.position.clone(), up }],
+            focus: bounds.getCenter(new THREE.Vector3()),
+            viewDistance: viewDistanceFor(bounds),
+          });
+          propNode.traverse((child: any) => {
+            child.userData.roomObject = id;
+            if (child.isMesh) interactiveMeshes.push(child);
+          });
+        });
+
+      /*
+       * The reading timeline's half of the deal: remember where every shelved book
+       * sits, and which way "out of the rack" is. Outward is horizontal, away from the
+       * shelf's own centre — which puts the slide into the room no matter which wall
+       * the capture stands the shelf against.
+       */
+      const shelfCentre = new THREE.Vector3();
+      const bookCentres: { index: number; centre: any; nodes: any[]; homes: any[] }[] = [];
+      for (let index = 1; index <= 10; index += 1) {
+        const nodes = [`book${index}`, `book${index} outer`]
+          .map((name) => model.getObjectByName(name))
+          .filter(Boolean);
+        if (nodes.length === 0) continue;
+        const centre = new THREE.Vector3();
+        const bounds = new THREE.Box3();
+        nodes.forEach((node: any) => {
+          node.updateWorldMatrix(true, false);
+          bounds.expandByObject(node);
+        });
+        bounds.getCenter(centre);
+        shelfCentre.add(centre);
+        bookCentres.push({ index, centre, nodes, homes: nodes.map((node: any) => node.position.clone()) });
+      }
+      if (bookCentres.length > 0) {
+        shelfCentre.multiplyScalar(1 / bookCentres.length);
+        bookCentres.forEach(({ index, centre, nodes, homes }) => {
+          const direction = new THREE.Vector3(centre.x - shelfCentre.x, 0, centre.z - shelfCentre.z);
+          if (direction.lengthSq() < 0.0001) direction.set(1, 0, 0);
+          direction.normalize();
+          bookRigs.set(index, { nodes, homes, direction, progress: 0 });
+        });
+      }
+
+      // Practical glows sit where the capture's lamp and screen actually are.
+      const lampHead = model.getObjectByName("Lamphead_Circle007");
+      if (lampHead) {
+        lampGlow.position.copy(lampHead.getWorldPosition(new THREE.Vector3()));
+        scene.add(lampGlow);
+      }
+      if (screenNodes[0]) {
+        const bounds = new THREE.Box3().setFromObject(screenNodes[0]);
+        bounds.getCenter(screenGlow.position);
+        scene.add(screenGlow);
       }
 
       loaded = true;
@@ -623,6 +859,8 @@ export function createRoomScene(filmSources?: RoomFilmSources): RoomScene {
   const handoffStartQuaternion = new THREE.Quaternion();
   const handoffQuaternion = new THREE.Quaternion();
   let focusAmount = 0;
+  /** The app-opening read: full pull, not the hover chips' half-step. */
+  let focusClose = false;
   let lastFrameMs = 0;
   let playerMode = false;
   let playerAmount = 0;
@@ -683,12 +921,39 @@ export function createRoomScene(filmSources?: RoomFilmSources): RoomScene {
       : 0;
     lastFrameMs = timeMs;
     deck?.update(delta);
+    props.update(delta, timeMs);
+
+    // The room's moment. One shared tint uniform moves all atlases together; the
+    // practical glows ride their own targets so the lamp patch survives its tint.
+    const grade = reducedMotion ? 1 : Math.min(1, delta * 3.2);
+    const presetTarget = LIGHT_PRESETS[lightPreset];
+    tintUniform.value.r += (presetTarget.tint[0] - tintUniform.value.r) * grade;
+    tintUniform.value.g += (presetTarget.tint[1] - tintUniform.value.g) * grade;
+    tintUniform.value.b += (presetTarget.tint[2] - tintUniform.value.b) * grade;
+    const terminalTarget = terminal.isActive() ? 1 : 0;
+    terminalMix += (terminalTarget - terminalMix) * (reducedMotion ? 1 : Math.min(1, delta * 6));
+    if (screenMaterial) screenMaterial.uniforms.uMix.value = terminalMix;
+    if (terminalMix > 0.001) terminal.update(delta);
+    lampGlowAmount += (presetTarget.lamp - lampGlowAmount) * grade;
+    screenGlowAmount += (presetTarget.screen + terminalMix * 0.5 - screenGlowAmount) * grade;
+    lampGlowMaterial.opacity = lampGlowAmount * 0.38;
+    screenGlowMaterial.opacity = screenGlowAmount * 0.34;
 
     pickables.forEach((entry, id) => {
       const lift = hovered === id ? 0.28 : 0;
       entry.nodes.forEach(({ node, home, up }) => {
         liftStep.copy(home).addScaledVector(up, lift).sub(node.position);
         node.position.addScaledVector(liftStep, reducedMotion ? 1 : 0.14);
+      });
+    });
+
+    // The reading timeline's half: the selected volume eases out of the rack. This
+    // rides on top of the hover pass above, which owns position every frame.
+    bookRigs.forEach((rig, index) => {
+      const target = selectedBook === index ? 1 : 0;
+      rig.progress += (target - rig.progress) * (reducedMotion ? 1 : Math.min(1, delta * 7));
+      rig.nodes.forEach((node, nodeIndex) => {
+        node.position.copy(rig.homes[nodeIndex]).addScaledVector(rig.direction, rig.progress * 0.9);
       });
     });
 
@@ -699,8 +964,16 @@ export function createRoomScene(filmSources?: RoomFilmSources): RoomScene {
     lookCurrent.lerp(cameraTarget, reducedMotion ? 1 : 0.075);
 
     cameraDirection.copy(responsiveHome).sub(HOME_LOOK).normalize();
-    focusHome.copy(focusPoint).addScaledVector(cameraDirection, FOCUS_DISTANCE);
-    cameraHome.copy(responsiveHome).lerp(focusHome, focusAmount * 0.58);
+    const focusedEntry = focused ? pickables.get(focused) : null;
+    const focusDistance = focusedEntry
+      ? THREE.MathUtils.clamp(
+          focusedEntry.viewDistance * (focusClose ? 0.78 : 1),
+          6.5,
+          30,
+        )
+      : FOCUS_DISTANCE;
+    focusHome.copy(focusPoint).addScaledVector(cameraDirection, focusDistance);
+    cameraHome.copy(responsiveHome).lerp(focusHome, focusAmount * (focusClose ? 0.92 : 0.58));
     const px = pointer?.x ?? 0;
     const py = pointer?.y ?? 0;
     baseHome.set(
@@ -827,7 +1100,14 @@ export function createRoomScene(filmSources?: RoomFilmSources): RoomScene {
       return (hit?.userData.deckControl as DeckControlId | undefined) ?? null;
     },
     setHover: (id) => { hovered = id; },
-    focus: (id) => { focused = id; },
+    focus: (id, close) => {
+      focused = id;
+      focusClose = close ?? false;
+    },
+    setLightPreset: (preset) => { lightPreset = preset; },
+    setBookSelected: (nodeIndex) => { selectedBook = nodeIndex; },
+    pokeProp: (id) => props.poke(id),
+    terminal,
     setPlayerMode: (on) => { playerMode = on; },
     orbitPlayer: (dx, dy) => {
       orbitAzimuth = THREE.MathUtils.clamp(
@@ -858,6 +1138,13 @@ export function createRoomScene(filmSources?: RoomFilmSources): RoomScene {
     dispose: () => {
       disposed = true;
       deck?.dispose();
+      props.dispose();
+      terminal.canvasTexture.dispose();
+      lampGlowMaterial.map?.dispose();
+      screenGlowMaterial.map?.dispose();
+      lampGlowMaterial.dispose();
+      screenGlowMaterial.dispose();
+      screenMaterial?.dispose();
       if (model) disposeObject(model);
       handoffGeometry?.dispose();
       handoffMaterial?.dispose();

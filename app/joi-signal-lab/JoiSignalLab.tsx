@@ -3,7 +3,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
 import * as THREE from "three";
-import { createRoomScene } from "./room3d";
+import { createRoomScene, type RoomLightPreset } from "./room3d";
 import type { DeckControlId } from "./roomTurntable";
 import { createHeroScene } from "./heroScene";
 import { createOceanScene, SEA_STATES } from "./oceanScene";
@@ -14,13 +14,65 @@ import { JoiMusicPlayer } from "./JoiMusicPlayer";
 import { PageTurnCorner } from "./PageTurnCorner";
 import { createScrollSignal } from "./scrollSignal";
 import { ROOM_OBJECTS, type RoomObjectId } from "./roomObjects";
+import { ROOM_BOOKS } from "./roomBooks";
+import {
+  BooksSheet,
+  CartridgeSheet,
+  FilmsSheet,
+  PosterSheet,
+  RoomAppSheet,
+  RoomTimeSwitch,
+  TerminalInputBridge,
+  type RoomAppId,
+  type RoomLightPresetUi,
+} from "./roomApps";
+import type { RoomTerminalRig } from "./roomTerminal";
+import { setRoomTerminalActive } from "./roomTerminalGate";
 import { projects, reelMotionSources, reelPosterSources, type ProjectSignal } from "./reelProjects";
 import { createReelMotion, modulo, type ReelMotion } from "./reelMotion";
 import { ATLAS_FRAME_HEIGHT, ATLAS_FRAME_WIDTH, buildAtlas, drawCoverImage } from "./reelArt";
 import { buildHandheldModel } from "./handheldModel";
 import { useGlobalMusic } from "../../components/global-music/GlobalMusic";
 
+/**
+ * What the DOM layer may ask the room to do. Filled in by FilmCanvas once the scene
+ * exists; the sheets, the time switch and the terminal bridge all read it.
+ */
+type RoomApi = {
+  focus: (id: RoomObjectId | null, close?: boolean) => void;
+  setLightPreset: (preset: RoomLightPreset) => void;
+  setBookSelected: (nodeIndex: number | null) => void;
+  pokeProp: (id: "cat" | "balls") => void;
+  terminal: RoomTerminalRig;
+};
+
+/** Objects whose click opens a reading surface — they get the close-up camera. */
+const CLOSE_FOCUS_IDS = new Set<RoomObjectId>(["crt-monitor", "camera", "bookshelf", "poster", "handheld"]);
+
+/** Guangzhou hours: the room wakes in daylight, eases through blue hour, then night. */
+const lightPresetForHour = (hour: number): RoomLightPresetUi => {
+  if (hour >= 7 && hour < 17) return "day";
+  if (hour >= 17 && hour < 19.5) return "blue";
+  return "night";
+};
+
 const seaStateLabels = SEA_STATES.map((state) => state.label);
+
+/** Keys the room's terminal claims while it is up — everything else reaches the page. */
+const TERMINAL_OWNED_KEYS = new Set([
+  "ArrowUp",
+  "ArrowDown",
+  "ArrowLeft",
+  "ArrowRight",
+  " ",
+  "Tab",
+  "Enter",
+  "Backspace",
+  "PageUp",
+  "PageDown",
+  "Home",
+  "End",
+]);
 
 /** Contact copy becomes legible shortly after the paper starts exposing it. */
 const contactPresenceFor = (turn: number) => smoothStep((turn - 0.18) / 0.62);
@@ -214,6 +266,7 @@ function FilmCanvas({
   deckProgress,
   deckSide,
   resetDeckViewRef,
+  roomApiRef,
   onSeaStateChange,
   onRoomHover,
   onRoomPick,
@@ -257,6 +310,12 @@ function FilmCanvas({
   deckSide: { id?: string; title: string; artist: string; color: string; artwork?: string | null } | null;
   /** Filled in here so the deck's ROTATE button can reach the camera. */
   resetDeckViewRef: { current: () => void };
+  /**
+   * Filled in here: everything the DOM layer may ask the room — focus, light preset,
+   * the reading shelf, prop pokes, and the terminal rig itself. Children mount before
+   * parents run effects, so the caller's first effect sees this filled.
+   */
+  roomApiRef: { current: RoomApi | null };
   onStepChange: (step: number) => void;
   onProjectOpen: (href: string) => void;
   onReady: () => void;
@@ -560,6 +619,13 @@ function FilmCanvas({
       nightTide: uniforms.uNightTideMap,
       room: uniforms.uRoomMap,
     });
+    roomApiRef.current = {
+      focus: roomScene.focus,
+      setLightPreset: roomScene.setLightPreset,
+      setBookSelected: roomScene.setBookSelected,
+      pokeProp: roomScene.pokeProp,
+      terminal: roomScene.terminal,
+    };
 
     const material = new THREE.ShaderMaterial({
       uniforms,
@@ -1047,7 +1113,9 @@ function FilmCanvas({
       }
       if (!roomOwnsPointer() || deckOpenRef.current) return;
       const hit = roomScene.raycastAt(normalisedPointer(event));
-      roomScene.focus(hit);
+      // Objects that open a reading surface get the close-up; the cat and the balls
+      // are pokes, not reads, so the camera keeps its seat.
+      roomScene.focus(hit, hit !== null && CLOSE_FOCUS_IDS.has(hit));
       onRoomPickRef.current(hit);
     };
     const handleWheel = (event: WheelEvent) => {
@@ -1424,6 +1492,8 @@ function FilmCanvas({
       nightTideTarget.dispose();
       ocean.dispose();
       oceanTarget.dispose();
+      roomApiRef.current = null;
+      setRoomTerminalActive(false);
       roomScene.dispose();
       roomTarget.dispose();
       hero.dispose();
@@ -1549,11 +1619,50 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
   const [leavingTo, setLeavingTo] = useState<string | null>(null);
   const [seaState, setSeaState] = useState(0);
   const resetDeckViewRef = useRef(() => {});
+  /** Everything the DOM layer may ask the room to do; FilmCanvas fills it in. */
+  const roomApiRef = useRef<RoomApi | null>(null);
+  /** The object sheet the reader opened in the room, if any. */
+  const [activeRoomApp, setActiveRoomApp] = useState<RoomAppId | null>(null);
+  /** The volume the reading timeline has slid off the shelf. */
+  const [selectedBook, setSelectedBook] = useState<number | null>(null);
+  /** True while the room's terminal owns the keyboard. */
+  const [terminalActive, setTerminalActive] = useState(false);
+  /** Coarse pointers type into the terminal through the hidden bridge, not keydown. */
+  const [coarsePointer] = useState(
+    () => typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches,
+  );
+  /*
+   * The room's moment. Session-stored, so a reader who chose night keeps it; the
+   * default is Guangzhou time — daylight, blue hour, then the deep end. The server
+   * renders "day" and the client reconciles after mount: the choice depends on a
+   * clock and a session store, neither of which may vote during hydration.
+   */
+  const [roomLight, setRoomLight] = useState<RoomLightPresetUi>("day");
   /** The scroll driver runs outside React, so it closes the deck through a ref. */
   const closeDeckRef = useRef(() => {});
   // Reassigned each render so it closes over the live flag: the scroll driver calls this
   // on every frame it is away from About, and only the first one should do anything.
   closeDeckRef.current = () => { if (musicPlayerOpen) setMusicPlayerOpen(false); };
+  /*
+   * The way out of the room, shared: the reel's open handler and the terminal's
+   * `works go 1` both land here — sections scroll, routes push under the veil.
+   */
+  const openProjectRef = useRef<(href: string) => void>(() => {});
+  openProjectRef.current = (href) => {
+    const section = SECTIONS.find((entry) => entry.path === href);
+    if (section) {
+      scrollToSection.current(section.id);
+      return;
+    }
+    if (leaving) return;
+    try {
+      sessionStorage.setItem("reel:return", JSON.stringify({ step }));
+      sessionStorage.setItem("reel:arrive", "1");
+    } catch {}
+    setLeavingTo(href);
+    setLeaving(true);
+    window.setTimeout(() => router.push(href), 300);
+  };
   const [activeSection, setActiveSection] = useState<SectionId>(initialSection);
   const activeIndex = modulo(step, projects.length);
   // The loader doubles as the reference's boot screen: it holds the page (scroll lock in
@@ -1562,6 +1671,67 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
   const readyRef = useRef(ready);
   readyRef.current = ready;
   const loadedSystems = (filmReady ? 1 : 0) + (computerReady ? 1 : 0) + (fontsReady ? 1 : 0);
+
+  // The room's moment follows the switch, and the switch follows the session. The
+  // session/clock read happens after mount — see the state's note on hydration.
+  useEffect(() => {
+    let restored: RoomLightPresetUi | null = null;
+    try {
+      const saved = sessionStorage.getItem("room:light");
+      if (saved === "day" || saved === "blue" || saved === "night") restored = saved;
+    } catch {}
+    setRoomLight(restored ?? lightPresetForHour(new Date().getHours()));
+  }, []);
+
+  useEffect(() => {
+    roomApiRef.current?.setLightPreset(roomLight);
+    try {
+      sessionStorage.setItem("room:light", roomLight);
+    } catch {}
+  }, [roomLight]);
+
+  // Terminal lifecycle: the keyboard gate, and where `works go 1` lands.
+  useEffect(() => {
+    const rig = roomApiRef.current?.terminal;
+    if (!rig) return;
+    rig.onActiveChange((on) => {
+      setTerminalActive(on);
+      setRoomTerminalActive(on);
+    });
+    rig.onNavigate((href) => {
+      rig.deactivate();
+      openProjectRef.current(href);
+    });
+  }, []);
+
+  // The terminal owns the keyboard while it is up — capture phase, ahead of the page's
+  // own handlers. Escape hands it back; modifier chords belong to the browser.
+  useEffect(() => {
+    if (!terminalActive) return;
+    const rig = roomApiRef.current?.terminal;
+    if (!rig) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        rig.deactivate();
+        return;
+      }
+      rig.handleKey(event);
+      if (!event.metaKey && !event.ctrlKey && !event.altKey && TERMINAL_OWNED_KEYS.has(event.key)) {
+        event.preventDefault();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [terminalActive]);
+
+  // Walking away from About puts the room's apps away.
+  useEffect(() => {
+    if (activeSection === "about-me") return;
+    if (activeRoomApp) setActiveRoomApp(null);
+    if (selectedBook !== null) setSelectedBook(null);
+    roomApiRef.current?.setBookSelected(null);
+    roomApiRef.current?.terminal.deactivate();
+  }, [activeSection, activeRoomApp, selectedBook]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1710,7 +1880,7 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
     const handleKey = (event: KeyboardEvent) => {
       if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
       if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
-      if (!filmActiveRef.current || menuOpen || musicPlayerOpen) return;
+      if (!filmActiveRef.current || menuOpen || musicPlayerOpen || terminalActive) return;
       const target = event.target as HTMLElement | null;
       if (target?.closest?.("input, textarea, select, [contenteditable]")) return;
       event.preventDefault();
@@ -1718,7 +1888,7 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [menuOpen, musicPlayerOpen]);
+  }, [menuOpen, musicPlayerOpen, terminalActive]);
 
   // Land on the section this route names, before the first paint. One scroll, four addresses.
   useLayoutEffect(() => {
@@ -1921,11 +2091,37 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
             deckProgress={deckProgress}
             deckSide={deckSide}
             resetDeckViewRef={resetDeckViewRef}
+            roomApiRef={roomApiRef}
             onHeroReady={() => setComputerReady(true)}
             onSeaStateChange={setSeaState}
             onRoomHover={setHoveredInterest}
             onRoomPick={(id) => {
-              if (id === "joi-music-box") setMusicPlayerOpen(true);
+              if (!id) return;
+              // Picking anything other than the screen puts the terminal away first —
+              // the keyboard belongs to one surface at a time.
+              if (id !== "crt-monitor") roomApiRef.current?.terminal.deactivate();
+              if (id === "joi-music-box") {
+                setMusicPlayerOpen(true);
+                return;
+              }
+              if (id === "crt-monitor") {
+                roomApiRef.current?.terminal.activate();
+                return;
+              }
+              if (id === "cat" || id === "balls") {
+                roomApiRef.current?.pokeProp(id);
+                return;
+              }
+              if (id === "bookshelf") {
+                const first = ROOM_BOOKS[0].nodeIndex;
+                setSelectedBook(first);
+                roomApiRef.current?.setBookSelected(first);
+                setActiveRoomApp("books");
+                return;
+              }
+              if (id === "camera") setActiveRoomApp("films");
+              else if (id === "poster") setActiveRoomApp("poster");
+              else if (id === "handheld") setActiveRoomApp("handheld");
             }}
             recordPlaying={recordPlaying}
             onDeckVolumeChange={setDeckVolume}
@@ -2013,7 +2209,49 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
               <span>{ROOM_OBJECTS.find((entry) => entry.id === hoveredInterest)?.label}</span>
             </p>
           )}
+          <RoomTimeSwitch value={roomLight} onChange={setRoomLight} />
         </div>
+
+        {/*
+          The room's objects open into these sheets. The camera pull happens underneath
+          (FilmCanvas focused it on the pick); the sheet is the reading surface.
+        */}
+        {activeRoomApp && (
+          <RoomAppSheet
+            appId={activeRoomApp}
+            onClose={() => {
+              setActiveRoomApp(null);
+              if (activeRoomApp === "books") {
+                setSelectedBook(null);
+                roomApiRef.current?.setBookSelected(null);
+              }
+            }}
+          >
+            {activeRoomApp === "books" && (
+              <BooksSheet
+                selected={selectedBook}
+                onSelect={(nodeIndex) => {
+                  setSelectedBook(nodeIndex);
+                  roomApiRef.current?.setBookSelected(nodeIndex);
+                }}
+              />
+            )}
+            {activeRoomApp === "films" && <FilmsSheet />}
+            {activeRoomApp === "poster" && <PosterSheet />}
+            {activeRoomApp === "handheld" && <CartridgeSheet />}
+          </RoomAppSheet>
+        )}
+
+        {terminalActive && (
+          <div className={styles.roomTerminalHint} role="status">
+            <span>JOI9000 TERMINAL</span>
+            <em>ESC 退出 · help 看命令</em>
+          </div>
+        )}
+        <TerminalInputBridge
+          active={terminalActive && coarsePointer}
+          rig={roomApiRef.current?.terminal ?? null}
+        />
 
         <section
           className={`${styles.closingPanel} ${styles.aboutPanel} ${activeSection === "about-me" ? styles.closingPanelActive : ""}`}
