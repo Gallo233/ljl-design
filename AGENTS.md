@@ -56,13 +56,6 @@ app/
     badge/                  the lanyard: verlet rope + the CSS holographic card
     roomBase.ts             the desk capture: node names and atlas ids, pure data
     roomRecords.ts          the record rig — retired, see the note in its header
-    roomTerminal.ts         the JOI9000 terminal painted onto the room's screen
-    roomProps.ts            the room's own props: Nick, the handheld, the balls
-    roomApps.tsx            the object sheets (books/films/posters/cartridges), the
-                            mobile keyboard bridge, the three-moment switch
-    roomBooks.ts            the reading timeline's data  <-- COPY-REVIEW
-    roomFilms.ts            the film rolls' data; photos drop into public/media/films/
-    roomTerminalGate.ts     one flag: the terminal owns the keyboard while it is up
     oceanScene.ts           the sea behind the hero, tier-aware throughout
     solarSystem.ts          the hero's sky: planets, nebula, star field
     heroLightOrb.ts         the orb the reader can pick up in the hero
@@ -187,28 +180,6 @@ bloom levels, persistence, shadows, MSAA).
 **The About room keeps its own small context on purpose.** It is a panel widget in a box, not
 a fullscreen layer that cross-fades with anything; folding it into the stage would buy a
 scissor rectangle and no seam. Two contexts, not one, and that is the intended number.
-
-**The room is Gallo's, on top of the captured shell.** The desk study stays the pinchen
-capture (see `docs/asset-provenance.md`); what makes it this site's room lives in four
-additions, each with a reason:
-
-- **Three graded moments** (`setLightPreset`): the bake is one capture, so day / blue /
-  night are a shared tint uniform moved live plus two additive glow sprites — not more
-  bakes, and never the reference site's night atlases. Session-stored; defaults to
-  Guangzhou time.
-- **The props** (`roomProps.ts`) are procedural and lit by their own small rig, because
-  the baked shader materials ignore lights — a light that reached only standard
-  materials is what keeps the bake untouched. Placement is probed off the capture's
-  surfaces, never hardcoded.
-- **The terminal** (`roomTerminal.ts`) is a canvas texture mixed over the screen's
-  baked material — the fiction continues inside the machine rather than in a DOM sheet.
-  While it is up it owns the keyboard via `roomTerminalGate.ts`; the scroll driver and
-  both arrow-key handlers read that flag before they act.
-- **The object sheets** (`roomApps.tsx`) are DOM over the pulled-in camera: books slide
-  the real `bookN` meshes out of the rack, films show placeholder slates until real
-  scans land in `public/media/films/<roll>/`, and the room's copy carries COPY-REVIEW
-  until the author has been through it. Plan and decisions:
-  `docs/about-page-plan-2026-08.md`.
 
 ### The post chain
 

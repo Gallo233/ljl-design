@@ -186,7 +186,6 @@ export const BASE_ATLAS_EXPOSURE: Record<BaseAtlasId, number> = {
 const AUTHORED_HOTSPOT_NODES: Partial<Record<RoomObjectId, string[]>> = {
   "crt-monitor": ["screen", "screen.001", "macbook", "Cube.008", "Cylinder", "Curve"],
   camera: ["camera", "film", "film.001"],
-  poster: ["poster.001", "poster.002"],
   bookshelf: [
     "bookshelf",
     "bookshelf.001",
