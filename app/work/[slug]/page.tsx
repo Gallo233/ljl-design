@@ -13,6 +13,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { ArrivalFade } from "../../../components/ArrivalFade";
+import { DetailGallery } from "../../../components/DetailGallery";
 import { RevealRoot } from "../../../components/RevealRoot";
 import { SiteHUD } from "../../../components/SiteHUD";
 import { getProject, projects } from "../../../components/projectData";
@@ -298,14 +299,18 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
             ))}
 
             {hasFigures && (
-              <section className="project-detail-gallery" aria-label={`${project.title} project figures`} data-reveal>
-                {project.figures!.map((figure, index) => (
-                  <figure className={`project-detail-figure project-detail-figure--${index + 1}`} key={figure.src}>
-                    <img src={sitePath(figure.src)} alt={figure.alt} loading="lazy" />
-                    <figcaption>{figure.caption}</figcaption>
-                  </figure>
-                ))}
-              </section>
+              /* Client component: same figure markup, plus the two effects from
+                 the viscose study — the first figure condenses from particles on
+                 first sight, a glyph shadow gathers behind the hovered one. Both
+                 mount nothing unless conditions hold, so the plain gallery is
+                 what ships without them. */
+              <DetailGallery
+                title={project.title}
+                figures={project.figures!.map((figure) => ({
+                  ...figure,
+                  src: sitePath(figure.src),
+                }))}
+              />
             )}
 
             <aside className="project-meta-card" data-reveal>
