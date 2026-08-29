@@ -587,6 +587,7 @@ export function createRoomScene(filmSources?: RoomFilmSources): RoomScene {
               uExposure: { value: BASE_ATLAS_EXPOSURE[id] },
               uLift: { value: BAKE_LIFT },
               uTint: tintUniform,
+              uExposureMul: exposureUniform,
             },
             vertexShader: BAKED_VERTEX_SHADER[uvChannel],
             fragmentShader: BAKED_FRAGMENT_SHADER,
