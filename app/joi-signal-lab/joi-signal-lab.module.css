@@ -129,7 +129,9 @@
  */
 .filmUi {
   z-index: 6;
-  opacity: calc(var(--film-reveal) * (1 - var(--reel-exit)));
+  /* The title and browse controls clear before the physical negative starts falling.
+     Letting them linger over the room broke the one-object focal relay. */
+  opacity: calc(var(--film-reveal) * var(--reel-furniture-presence, 1));
   pointer-events: none;
   transform: translateY(calc(var(--film-shift) - var(--reel-exit) * 8svh));
   will-change: opacity, transform;

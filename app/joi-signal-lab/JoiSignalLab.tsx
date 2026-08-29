@@ -520,7 +520,6 @@ function FilmCanvas({
     });
     roomTarget.texture.colorSpace = THREE.SRGBColorSpace;
     roomTarget.texture.generateMipmaps = false;
-    const roomScene = createRoomScene();
 
     let frontT = 0;
     let frontScore = -Infinity;
@@ -551,6 +550,16 @@ function FilmCanvas({
       uTime: { value: 0 },
       uPointer: { value: new THREE.Vector2(0, 0) },
     };
+
+    const roomScene = createRoomScene({
+      atlas: uniforms.uMap,
+      joiVideo: uniforms.uJoiVideo,
+      joiMapVideo: uniforms.uJoiMapVideo,
+      joiVideoReady: uniforms.uJoiVideoReady,
+      joiMapVideoReady: uniforms.uJoiMapVideoReady,
+      nightTide: uniforms.uNightTideMap,
+      room: uniforms.uRoomMap,
+    });
 
     const material = new THREE.ShaderMaterial({
       uniforms,
@@ -705,6 +714,7 @@ function FilmCanvas({
     let readySent = false;
     let width = 1;
     let height = 1;
+    let ribbonHomeY = 0;
     /*
      * Where the canvas sits in the viewport.
      *
@@ -749,7 +759,8 @@ function FilmCanvas({
       const widthScale = THREE.MathUtils.clamp((width - 500) / (2560 - 500), 0, 1);
       const sourceScale = THREE.MathUtils.lerp(0.7, 0.9, widthScale) + 0.1 * aspect;
       const scale = sourceScale * 0.4;
-      ribbon.position.y = 0.2 + reelY * 0.4;
+      ribbonHomeY = 0.2 + reelY * 0.4;
+      ribbon.position.y = ribbonHomeY;
       ribbon.scale.setScalar(scale);
       ribbon.updateMatrixWorld(true);
       reelFocusWorld.copy(reelFocusLocal);
@@ -1157,6 +1168,18 @@ function FilmCanvas({
       uniforms.uFlex.value = flex * (1 - exit);
       uniforms.uTime.value += delta * 60;
       uniforms.uPointer.value.copy(pointer).multiplyScalar(1 - exit);
+
+      /*
+       * The selected frame is copied into the room before the ribbon leaves. Once the
+       * copy owns the focal plane, the rest of the strip can slip up and left without
+       * dragging the visitor's point of attention with it. Reversing the scroll runs
+       * the same physical relay backwards — no second entrance animation to desynchronise.
+       */
+      const ribbonRelease = smoothStep((exit - 0.06) / 0.26);
+      ribbon.position.x = -2.25 * ribbonRelease;
+      ribbon.position.y = ribbonHomeY + 0.82 * ribbonRelease;
+      ribbon.rotation.z = -0.065 * ribbonRelease;
+      ribbon.updateMatrixWorld(true);
       // The Night Tide handheld is a whole second scene drawn into a 768×576 target. It only
       // feeds frame 03, so rendering it while the reader is three frames away was paying for
       // an offscreen pass sixty times a second to light a texture nobody was sampling.
@@ -1186,6 +1209,7 @@ function FilmCanvas({
       );
       const roomPresence = roomPresenceRef.current;
       const roomIsStage = roomPresence > 0.001;
+      roomScene.setFilmHandoff(exit, activeProject);
       // The deck owns the camera, the platter speed and the tonearm while it is open.
       roomScene.setPlayerMode(deckOpenRef.current && roomIsStage);
       roomScene.setPlatterRpm(deckRpmRef.current);
@@ -1245,24 +1269,14 @@ function FilmCanvas({
        * being a room with a computer in it and becomes the computer's own output.
        */
       /*
-       * Leaving the reel is a push, not a dissolve. The ribbon comes at the camera
-       * through the exit and the room is already behind it, so the cut lands at the
-       * moment the film is too close to read — you go through the picture rather
-       * than watching it fade.
+       * The camera now holds on the selected frame while the object changes worlds.
+       * Previously it rushed through the film to hide a cut; that made every project
+       * look like an arbitrary portal. The relay negative supplies continuity, so a
+       * nearly still lens is both calmer and more legible.
        */
-      const reelDolly = reducedMotion ? 0 : exit;
-      reelDirection.copy(reelCameraHome).sub(reelFocusWorld).normalize();
-      const reelHomeDistance = reelCameraHome.distanceTo(reelFocusWorld);
-      camera.position.copy(reelFocusWorld).addScaledVector(
-        reelDirection,
-        THREE.MathUtils.lerp(reelHomeDistance, 0.82, reelDolly),
-      );
-      reelLook.lerpVectors(reelLookHome, reelFocusWorld, reelDolly);
-      camera.lookAt(reelLook);
-      // Only the fov feeds the projection, and it only moves while the reel is being
-      // pushed through — which is a fraction of the scroll. Rebuilding the matrix on a
-      // value that has not changed is a wasted matrix and a wasted dirty flag.
-      const nextFov = 65 + reelDolly * 14;
+      camera.position.copy(reelCameraHome);
+      camera.lookAt(reelLookHome);
+      const nextFov = 65;
       if (nextFov !== camera.fov) {
         camera.fov = nextFov;
         camera.updateProjectionMatrix();
@@ -1271,9 +1285,10 @@ function FilmCanvas({
       // How much of the frame the reel still owns. The reel arrives on `reveal` and
       // leaves on `exit`; `reveal` saturates at the anchor and never comes back down on
       // its own, which is what used to leave the film hanging behind About and Contact.
-      // The handover is deliberately late and quick: the reel holds the frame while it
-      // pushes in, then gives way over the last third of the exit.
-      const reelOwnsFrame = reveal * (1 - smoothStep((exit - 0.62) / 0.3));
+      // Slot A first reproduces the selected frame at the same focal position. Only
+      // after that match is established does the reel release the picture to the room.
+      const reelOwnsFrame = reveal * (1 - smoothStep((exit - 0.06) / 0.26));
+      const roomGrade = smoothStep((exit - 0.06) / 0.38);
 
       // The curved glass belongs to the reel and to nothing else.
       //
@@ -1305,44 +1320,65 @@ function FilmCanvas({
       // hero. The old settings added a broad 32% bloom to already relit whites, then
       // split their edges by more than a pixel. Preserve the tube in highlights and
       // sprockets while letting UI text and the original video pixels stay readable.
-      post.uniforms.uBloomIntensity.value = roomIsStage
-        ? 0.32
-        : THREE.MathUtils.lerp(0.32, 0.08, reelOwnsFrame);
-      post.uniforms.uBloomThreshold.value = roomIsStage
-        ? 0.62
-        : THREE.MathUtils.lerp(0.62, 0.78, reelOwnsFrame);
-      post.uniforms.uBloomSmoothing.value = roomIsStage
-        ? 0.28
-        : THREE.MathUtils.lerp(0.28, 0.16, reelOwnsFrame);
-      post.uniforms.uBloomRadius.value = roomIsStage
-        ? 0.5
-        : THREE.MathUtils.lerp(0.5, 0.28, reelOwnsFrame);
-      post.uniforms.uPhosphorAmount.value = roomIsStage
-        ? 0.1
-        : THREE.MathUtils.lerp(0.1, 0.035, reelOwnsFrame);
-      post.uniforms.uPow.value = roomIsStage
-        ? 1
-        : THREE.MathUtils.lerp(1, 1.1, reelOwnsFrame);
-      post.uniforms.uSharpness.value = roomIsStage
-        ? 0
-        : THREE.MathUtils.lerp(0, 0.28, reelOwnsFrame);
-      post.uniforms.uSepiaIntensity.value = roomIsStage
-        ? 0.025
-        : THREE.MathUtils.lerp(0.18, 0.035, reelOwnsFrame);
+      post.uniforms.uBloomIntensity.value = THREE.MathUtils.lerp(
+        THREE.MathUtils.lerp(0.32, 0.08, reelOwnsFrame),
+        0.32,
+        roomGrade,
+      );
+      post.uniforms.uBloomThreshold.value = THREE.MathUtils.lerp(
+        THREE.MathUtils.lerp(0.62, 0.78, reelOwnsFrame),
+        0.62,
+        roomGrade,
+      );
+      post.uniforms.uBloomSmoothing.value = THREE.MathUtils.lerp(
+        THREE.MathUtils.lerp(0.28, 0.16, reelOwnsFrame),
+        0.28,
+        roomGrade,
+      );
+      post.uniforms.uBloomRadius.value = THREE.MathUtils.lerp(
+        THREE.MathUtils.lerp(0.5, 0.28, reelOwnsFrame),
+        0.5,
+        roomGrade,
+      );
+      post.uniforms.uPhosphorAmount.value = THREE.MathUtils.lerp(
+        THREE.MathUtils.lerp(0.1, 0.035, reelOwnsFrame),
+        0.1,
+        roomGrade,
+      );
+      post.uniforms.uPow.value = THREE.MathUtils.lerp(
+        THREE.MathUtils.lerp(1, 1.1, reelOwnsFrame),
+        1,
+        roomGrade,
+      );
+      post.uniforms.uSharpness.value = THREE.MathUtils.lerp(
+        THREE.MathUtils.lerp(0, 0.28, reelOwnsFrame),
+        0,
+        roomGrade,
+      );
+      post.uniforms.uSepiaIntensity.value = THREE.MathUtils.lerp(
+        THREE.MathUtils.lerp(0.18, 0.035, reelOwnsFrame),
+        0.025,
+        roomGrade,
+      );
       // The baked room has already gone through its photographic contrast in
       // Blender. A gentler display grade keeps the dark oak, black upholstery and
       // small hardware legible without washing out the window or monitor whites.
-      post.uniforms.uBrightness.value = roomIsStage
-        ? 1.18
-        : THREE.MathUtils.lerp(1, 0.9, reelOwnsFrame);
-      post.uniforms.uContrast.value = roomIsStage
-        ? 0.86
-        : THREE.MathUtils.lerp(1.04, 1, reelOwnsFrame);
+      post.uniforms.uBrightness.value = THREE.MathUtils.lerp(
+        THREE.MathUtils.lerp(1, 0.9, reelOwnsFrame),
+        1.18,
+        roomGrade,
+      );
+      post.uniforms.uContrast.value = THREE.MathUtils.lerp(
+        THREE.MathUtils.lerp(1.04, 1, reelOwnsFrame),
+        0.86,
+        roomGrade,
+      );
       // A little of the last frame while the reel is being thrown, and none of it
       // when the picture is still — persistence on a static frame is just softness.
-      post.uniforms.uPersistence.value = roomIsStage
-        ? 0
-        : Math.min(0.2, Math.abs(reelVelocity) * 0.008 + instability * 0.09 * reelOwnsFrame);
+      post.uniforms.uPersistence.value = Math.min(
+        0.2,
+        Math.abs(reelVelocity) * 0.008 + instability * 0.09 * reelOwnsFrame,
+      ) * (1 - roomGrade);
 
       elapsed += delta;
       post.render({
@@ -1350,7 +1386,9 @@ function FilmCanvas({
         // Slot A is the hero before the reel and the room after it. The room fades
         // away before Contact becomes active, revealing the stage's dark call-sheet
         // field instead of leaking About's desk into the next section.
-        slotAOpacity: exit > 0.001 ? roomPresence : 1,
+        slotAOpacity: exit > 0.001
+          ? smoothStep(exit / 0.22) * THREE.MathUtils.clamp(roomPresence / exit, 0, 1)
+          : 1,
         // Only the hero was authored under Neutral tone mapping, which a render
         // target drops. The room in the same slot never had it.
         toneMapA: roomIsStage ? 0 : 1,
@@ -1743,6 +1781,7 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
       write("--terminal-opacity", (1 - smoothStep(entry / 0.85)).toFixed(4));
       write("--terminal-shift", `${(entry * 18).toFixed(2)}px`);
       write("--reel-exit", reelExit.toFixed(4));
+      write("--reel-furniture-presence", (1 - smoothStep(reelExit / 0.2)).toFixed(4));
       write("--about-presence", aboutPresence.toFixed(4));
       write("--about-shift", `${((1 - aboutPresence) * 34).toFixed(2)}px`);
       if (!pageTurnGestureRef.current) {

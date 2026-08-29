@@ -37,6 +37,12 @@ export type RoomScene = {
   frameCamera: any;
   fullCamera: any;
   setFullAspect: (aspect: number) => void;
+  /**
+   * Relay the selected reel frame into the room. The first part of the hand-off keeps
+   * the negative pinned to the reel's focal plane; the second lets it fall onto the
+   * physical desk, where it remains as evidence of the route the visitor took in.
+   */
+  setFilmHandoff: (progress: number, projectIndex: number) => void;
   update: (timeMs: number, pointer?: { x: number; y: number }) => void;
   raycastAt: (ndc: { x: number; y: number }) => RoomObjectId | null;
   /** Pick one of the four physical deck controls while its close-up camera owns the room. */
@@ -70,6 +76,17 @@ export type RoomScene = {
   pressDeckStart: () => void;
   setDeckControlHover: (control: DeckControlId | null) => void;
   dispose: () => void;
+};
+
+/** Shared uniform objects let the relay sample the exact sources the reel is showing. */
+export type RoomFilmSources = {
+  atlas: { value: any };
+  joiVideo: { value: any };
+  joiMapVideo: { value: any };
+  joiVideoReady: { value: number };
+  joiMapVideoReady: { value: number };
+  nightTide: { value: any };
+  room: { value: any };
 };
 
 const ASSET_VERSION = "desk-base-20260825-1";
@@ -126,6 +143,100 @@ const BAKED_FRAGMENT_SHADER = /* glsl */ `
 const BAKE_LIFT = 0.006;
 
 /**
+ * A single physical frame of 35 mm stock.
+ *
+ * It intentionally shares the reel's texture uniforms rather than taking a screenshot:
+ * moving Joi footage, the live handheld and the room target all survive the hand-off.
+ * The card is rendered only by `fullCamera`, so sampling the room target here never feeds
+ * the card back into frame 05's own render target.
+ */
+const FILM_HANDOFF_VERTEX_SHADER = /* glsl */ `
+  uniform float uCurl;
+  uniform float uTime;
+  varying vec2 vFilmUv;
+  varying vec3 vFilmWorldPosition;
+  varying vec3 vFilmWorldNormal;
+  void main() {
+    vFilmUv = uv;
+    vec3 bent = position;
+    float arch = sin(uv.x * 3.14159265) * sin(uv.y * 3.14159265);
+    float flutter = sin((uv.x * 2.1 + uv.y * 1.4) * 6.2831853 + uTime) * 0.045;
+    bent.z += (arch + flutter) * uCurl;
+    vec4 world = modelMatrix * vec4(bent, 1.0);
+    vFilmWorldPosition = world.xyz;
+    vFilmWorldNormal = normalize(mat3(modelMatrix) * normal);
+    gl_Position = projectionMatrix * viewMatrix * world;
+  }
+`;
+
+const FILM_HANDOFF_FRAGMENT_SHADER = /* glsl */ `
+  precision highp float;
+  uniform sampler2D uMap;
+  uniform sampler2D uJoiVideo;
+  uniform sampler2D uJoiMapVideo;
+  uniform sampler2D uNightTideMap;
+  uniform sampler2D uRoomMap;
+  uniform float uJoiVideoReady;
+  uniform float uJoiMapVideoReady;
+  uniform float uActiveFrame;
+  uniform float uOpacity;
+  varying vec2 vFilmUv;
+  varying vec3 vFilmWorldPosition;
+  varying vec3 vFilmWorldNormal;
+
+  void main() {
+    const float TEXTURE_COUNT = 6.0;
+    const float BORDER_X = 0.030;
+    const float BORDER_Y = 0.070;
+    float frameIndex = floor(uActiveFrame + 0.5);
+    vec2 contentUv = vec2(
+      clamp((vFilmUv.x - BORDER_X) / (1.0 - BORDER_X * 2.0), 0.0, 1.0),
+      clamp((vFilmUv.y - BORDER_Y) / (1.0 - BORDER_Y * 2.0), 0.0, 1.0)
+    );
+    vec2 atlasUv = vec2((frameIndex + contentUv.x) / TEXTURE_COUNT, contentUv.y);
+    vec3 image;
+    if (abs(frameIndex - 0.0) < 0.5) {
+      image = mix(texture2D(uMap, atlasUv).rgb, texture2D(uJoiVideo, contentUv).rgb, uJoiVideoReady);
+    } else if (abs(frameIndex - 1.0) < 0.5) {
+      vec2 mobileVideoUv = vec2(0.125 + contentUv.x * 0.75, contentUv.y);
+      image = mix(texture2D(uMap, atlasUv).rgb, texture2D(uJoiMapVideo, mobileVideoUv).rgb, uJoiMapVideoReady);
+    } else if (abs(frameIndex - 2.0) < 0.5) {
+      image = texture2D(uNightTideMap, contentUv).rgb;
+    } else if (abs(frameIndex - 4.0) < 0.5) {
+      image = texture2D(uRoomMap, contentUv).rgb;
+    } else {
+      image = texture2D(uMap, atlasUv).rgb;
+    }
+
+    bool sideBorder = vFilmUv.x < BORDER_X || vFilmUv.x > 1.0 - BORDER_X;
+    bool topBottom = vFilmUv.y < BORDER_Y || vFilmUv.y > 1.0 - BORDER_Y;
+    vec3 colour = (sideBorder || topBottom) ? vec3(0.006, 0.008, 0.012) : image;
+
+    // The same sealed sprocket rail as the reel: holes belong inside the stock, never
+    // cut through its outer edge. A little more spacing makes them legible once the
+    // negative has become a small object on the desk.
+    const float HOLE_SEAL = 0.016;
+    const float HOLE_INNER = 0.060;
+    const float HOLE_RADIUS = 0.34;
+    float edgeBand = min(vFilmUv.y, 1.0 - vFilmUv.y);
+    float holePhase = fract(vFilmUv.x * 15.0);
+    float holeCentre = (HOLE_SEAL + HOLE_INNER) * 0.5;
+    float holeHalf = (HOLE_INNER - HOLE_SEAL) * 0.5;
+    vec2 holeLocal = vec2((holePhase - 0.5) * 2.0, (edgeBand - holeCentre) / holeHalf);
+    vec2 holeQ = abs(holeLocal) - vec2(0.56, 1.0) + HOLE_RADIUS;
+    float holeSdf = length(max(holeQ, 0.0)) + min(max(holeQ.x, holeQ.y), 0.0) - HOLE_RADIUS;
+    if (holeSdf < 0.0) discard;
+
+    vec3 toEye = normalize(cameraPosition - vFilmWorldPosition);
+    float facing = abs(dot(normalize(vFilmWorldNormal), toEye));
+    float sheen = pow(1.0 - facing, 2.4);
+    colour += vec3(0.10, 0.16, 0.21) * sheen * 0.32;
+    colour = mix(colour, vec3(dot(colour, vec3(0.299, 0.587, 0.114))), 0.035);
+    gl_FragColor = vec4(colour, uOpacity);
+  }
+`;
+
+/**
  * Framing.
  *
  * The desk runs along its wall from Z −13 to +3 with the chair pulled out at +X, so the
@@ -161,7 +272,7 @@ const ORBIT_AZIMUTH_LIMIT = THREE.MathUtils.degToRad(62);
 const ORBIT_ELEVATION_MIN = THREE.MathUtils.degToRad(14);
 const ORBIT_ELEVATION_MAX = THREE.MathUtils.degToRad(72);
 
-export function createRoomScene(): RoomScene {
+export function createRoomScene(filmSources?: RoomFilmSources): RoomScene {
   const reducedMotion =
     typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
@@ -180,6 +291,66 @@ export function createRoomScene(): RoomScene {
   fullCamera.position.copy(FULL_HOME);
   fullCamera.lookAt(HOME_LOOK);
 
+  /*
+   * Layer 1 is the relay negative. Frame 05's camera remains on layer 0, which prevents
+   * the card from recursively appearing inside the room texture it samples. The full
+   * About camera sees both layers and therefore receives the same physical object after
+   * the reel itself has released it.
+   */
+  fullCamera.layers.enable(1);
+
+  const filmHandoff = new THREE.Group();
+  filmHandoff.name = "selected-film-handoff";
+  filmHandoff.visible = false;
+  let handoffMaterial: any = null;
+  let handoffShadowMaterial: any = null;
+  let handoffGeometry: any = null;
+  if (filmSources) {
+    handoffGeometry = new THREE.PlaneGeometry(4, 3, 12, 9);
+    handoffMaterial = new THREE.ShaderMaterial({
+      name: "Selected film handoff",
+      uniforms: {
+        uMap: filmSources.atlas,
+        uJoiVideo: filmSources.joiVideo,
+        uJoiMapVideo: filmSources.joiMapVideo,
+        uJoiVideoReady: filmSources.joiVideoReady,
+        uJoiMapVideoReady: filmSources.joiMapVideoReady,
+        uNightTideMap: filmSources.nightTide,
+        uRoomMap: filmSources.room,
+        uActiveFrame: { value: 0 },
+        uOpacity: { value: 1 },
+        uCurl: { value: 0 },
+        uTime: { value: 0 },
+      },
+      vertexShader: FILM_HANDOFF_VERTEX_SHADER,
+      fragmentShader: FILM_HANDOFF_FRAGMENT_SHADER,
+      side: THREE.DoubleSide,
+      transparent: true,
+      depthWrite: true,
+      toneMapped: false,
+    });
+    const negative = new THREE.Mesh(handoffGeometry, handoffMaterial);
+    negative.name = "selected-film-negative";
+    negative.renderOrder = 2;
+    filmHandoff.add(negative);
+
+    handoffShadowMaterial = new THREE.MeshBasicMaterial({
+      color: 0x000000,
+      transparent: true,
+      opacity: 0.12,
+      depthWrite: false,
+      toneMapped: false,
+    });
+    const shadow = new THREE.Mesh(handoffGeometry, handoffShadowMaterial);
+    shadow.name = "selected-film-shadow";
+    shadow.position.z = -0.035;
+    shadow.scale.set(1.035, 1.045, 1);
+    shadow.renderOrder = 1;
+    filmHandoff.add(shadow);
+  }
+  filmHandoff.traverse((node: any) => node.layers.set(1));
+  scene.add(filmHandoff);
+
   const modelHost = new THREE.Group();
   scene.add(modelHost);
 
@@ -195,6 +366,11 @@ export function createRoomScene(): RoomScene {
   let hovered: RoomObjectId | null = null;
   let focused: RoomObjectId | null = null;
   let fullAspect = 16 / 9;
+  let handoffProgress = 0;
+  const handoffLanding = new THREE.Vector3(5.6, 5.7, -2.6);
+  const handoffLandingQuaternion = new THREE.Quaternion().setFromEuler(
+    new THREE.Euler(-Math.PI / 2, 0, -0.16),
+  );
 
   /** One node that lifts on hover, and the parent-space axis that is world "up" for it. */
   type PickableNode = { node: any; home: any; up: any };
@@ -293,6 +469,41 @@ export function createRoomScene(): RoomScene {
 
       baseRoot.add(model);
       baseRoot.updateMatrixWorld(true);
+
+      /*
+       * Find the real desk surface under the intended landing point. The capture can be
+       * swapped or repositioned without leaving the negative floating above a guessed Y.
+       * Up-facing surfaces only: a monitor bezel crossed by the probe is not a table.
+       */
+      const landingProbe = new THREE.Raycaster(
+        new THREE.Vector3(handoffLanding.x, 30, handoffLanding.z),
+        new THREE.Vector3(0, -1, 0),
+        0,
+        60,
+      );
+      const normalMatrix = new THREE.Matrix3();
+      const landingHit = landingProbe.intersectObject(model, true).find((hit: any) => {
+        if (!hit.face || hit.point.y < 3.5 || hit.point.y > 8.5) return false;
+        const normal = hit.face.normal.clone().applyMatrix3(
+          normalMatrix.getNormalMatrix(hit.object.matrixWorld),
+        ).normalize();
+        return normal.y > 0.72;
+      });
+      if (landingHit?.face) {
+        const normal = landingHit.face.normal.clone().applyMatrix3(
+          normalMatrix.getNormalMatrix(landingHit.object.matrixWorld),
+        ).normalize();
+        handoffLanding.copy(landingHit.point).addScaledVector(normal, 0.055);
+        const alignToSurface = new THREE.Quaternion().setFromUnitVectors(
+          new THREE.Vector3(0, 0, 1),
+          normal,
+        );
+        const turnOnSurface = new THREE.Quaternion().setFromAxisAngle(
+          new THREE.Vector3(0, 0, 1),
+          -0.16,
+        );
+        handoffLandingQuaternion.copy(alignToSurface).multiply(turnOnSurface);
+      }
 
       const worldUp = new THREE.Vector3(0, 1, 0);
 
@@ -406,6 +617,11 @@ export function createRoomScene(): RoomScene {
   const focusHome = new THREE.Vector3();
   const cameraDirection = new THREE.Vector3();
   const liftStep = new THREE.Vector3();
+  const handoffStart = new THREE.Vector3();
+  const handoffPosition = new THREE.Vector3();
+  const handoffDirection = new THREE.Vector3();
+  const handoffStartQuaternion = new THREE.Quaternion();
+  const handoffQuaternion = new THREE.Quaternion();
   let focusAmount = 0;
   let lastFrameMs = 0;
   let playerMode = false;
@@ -518,6 +734,49 @@ export function createRoomScene(): RoomScene {
     fullCamera.position.copy(baseHome);
     fullCamera.lookAt(lookCurrent);
 
+    if (handoffMaterial && handoffProgress > 0.035) {
+      filmHandoff.visible = true;
+      fullCamera.updateMatrixWorld(true);
+      fullCamera.getWorldDirection(handoffDirection);
+
+      // During the source swap the card stays pinned to the selected reel frame. Only
+      // after slot A owns the picture does it begin the long, readable fall to the desk.
+      const rawFlight = THREE.MathUtils.clamp((handoffProgress - 0.28) / 0.58, 0, 1);
+      const flight = rawFlight * rawFlight * (3 - 2 * rawFlight);
+      const startDistance = 2.4;
+      handoffStart.copy(fullCamera.position).addScaledVector(handoffDirection, startDistance);
+      const viewportHeight = 2 * Math.tan(THREE.MathUtils.degToRad(fullCamera.fov) * 0.5) * startDistance;
+      const startScale = viewportHeight * (fullAspect < 0.8 ? 0.40 : 0.47) / 3;
+      const endScale = fullAspect < 0.72 ? 0.82 : 1.08;
+
+      handoffPosition.lerpVectors(handoffStart, handoffLanding, flight);
+      handoffPosition.y += Math.sin(flight * Math.PI) * (fullAspect < 0.8 ? 1.25 : 2.25);
+      filmHandoff.position.copy(handoffPosition);
+      handoffStartQuaternion.copy(fullCamera.quaternion);
+      handoffQuaternion.copy(handoffStartQuaternion).slerp(handoffLandingQuaternion, flight);
+      filmHandoff.quaternion.copy(handoffQuaternion);
+      filmHandoff.scale.setScalar(THREE.MathUtils.lerp(startScale, endScale, flight));
+
+      handoffMaterial.uniforms.uOpacity.value = THREE.MathUtils.smoothstep(
+        handoffProgress,
+        0.035,
+        0.115,
+      );
+      handoffMaterial.uniforms.uCurl.value = reducedMotion ? 0 : Math.sin(flight * Math.PI) * 0.34;
+      handoffMaterial.uniforms.uTime.value = t * 2.1;
+      if (handoffShadowMaterial) {
+        handoffShadowMaterial.opacity = THREE.MathUtils.lerp(0.07, 0.22, flight);
+      }
+
+      if (reducedMotion) {
+        filmHandoff.position.copy(handoffLanding);
+        filmHandoff.quaternion.copy(handoffLandingQuaternion);
+        filmHandoff.scale.setScalar(endScale);
+      }
+    } else {
+      filmHandoff.visible = false;
+    }
+
     // The arm parks itself when nothing is playing and tracks inward while it is. Where
     // it lands, and the lift-swing-drop on the way, belong to the deck.
     deck?.setTonearm(tonearmTarget);
@@ -542,6 +801,10 @@ export function createRoomScene(): RoomScene {
       fullCamera.fov = fullAspect < 1 ? 38 : 30;
       fullCamera.updateProjectionMatrix();
       updateResponsiveHome();
+    },
+    setFilmHandoff: (progress, projectIndex) => {
+      handoffProgress = THREE.MathUtils.clamp(progress, 0, 1);
+      if (handoffMaterial) handoffMaterial.uniforms.uActiveFrame.value = projectIndex;
     },
     update,
     raycastAt: (ndc) => {
@@ -596,6 +859,9 @@ export function createRoomScene(): RoomScene {
       disposed = true;
       deck?.dispose();
       if (model) disposeObject(model);
+      handoffGeometry?.dispose();
+      handoffMaterial?.dispose();
+      handoffShadowMaterial?.dispose();
       ownedTextures.forEach((texture) => texture.dispose());
       scene.clear();
       pickables.clear();
