@@ -1,21 +1,24 @@
 /**
- * Detail-page figure effects: the one-shot particle condensation on a figure and
- * the reversible glyph shadow that gathers behind a hovered figure.
+ * Detail-page figure effects: the one-shot particle condensation on the first
+ * figure, and the liquid field over the whole gallery.
  *
  * Ported from the viscose study (docs/shader-research/viscose-carousel-2026-08):
- * ICE WORKS' intro assembly and hover shadow, stripped to raw WebGL2. Origin:
  * Yousuf Soomro's Viscose Carousel and MegD1's ICE WORKS derivative, both MIT —
- * the shader math here follows their planeShaders.js. Three is
+ * the substrate field below is planeShaders.js math (smin fusion, the cursor
+ * melt halo, the capillary wake, surface-tension wobble) and the hover shadow
+ * is ICE's hoveredCardParticles, both re-anchored to DOM rectangles. Three is
  * deliberately not imported here — the detail pages carry no WebGL dependency
  * today and a full-screen quad does not justify one. GLSL is kept in ES 1.00
  * style, which a WebGL2 context accepts as-is.
  *
- * Both effects follow the study's particle discipline: particles belong to a
- * bounded beat only — one condensation per page load, one shadow behind the
- * single hovered figure — and both are additive over content that is already
- * fully visible without them. Every entry point returns null or a cleanup; a
- * failed context, a narrow window, or reduced motion simply means the static
- * figure stands alone.
+ * The liquid discipline is the study's own: the cursor is a force, not a
+ * pointer — nothing is ever drawn at it; it swells and ripples the field
+ * around itself. Particles belong to a bounded beat only (one condensation per
+ * page load, one glyph shadow behind the single hovered figure). Both layers
+ * are additive over content that is fully visible without them, and every
+ * entry point degrades to the plain page: a failed context, reduced motion, a
+ * coarse pointer or a narrow window simply means the static figures stand
+ * alone.
  */
 
 const ASCII_GLYPHS = ".:+x*#@";
@@ -74,6 +77,9 @@ function makeFxContext(canvas: HTMLCanvasElement, fragment: string): FxContext |
     antialias: false,
     depth: false,
     stencil: false,
+    // The field idles between pointer visits; keeping the buffer means the
+    // last drawn frame — the resting seams — stays composited reliably.
+    preserveDrawingBuffer: true,
   });
   if (!gl) return null;
 
@@ -98,7 +104,12 @@ function makeFxContext(canvas: HTMLCanvasElement, fragment: string): FxContext |
     if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
       throw new Error(gl.getProgramInfoLog(program) ?? "link failed");
     }
-  } catch {
+  } catch (error) {
+    // A silent null here would read as "the effect never ran". Keep the
+    // reason reachable for diagnosis; the page itself still degrades cleanly.
+    (window as unknown as Record<string, unknown>).__figureFxDiag = String(
+      error instanceof Error ? error.message : error,
+    ).slice(0, 400);
     gl.getExtension("WEBGL_lose_context")?.loseContext();
     return null;
   }
@@ -151,7 +162,7 @@ function sizeCanvas(canvas: HTMLCanvasElement, width: number, height: number, dp
    adopt its colour and tone as they close, and hand off to the real <img>,
    which fades in beneath the field's tail. One shot; the canvas is removed
    when it lands. Numbers track the study's intro (1.55s power3-in-out gather,
-   spread 3.8 pulled to 2.4 to fit the canvas, cell 13px).
+   spread 2.4 to fit the canvas, cell 13px).
    ------------------------------------------------------------------------- */
 
 const CONDENSE_FS = `
@@ -253,7 +264,6 @@ export function condenseFigure(
     const w = figure.clientWidth;
     const h = figure.clientHeight;
     sizeCanvas(canvas, w, h, dpr);
-    return { w, h };
   };
   const onResize = () => {
     dpr = Math.min(window.devicePixelRatio || 1, 1.5);
@@ -345,21 +355,121 @@ export function condenseFigure(
 }
 
 /* -------------------------------------------------------------------------
-   The hover shadow. One canvas over the whole gallery; the glyph field
-   belongs to the single figure under the pointer and enters and exits on
-   that figure alone — an exit in flight never jumps to the next card. The
-   field only exists outside the figure's rect, so it can sit above the
-   figures without ever covering one.
+   The liquid field. Two canvases, one loop.
+
+   The substrate (under the figures) is the study's own material: every figure
+   cell is a rounded-box distance field, the cells fuse through a smooth
+   minimum, and the fused blob is filled with ink — which is what turns the
+   grid's one-pixel seams into the joins of a single liquid slab. The cursor
+   is a force: a melt halo swells the field around it, a capillary wake rings
+   out through the surface and outlives the movement, and surface-tension
+   noise keeps the edge alive while the pointer is anywhere near.
+
+   The glyph layer (over the figures) carries ICE's hover shadow: glyphs
+   gather behind the single hovered figure, reversible, latched to its card —
+   and clipped against every sibling cell so the field never paints over
+   another figure's image.
    ------------------------------------------------------------------------- */
 
-const SHADOW_FS = `
+const SUBSTRATE_FS = `
+  precision mediump float;
+  varying vec2 vUv;
+  uniform vec2 uRes;
+  uniform int uCellCount;
+  uniform vec4 uCells[8];
+  uniform vec2 uMouse;
+  uniform float uMouseIn;
+  uniform float uTime;
+  uniform vec3 uInk;
+  uniform float uDpr;
+
+  vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+  vec2 mod289(vec2 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+  vec3 permute(vec3 x) { return mod289(((x * 34.0) + 1.0) * x); }
+
+  float snoise(vec2 v) {
+    const vec4 C = vec4(0.211324865405187, 0.366025403784439,
+                        -0.577350269189626, 0.024390243902439);
+    vec2 i  = floor(v + dot(v, C.yy));
+    vec2 x0 = v - i + dot(i, C.xx);
+    vec2 i1 = (x0.x > x0.y) ? vec2(1.0, 0.0) : vec2(0.0, 1.0);
+    vec4 x12 = x0.xyxy + C.xxzz;
+    x12.xy -= i1;
+    i = mod289(i);
+    vec3 p = permute(permute(i.y + vec3(0.0, i1.y, 1.0))
+                    + i.x + vec3(0.0, i1.x, 1.0));
+    vec3 m = max(0.5 - vec3(dot(x0, x0), dot(x12.xy, x12.xy),
+                            dot(x12.zw, x12.zw)), 0.0);
+    m = m * m; m = m * m;
+    vec3 x = 2.0 * fract(p * C.www) - 1.0;
+    vec3 h = abs(x) - 0.5;
+    vec3 ox = floor(x + 0.5);
+    vec3 a0 = x - ox;
+    m *= 1.79284291400159 - 0.85373472095314 * (a0 * a0 + h * h);
+    vec3 g;
+    g.x  = a0.x * x0.x + h.x * x0.y;
+    g.yz = a0.y * x12.xz + h.yz * x12.yw;
+    return 130.0 * dot(m, g);
+  }
+
+  float sdRoundBox(vec2 p, vec2 b, float r) {
+    vec2 q = abs(p) - b + r;
+    return min(max(q.x, q.y), 0.0) + length(max(q, 0.0)) - r;
+  }
+
+  float smin(float a, float b, float k) {
+    float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0);
+    return mix(b, a, h) - k * h * (1.0 - h);
+  }
+
+  void main() {
+    vec2 p = vUv * uRes;
+    float dpr = uDpr;
+
+    // The goo. At rest k is small: each cell keeps its own ink outline. The
+    // cursor's halo lifts k locally — exactly the study's melt — so nearby
+    // outlines fuse into one blob under the pointer and split again on the
+    // way out.
+    float toMouse0 = distance(p, uMouse);
+    float halo = uMouseIn * exp(-pow(toMouse0 / (260.0 * dpr), 2.0));
+    float k = 9.0 * dpr + 34.0 * dpr * halo;
+    float d = 1e6;
+    for (int i = 0; i < 8; i++) {
+      if (i >= uCellCount) break;
+      vec2 c = uCells[i].xy;
+      vec2 b = max(uCells[i].zw, vec2(1.0));
+      float r = min(14.0 * dpr, min(b.x, b.y));
+      d = smin(d, sdRoundBox(p - c, b, r), k);
+    }
+
+    // A capillary wake rings out through the surface and outlives the
+    // movement; surface tension keeps the line alive while the pointer nears.
+    float toMouse = distance(p, uMouse);
+    d += sin(toMouse * 0.05 / dpr - uTime * 7.0)
+       * 3.0 * dpr * uMouseIn * exp(-toMouse / (260.0 * dpr));
+    d -= halo * 8.0 * dpr;
+    d += snoise((p / dpr) * 0.012 + vec2(uTime * 0.22, uTime * -0.17))
+       * (0.8 + 2.6 * halo) * dpr;
+
+    // Analytic AA. The study clamps fwidth, but this WebKit build declines
+    // fwidth in ESSL 1.00 shaders — and a thin constant line is what the
+    // editorial page wants anyway.
+    float aa = 1.1 * dpr;
+    float alpha = (1.0 - smoothstep(0.0, 2.6 * dpr, abs(d))) * 0.9;
+    gl_FragColor = vec4(uInk, alpha);
+  }
+`;
+
+const GLYPH_FS = `
   precision mediump float;
   varying vec2 vUv;
   uniform vec2 uRes;
   uniform sampler2D uGlyphs;
   uniform vec3 uInk;
-  uniform vec2 uFigPos;
-  uniform vec2 uFigHalf;
+  uniform int uCellCount;
+  uniform vec4 uCells[8];
+  uniform vec2 uFocusPos;
+  uniform vec2 uFocusHalf;
   uniform float uAmount;
   uniform float uReach;
   uniform float uCell;
@@ -372,12 +482,32 @@ const SHADOW_FS = `
     return fract(p.x * p.y);
   }
 
+  float sdRoundBox(vec2 p, vec2 b, float r) {
+    vec2 q = abs(p) - b + r;
+    return min(max(q.x, q.y), 0.0) + length(max(q, 0.0)) - r;
+  }
+
   void main() {
-    vec2 q = vUv * uRes - uFigPos;
-    float cardD = max(abs(q.x) - uFigHalf.x, abs(q.y) - uFigHalf.y);
-    float outside = smoothstep(1.5, 5.0, cardD);
-    float falloff = 1.0 - smoothstep(0.0, uReach, cardD);
-    float field = outside * pow(max(falloff, 0.0), 1.25);
+    vec2 p = vUv * uRes;
+    if (uAmount <= 0.004) { gl_FragColor = vec4(0.0); return; }
+
+    // Outside every cell: the shadow may pool against a sibling's edge but
+    // never onto another figure's image.
+    float outsideAll = 1.0;
+    for (int i = 0; i < 8; i++) {
+      if (i >= uCellCount) break;
+      vec2 c = uCells[i].xy;
+      vec2 b = max(uCells[i].zw, vec2(1.0));
+      outsideAll = min(outsideAll, smoothstep(1.5, 5.0,
+        sdRoundBox(p - c, b, min(14.0, min(b.x, b.y)))));
+    }
+
+    vec2 q = p - uFocusPos;
+    vec2 halfSize = max(uFocusHalf, vec2(1.0));
+    float focusD = sdRoundBox(q, halfSize, min(14.0, min(halfSize.x, halfSize.y)));
+    float outside = smoothstep(1.5, 5.0, focusD);
+    float falloff = 1.0 - smoothstep(0.0, uReach, focusD);
+    float field = outside * pow(max(falloff, 0.0), 1.25) * outsideAll;
     if (field <= 0.002) { gl_FragColor = vec4(0.0); return; }
 
     float radius = max(length(q), 1.0);
@@ -406,142 +536,255 @@ const SHADOW_FS = `
   }
 `;
 
-export type ShadowHandle = { cancel: () => void };
+export type FieldHandle = { cancel: () => void };
+
+const MAX_CELLS = 8;
 
 /**
- * The gallery-wide hover shadow. Fine pointers only (the caller checks the
- * media queries); every figure gets its own amount, so a leaving shadow dies
- * on the card it belonged to while the next one gathers.
+ * The gallery-wide liquid field. `hoverEnv` says the pointer can actually
+ * hover (fine pointer, hover available): without it the substrate renders one
+ * static frame — the fused seams — and no loop is ever scheduled.
  */
-export function attachFigureShadow(gallery: HTMLElement): ShadowHandle | null {
+export function attachGalleryField(
+  gallery: HTMLElement,
+  options: { hoverEnv: boolean },
+): FieldHandle | null {
   const figures = Array.from(gallery.querySelectorAll<HTMLElement>(".project-detail-figure"));
   if (figures.length === 0) return null;
+  const cells = figures.slice(0, MAX_CELLS);
 
-  const canvas = document.createElement("canvas");
-  canvas.className = "figure-fx-canvas";
-  canvas.setAttribute("aria-hidden", "true");
-  gallery.appendChild(canvas);
+  const substrate = document.createElement("canvas");
+  substrate.className = "figure-fx-canvas figure-fx-canvas--substrate";
+  substrate.setAttribute("aria-hidden", "true");
+  const glyphLayer = document.createElement("canvas");
+  glyphLayer.className = "figure-fx-canvas";
+  glyphLayer.setAttribute("aria-hidden", "true");
+  gallery.prepend(substrate);
+  gallery.appendChild(glyphLayer);
 
-  const fx = makeFxContext(canvas, SHADOW_FS);
-  if (!fx) {
-    canvas.remove();
+  const fxS = makeFxContext(substrate, SUBSTRATE_FS);
+  const fxG = options.hoverEnv ? makeFxContext(glyphLayer, GLYPH_FS) : null;
+  if (!fxS) {
+    substrate.remove();
+    glyphLayer.remove();
     return null;
   }
-  const { gl, program } = fx;
-  const U = (name: string) => gl.getUniformLocation(program, name);
-  const atlas = buildGlyphAtlas();
-  uploadTexture(gl, 1, atlas);
-  gl.uniform1i(U("uGlyphs"), 1);
+  const glS = fxS.gl;
+  const US = (n: string) => glS.getUniformLocation(fxS.program, n);
+  glS.enable(glS.BLEND);
+  glS.blendFunc(glS.SRC_ALPHA, glS.ONE_MINUS_SRC_ALPHA);
   const ink = readInk(gallery);
-  gl.uniform3f(U("uInk"), ink[0], ink[1], ink[2]);
-  gl.enable(gl.BLEND);
-  gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+  glS.useProgram(fxS.program);
+  glS.uniform3f(US("uInk"), ink[0], ink[1], ink[2]);
+
+  let glG: WebGL2RenderingContext | null = null;
+  const UG = (n: string) => (glG ? glG.getUniformLocation(fxG!.program, n) : null);
+  if (fxG) {
+    glG = fxG.gl;
+    glG.enable(glG.BLEND);
+    glG.blendFunc(glG.SRC_ALPHA, glG.ONE_MINUS_SRC_ALPHA);
+    glG.useProgram(fxG.program);
+    const atlas = buildGlyphAtlas();
+    uploadTexture(glG, 1, atlas);
+    glG.uniform1i(UG("uGlyphs"), 1);
+    glG.uniform3f(UG("uInk"), ink[0], ink[1], ink[2]);
+  }
 
   const dpr = () => Math.min(window.devicePixelRatio || 1, 1.5);
-  const amounts = figures.map(() => ({ value: 0, target: 0 }));
-  const phases = figures.map((_, i) => (i * 0.618) % 1);
 
-  let raf = 0;
-  let running = false;
-  let galleryVisible = true;
-  let disposed = false;
+  // Cursor and hover state, chased at the study's lopsided rates: the field
+  // takes a lean quickly and lets go of it slowly — that gap is what reads as
+  // something thick being dragged through.
+  const pointer = { x: 0, y: 0, tx: 0, ty: 0, inside: 0, tInside: 0 };
+  const amounts = cells.map(() => ({ value: 0, target: 0 }));
+  const phases = cells.map((_, i) => (i * 0.618) % 1);
+  let hoverIndex = -1;
+  const cellArr = new Float32Array(MAX_CELLS * 4);
+
+  const measure = () => {
+    const g = gallery.getBoundingClientRect();
+    const sx = substrate.width / Math.max(g.width, 1);
+    cells.forEach((figure, i) => {
+      const r = figure.getBoundingClientRect();
+      cellArr[i * 4] = (r.left - g.left + r.width / 2) * sx;
+      cellArr[i * 4 + 1] = (r.top - g.top + r.height / 2) * sx;
+      cellArr[i * 4 + 2] = (r.width / 2) * sx;
+      cellArr[i * 4 + 3] = (r.height / 2) * sx;
+    });
+    glS.useProgram(fxS.program);
+    glS.uniform4fv(US("uCells"), cellArr);
+    glS.uniform1i(US("uCellCount"), cells.length);
+    glS.uniform1f(US("uDpr"), dpr());
+    if (glG) {
+      glG.useProgram(fxG!.program);
+      glG.uniform4fv(UG("uCells"), cellArr);
+      glG.uniform1i(UG("uCellCount"), cells.length);
+    }
+    return g;
+  };
 
   const resize = () => {
-    sizeCanvas(canvas, gallery.clientWidth, gallery.clientHeight, dpr());
-    gl.viewport(0, 0, canvas.width, canvas.height);
-    gl.useProgram(program);
-    gl.uniform2f(U("uRes"), canvas.width, canvas.height);
+    sizeCanvas(substrate, gallery.clientWidth, gallery.clientHeight, dpr());
+    glS.viewport(0, 0, substrate.width, substrate.height);
+    glS.uniform2f(US("uRes"), substrate.width, substrate.height);
+    if (glG) {
+      sizeCanvas(glyphLayer, gallery.clientWidth, gallery.clientHeight, dpr());
+      glG.viewport(0, 0, glyphLayer.width, glyphLayer.height);
+      glG.uniform2f(UG("uRes"), glyphLayer.width, glyphLayer.height);
+      glG.uniform1f(UG("uReach"), Math.min(130, Math.max(60, gallery.clientWidth * 0.1)) * dpr());
+      glG.uniform1f(UG("uCell"), Math.min(20, Math.max(10, gallery.clientWidth / 54)) * dpr());
+    }
+    measure();
+    // One resting frame right away: the fused seams are part of the page even
+    // before the pointer arrives — and on a touch device they are the whole
+    // show. The frame draws synchronously, so it lands even where animation
+    // clocks are suspended.
+    drawSubstrate(0);
+    if (glG) {
+      glG.clearColor(0, 0, 0, 0);
+      glG.clear(glG.COLOR_BUFFER_BIT);
+    }
   };
+
+  const drawSubstrate = (time: number) => {
+    glS.useProgram(fxS.program);
+    glS.uniform2f(US("uMouse"), pointer.x * dpr(), pointer.y * dpr());
+    glS.uniform1f(US("uMouseIn"), pointer.inside);
+    glS.uniform1f(US("uTime"), time);
+    glS.clearColor(0, 0, 0, 0);
+    glS.clear(glS.COLOR_BUFFER_BIT);
+    glS.drawArrays(glS.TRIANGLES, 0, 3);
+  };
+
+  const drawGlyphs = (time: number) => {
+    if (!glG) return;
+    glG.useProgram(fxG!.program);
+    glG.uniform1f(UG("uTime"), time);
+    const active = hoverIndex >= 0 ? hoverIndex : -1;
+    glG.uniform1f(UG("uAmount"), active >= 0 ? amounts[active].value : 0);
+    glG.uniform1f(UG("uPhase"), active >= 0 ? phases[active] : 0);
+    glG.uniform2f(
+      UG("uFocusPos"),
+      active >= 0 ? cellArr[active * 4] : 0,
+      active >= 0 ? cellArr[active * 4 + 1] : 0,
+    );
+    glG.uniform2f(
+      UG("uFocusHalf"),
+      active >= 0 ? cellArr[active * 4 + 2] : 0,
+      active >= 0 ? cellArr[active * 4 + 3] : 0,
+    );
+    glG.clearColor(0, 0, 0, 0);
+    glG.clear(glG.COLOR_BUFFER_BIT);
+    if (active >= 0 && amounts[active].value > 0.004) {
+      glG.drawArrays(glG.TRIANGLES, 0, 3);
+    }
+  };
+
   resize();
   const ro = new ResizeObserver(resize);
   ro.observe(gallery);
 
-  const io = new IntersectionObserver((entries) => {
-    galleryVisible = entries.some((entry) => entry.isIntersecting);
-  });
-  io.observe(gallery);
-
-  const onEnter = (i: number) => () => {
-    amounts[i].target = 1;
-    start();
-  };
-  const onLeave = (i: number) => () => {
-    amounts[i].target = 0;
-    start();
-  };
-  figures.forEach((figure, i) => {
-    figure.addEventListener("pointerenter", onEnter(i));
-    figure.addEventListener("pointerleave", onLeave(i));
-  });
-
+  let raf = 0;
+  let running = false;
   let last = -1;
+  let idleFrames = 0;
+
   const frame = (now: number) => {
     raf = window.requestAnimationFrame(frame);
     const dt = last < 0 ? 0.016 : Math.min((now - last) / 1000, 0.1);
     last = now;
+    const time = now / 1000;
 
-    // Asymmetric on purpose, straight from the study: a card takes the field
-    // up quickly and lets go of it slowly.
-    let alive = false;
-    amounts.forEach((a) => {
+    const chase = (value: number, target: number, rate: number) =>
+      value + (target - value) * Math.min(1, rate * dt * 60);
+
+    // grab 0.14 / release 0.06 per 60fps frame, from the study
+    const rate = pointer.tInside > pointer.inside ? 0.14 : 0.06;
+    pointer.inside = chase(pointer.inside, pointer.tInside, rate);
+    pointer.x = chase(pointer.x, pointer.tx, 0.3);
+    pointer.y = chase(pointer.y, pointer.ty, 0.3);
+
+    let alive = pointer.inside > 0.004;
+    amounts.forEach((a, i) => {
       const tau = a.target > a.value ? 0.09 : 0.16;
       a.value += (a.target - a.value) * (1 - Math.exp(-dt / tau));
       if (a.value > 0.004 || a.target > 0) alive = true;
     });
-    if (!alive || !galleryVisible || document.hidden) {
-      // Fully idle: one clearing frame, then the loop stops being scheduled.
-      // A pointer entering the gallery is what wakes it again.
-      running = false;
-      gl.clearColor(0, 0, 0, 0);
-      gl.clear(gl.COLOR_BUFFER_BIT);
-      window.cancelAnimationFrame(raf);
-      return;
+
+    drawSubstrate(time);
+    drawGlyphs(time);
+
+    if (!alive) {
+      idleFrames += 1;
+      if (idleFrames > 30) {
+        running = false;
+        window.cancelAnimationFrame(raf);
+      }
+    } else {
+      idleFrames = 0;
     }
-
-    gl.clearColor(0, 0, 0, 0);
-    gl.clear(gl.COLOR_BUFFER_BIT);
-    gl.useProgram(program);
-    gl.uniform1f(U("uTime"), now / 1000);
-    const galleryRect = gallery.getBoundingClientRect();
-    const sx = canvas.width / galleryRect.width;
-
-    figures.forEach((figure, i) => {
-      const amount = amounts[i].value;
-      if (amount <= 0.004) return;
-      const rect = figure.getBoundingClientRect();
-      const cx = (rect.left - galleryRect.left + rect.width / 2) * sx;
-      const cy = (rect.top - galleryRect.top + rect.height / 2) * sx;
-      const halfW = (rect.width / 2) * sx;
-      const halfH = (rect.height / 2) * sx;
-      gl.uniform2f(U("uFigPos"), cx, cy);
-      gl.uniform2f(U("uFigHalf"), halfW, halfH);
-      gl.uniform1f(U("uAmount"), amount);
-      gl.uniform1f(U("uReach"), Math.min(130, Math.max(60, rect.width * 0.14)) * sx);
-      gl.uniform1f(U("uCell"), Math.min(20, Math.max(10, rect.width / 54)) * sx);
-      gl.uniform1f(U("uPhase"), phases[i]);
-      gl.drawArrays(gl.TRIANGLES, 0, 3);
-    });
   };
 
-  function start() {
-    if (running || disposed) return;
+  const start = () => {
+    if (running) return;
     running = true;
     last = -1;
+    idleFrames = 0;
     raf = window.requestAnimationFrame(frame);
+  };
+
+  const toLocal = (e: PointerEvent) => {
+    const g = gallery.getBoundingClientRect();
+    pointer.tx = e.clientX - g.left;
+    pointer.ty = e.clientY - g.top;
+  };
+
+  const onEnter = (i: number) => (e: PointerEvent) => {
+    hoverIndex = i;
+    amounts[i].target = 1;
+    toLocal(e);
+    pointer.tInside = 1;
+    start();
+  };
+  const onMove = (e: PointerEvent) => {
+    toLocal(e);
+    pointer.tInside = 1;
+    start();
+  };
+  const onLeave = () => {
+    pointer.tInside = 0;
+    amounts.forEach((a) => (a.target = 0));
+    hoverIndex = -1;
+    start();
+  };
+
+  if (options.hoverEnv) {
+    gallery.addEventListener("pointermove", onMove, { passive: true });
+    gallery.addEventListener("pointerenter", onMove, { passive: true });
+    gallery.addEventListener("pointerleave", onLeave, { passive: true });
+    cells.forEach((figure, i) => {
+      figure.addEventListener("pointerenter", onEnter(i));
+      figure.addEventListener("pointerleave", onLeave, { passive: true });
+    });
   }
 
   return {
     cancel: () => {
-      disposed = true;
       window.cancelAnimationFrame(raf);
       ro.disconnect();
-      io.disconnect();
-      figures.forEach((figure, i) => {
-        figure.removeEventListener("pointerenter", onEnter(i));
-        figure.removeEventListener("pointerleave", onLeave(i));
-      });
-      fx.destroy();
-      canvas.remove();
+      if (options.hoverEnv) {
+        gallery.removeEventListener("pointermove", onMove);
+        gallery.removeEventListener("pointerenter", onMove);
+        gallery.removeEventListener("pointerleave", onLeave);
+        cells.forEach((figure, i) => {
+          figure.removeEventListener("pointerenter", onEnter(i));
+          figure.removeEventListener("pointerleave", onLeave);
+        });
+      }
+      fxS.destroy();
+      fxG?.destroy();
+      substrate.remove();
+      glyphLayer.remove();
     },
   };
 }

@@ -739,8 +739,15 @@
   z-index: 2;
 }
 
+/* The liquid substrate sits under the figures: its ink shows in the seams
+   and swells past the outer edge where the cursor pulls it. */
+.project-detail-gallery > .figure-fx-canvas--substrate {
+  z-index: 0;
+}
+
 .project-detail-figure {
   position: relative;
+  z-index: 1;
   overflow: hidden;
 }
 

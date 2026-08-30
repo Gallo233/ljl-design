@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { attachFigureShadow, condenseFigure } from "./detail-figure-fx";
+import { attachGalleryField, condenseFigure } from "./detail-figure-fx";
 
 /**
- * The project gallery, plus the two figure effects from the viscose study —
- * the first figure condenses out of ASCII particles the first time it is
- * seen, and a glyph shadow gathers behind whichever figure the pointer is
- * over. The markup here is exactly what the server page used to render; the
+ * The project gallery, plus the figure effects from the viscose study — the
+ * first figure condenses out of ASCII particles the first time it is seen,
+ * and the whole gallery sits on a liquid ink field: the cells fuse into one
+ * slab, the seams run ink, and the cursor swells and ripples the edge as it
+ * passes. The markup here is exactly what the server page used to render; the
  * effects are additive canvases mounted by this effect or not at all, so a
  * failed context, a narrow window, or reduced motion leaves the plain
  * gallery untouched.
@@ -36,10 +37,11 @@ export function DetailGallery({
     const root = rootRef.current;
     if (!root) return;
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    // A narrow window gets neither effect: the hover shadow has no pointer to
-    // answer, and the condensation would only delay a figure the reader
-    // scrolled hard to reach.
-    if (!window.matchMedia("(min-width: 1024px)").matches) return;
+    // Both effects want a grown-up layout; the hover field also wants a
+    // pointer that can actually hover. A coarse-pointer or small window gets
+    // the static fused seams only.
+    if (!window.matchMedia("(min-width: 760px)").matches) return;
+    const hoverEnv = window.matchMedia("(hover: hover) and (pointer: fine)").matches;
 
     const cleanups: Array<() => void> = [];
 
@@ -72,8 +74,8 @@ export function DetailGallery({
       });
     }
 
-    const shadow = attachFigureShadow(root);
-    if (shadow) cleanups.push(shadow.cancel);
+    const field = attachGalleryField(root, { hoverEnv });
+    if (field) cleanups.push(field.cancel);
 
     return () => {
       cleanups.forEach((fn) => fn());
