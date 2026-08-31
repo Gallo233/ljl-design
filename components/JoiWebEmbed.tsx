@@ -5,9 +5,11 @@
  *
  * In a regular article the embed may float automatically. In the Work
  * Experience it is controlled: docked and pointer-transparent while the page
- * owns input, then released as the real compact desktop pet while the visitor
- * is in INTERACT mode. The iframe is never reparented, so its socket, model and
- * conversation survive the morph.
+ * owns input, then docked and interactive after the visitor hands input over.
+ * Compact pet mode remains an explicit action inside Joi; entering the
+ * experience must never turn the chat surface into a pet as a side effect. The
+ * iframe is never reparented, so its socket, model and conversation survive a
+ * user-requested morph.
  */
 
 import { useEffect, useRef, useState } from "react";
@@ -58,7 +60,9 @@ export function JoiWebEmbed({
     activeRef.current = active;
     const instance = instanceRef.current;
     instance?.setInteractionEnabled(active);
-    if (stage) instance?.setPresentation(active ? "pet" : "docked");
+    // Leaving the experience always puts the full surface back in its aperture.
+    // Entering only hands input over; it must not implicitly opt into pet mode.
+    if (stage && !active) instance?.setPresentation("docked");
   }, [active, stage]);
 
   useEffect(() => {
@@ -125,7 +129,7 @@ export function JoiWebEmbed({
         }
         instanceRef.current = instance;
         instance.setInteractionEnabled(interactionEnabled);
-        if (stage) instance.setPresentation(interactionEnabled ? "pet" : "docked");
+        if (stage) instance.setPresentation("docked");
         setPhase("live");
       } catch (error) {
         if (!startedRef.current) return;

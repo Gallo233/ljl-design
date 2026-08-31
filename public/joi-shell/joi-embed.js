@@ -77,9 +77,9 @@ export async function mountJoi(options) {
     : options?.container
   if (!(container instanceof HTMLElement)) throw new Error('A Joi container element is required')
   // A normal article may opt into automatic dock -> corner behaviour. The
-  // Work Experience owns that transition explicitly: it keeps the frame
-  // docked while browsing, then releases it as a real desktop pet only after
-  // the visitor hands input over.
+  // Work Experience keeps the frame docked while browsing and while its chat
+  // owns input. Compact mode is user-driven inside Joi, never a side effect of
+  // the host handing input over.
   const floatingEnabled = options?.floatingEnabled !== false
   const autoFloat = floatingEnabled && options?.autoFloat !== false
   let interactionEnabled = options?.interactionEnabled !== false
@@ -257,7 +257,12 @@ export async function mountJoi(options) {
     } else if (message.type === 'joi.position.restore') {
       petPosition = clampPet({ x: message.x, y: message.y })
       if (floating) applyFloating()
+    } else if (message.type === 'joi.compact') {
+      setFloating(message.compact !== false)
     } else if (message.type === 'joi.restore' || message.type === 'joi.open_cabin') {
+      // The shell owns the gesture (including the character double-click), but
+      // only the host can change the iframe wrapper back to docked geometry.
+      setFloating(false)
       if (message.type === 'joi.open_cabin') {
         frame.contentWindow?.postMessage(
           { source: 'joi-embed', type: 'joi.open_cabin', cabin: message.cabin },
