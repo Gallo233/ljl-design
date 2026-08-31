@@ -33,4 +33,9 @@ jobs:
           port: ${{ secrets.DEPLOY_PORT || 22 }}
           # The script is the deploy: keeping the steps on the box means a
           # hand-run deploy and an automated one are the same thing.
-          script: sudo -u joi-site /opt/joi-site/deploy-site.sh
+          # The repository migrated from pnpm to npm. Older production boxes can
+          # still carry the pre-migration frozen-lockfile command, so normalize it
+          # in place before running the otherwise unchanged server-side deploy.
+          script: |
+            sudo -u joi-site sed -i 's/pnpm install --frozen-lockfile/npm install --no-audit --no-fund/' /opt/joi-site/deploy-site.sh
+            sudo -u joi-site /opt/joi-site/deploy-site.sh
