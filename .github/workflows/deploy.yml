@@ -37,5 +37,6 @@ jobs:
           # still carry the pre-migration frozen-lockfile command, so normalize it
           # in place before running the otherwise unchanged server-side deploy.
           script: |
+            sudo -u joi-site sed -n '1,220p' /opt/joi-site/deploy-site.sh
             sudo -u joi-site sed -i 's/pnpm install --frozen-lockfile/npm install --no-audit --no-fund/' /opt/joi-site/deploy-site.sh
             sudo -u joi-site /opt/joi-site/deploy-site.sh
