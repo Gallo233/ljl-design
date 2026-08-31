@@ -168,7 +168,6 @@
   user-select: none;
   -webkit-user-select: none;
 }
-.filmCanvasOpenable { cursor: pointer; }
 .filmCanvas:focus-visible {
   outline: 1px solid rgba(222, 238, 255, .82);
   outline-offset: -18px;

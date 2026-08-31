@@ -84,6 +84,9 @@ export async function mountJoi(options) {
   const autoFloat = floatingEnabled && options?.autoFloat !== false
   let interactionEnabled = options?.interactionEnabled !== false
   const onEscape = typeof options?.onEscape === 'function' ? options.onEscape : null
+  const onPresentationChange = typeof options?.onPresentationChange === 'function'
+    ? options.onPresentationChange
+    : null
 
   const storageKey = `${STORAGE_PREFIX}${new URL(brokerBase, window.location.href).origin}`
   let stored = null
@@ -219,6 +222,7 @@ export async function mountJoi(options) {
       { source: 'joi-embed', type: 'joi.set_compact', compact: floating },
       shellOrigin,
     )
+    onPresentationChange?.(floating ? 'pet' : 'docked')
   }
 
   apply()

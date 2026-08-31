@@ -6,8 +6,7 @@ import {
   createIPhone17ProScene,
   type IPhoneScene,
 } from "./createIPhone17ProScene";
-
-const APPETIZE_BUILD_ID = "b_crwzussfaihmp5aqsmfzxyxwde";
+import { JOI_MOBILE_APPETIZE_URL } from "./appetize";
 
 type Props = {
   poster: string;
@@ -25,12 +24,7 @@ export function JoiMobileIPhoneShowcase({ poster, active = false }: Props) {
   const [motionOn, setMotionOn] = useState(false);
 
   const nativePlayUrl = useMemo(() => {
-    const query = new URLSearchParams({
-      device: "iphone14pro",
-      osVersion: "26.0",
-      orientation: "portrait",
-    });
-    return `https://appetize.io/app/${APPETIZE_BUILD_ID}?${query.toString()}`;
+    return JOI_MOBILE_APPETIZE_URL;
   }, []);
 
   const openNativeDemo = useCallback(() => {

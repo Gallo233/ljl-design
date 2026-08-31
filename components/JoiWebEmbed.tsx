@@ -28,24 +28,30 @@ type Phase = "idle" | "connecting" | "live" | "unavailable";
 
 type Props = {
   active?: boolean;
+  presentation?: "docked" | "pet";
   stage?: boolean;
   start?: boolean;
   onPhaseChange?: (phase: Phase) => void;
   onExitRequested?: () => void;
+  onPresentationChange?: (presentation: "docked" | "pet") => void;
 };
 
 export function JoiWebEmbed({
   active = true,
+  presentation = "docked",
   stage = false,
   start = true,
   onPhaseChange,
   onExitRequested,
+  onPresentationChange,
 }: Props = {}) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const startedRef = useRef(false);
   const instanceRef = useRef<MountResult | null>(null);
   const teardownRef = useRef<number | null>(null);
-  const activeRef = useRef(active);
+  const interactionRef = useRef(active || (stage && presentation === "pet"));
+  const presentationRef = useRef(presentation);
+  const onPresentationChangeRef = useRef(onPresentationChange);
   const [phase, setPhaseState] = useState<Phase>(
     !start ? "idle" : brokerBase ? "connecting" : "unavailable",
   );
@@ -57,13 +63,14 @@ export function JoiWebEmbed({
   };
 
   useEffect(() => {
-    activeRef.current = active;
+    const interactionEnabled = active || (stage && presentation === "pet");
+    interactionRef.current = interactionEnabled;
+    presentationRef.current = presentation;
+    onPresentationChangeRef.current = onPresentationChange;
     const instance = instanceRef.current;
-    instance?.setInteractionEnabled(active);
-    // Leaving the experience always puts the full surface back in its aperture.
-    // Entering only hands input over; it must not implicitly opt into pet mode.
-    if (stage && !active) instance?.setPresentation("docked");
-  }, [active, stage]);
+    instance?.setInteractionEnabled(interactionEnabled);
+    if (stage) instance?.setPresentation(presentation);
+  }, [active, onPresentationChange, presentation, stage]);
 
   useEffect(() => {
     if (!start) {
@@ -113,7 +120,7 @@ export function JoiWebEmbed({
           /* webpackIgnore: true */ `${shellBase}/joi-embed.js`
         );
         if (!startedRef.current || !containerRef.current) return;
-        const interactionEnabled = activeRef.current;
+        const interactionEnabled = interactionRef.current;
         const instance = await module.mountJoi({
           brokerBase,
           shellBase,
@@ -122,14 +129,18 @@ export function JoiWebEmbed({
           autoFloat: !stage,
           interactionEnabled,
           onEscape: onExitRequested,
+          onPresentationChange: (next: "docked" | "pet") => {
+            presentationRef.current = next;
+            onPresentationChangeRef.current?.(next);
+          },
         });
         if (!startedRef.current) {
           await instance.destroy({ endSession: true });
           return;
         }
         instanceRef.current = instance;
-        instance.setInteractionEnabled(interactionEnabled);
-        if (stage) instance.setPresentation("docked");
+        instance.setInteractionEnabled(interactionRef.current);
+        if (stage) instance.setPresentation(presentationRef.current);
         setPhase("live");
       } catch (error) {
         if (!startedRef.current) return;

@@ -981,7 +981,7 @@ function FilmCanvas({
       drag.offset = THREE.MathUtils.clamp(event.clientX - drag.startX, -limit, limit);
       targetReelOffset = stepRef.current * FRAME_WIDTH - drag.offset / (0.05 * width);
     };
-    const finishDrag = (event: PointerEvent, openOnTap: boolean) => {
+    const finishDrag = (event: PointerEvent) => {
       if (activeDeckControl) {
         activeDeckControl = null;
         canvas.style.cursor = hoveredDeckControl === "volume" || hoveredDeckControl === "tone"
@@ -1001,7 +1001,6 @@ function FilmCanvas({
       if (!drag.active) return;
       drag.active = false;
       onDragStateChangeRef.current(false);
-      const wasTap = Math.abs(drag.offset) < 8;
       const crossedThreshold = Math.abs(drag.offset) > width * 0.1;
       const currentStep = stepRef.current;
       const nextStep = crossedThreshold ? currentStep - Math.sign(drag.offset) : currentStep;
@@ -1012,10 +1011,6 @@ function FilmCanvas({
       drag.offset = 0;
       if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
       canvas.classList.remove(styles.filmCanvasDragging);
-      const project = projects[modulo(currentStep, projects.length)];
-      if (openOnTap && wasTap && project) {
-        onProjectOpenRef.current(project.href);
-      }
     };
     const dropOrb = (event: PointerEvent) => {
       if (!carryingOrb) return false;
@@ -1029,11 +1024,11 @@ function FilmCanvas({
     };
     const handlePointerUp = (event: PointerEvent) => {
       if (dropOrb(event)) return;
-      finishDrag(event, true);
+      finishDrag(event);
     };
     const handlePointerCancel = (event: PointerEvent) => {
       if (dropOrb(event)) return;
-      finishDrag(event, false);
+      finishDrag(event);
     };
     const handleLeave = () => {
       hero.setPointer(0, 0);
@@ -1564,9 +1559,6 @@ function FilmCanvas({
   }, []);
 
   const activeProject = projects[modulo(step, projects.length)];
-  const openActiveProject = () => {
-    onProjectOpen(activeProject.href);
-  };
 
   return (
     <>
@@ -1584,15 +1576,10 @@ function FilmCanvas({
       </div>
       <canvas
         ref={canvasRef}
-        className={`${styles.filmCanvas} ${styles.filmCanvasOpenable}`}
-        role="link"
+        className={styles.filmCanvas}
+        role="region"
         tabIndex={0}
-        aria-label={`Open ${activeProject.title}. Drag horizontally to browse projects.`}
-        onKeyDown={(event) => {
-          if (event.key !== "Enter" && event.key !== " ") return;
-          event.preventDefault();
-          openActiveProject();
-        }}
+        aria-label={`${activeProject.title}. Drag horizontally to browse projects; use the project link to open it.`}
       />
     </>
   );

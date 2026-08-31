@@ -12,6 +12,7 @@ import {
 } from "react";
 import { JoiWebEmbed } from "../JoiWebEmbed";
 import { JoiMobileIPhoneShowcase } from "../joi-mobile-iphone/JoiMobileIPhoneShowcase";
+import { JOI_MOBILE_APPETIZE_URL } from "../joi-mobile-iphone/appetize";
 import {
   createLiquidStage,
   dampFrame,
@@ -45,6 +46,8 @@ type ExperienceMode =
   | "interact"
   | "leaving"
   | "reduced";
+
+type JoiPresentation = "docked" | "pet";
 
 const ANCHORS = [0, 0.5, 1] as const;
 const clamp01 = (value: number) => Math.min(1, Math.max(0, value));
@@ -111,6 +114,7 @@ export function WorkExperienceShell({ project }: { project: WorkExperienceProjec
   const primedRef = useRef(false);
   const [experiencePrimed, setExperiencePrimed] = useState(false);
   const [routeLeaving, setRouteLeaving] = useState<"next" | "reel" | null>(null);
+  const [joiPresentation, setJoiPresentation] = useState<JoiPresentation>("docked");
 
   const isMobile = project.slug === "joi-mobile";
   const palette = useMemo(
@@ -476,6 +480,7 @@ export function WorkExperienceShell({ project }: { project: WorkExperienceProjec
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.preventDefault();
+        setJoiPresentation("docked");
         modeRef.current = "leaving";
         setMode("leaving");
         if (leaveTimerRef.current !== null) window.clearTimeout(leaveTimerRef.current);
@@ -572,6 +577,7 @@ export function WorkExperienceShell({ project }: { project: WorkExperienceProjec
 
   const enterExperience = useCallback(() => {
     if (modeRef.current === "entering" || modeRef.current === "interact") return;
+    setJoiPresentation("docked");
     const activeElement = document.activeElement;
     if (activeElement instanceof HTMLElement) returnFocusRef.current = activeElement;
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -601,9 +607,10 @@ export function WorkExperienceShell({ project }: { project: WorkExperienceProjec
     });
   }, [settleTo]);
 
-  const leaveExperience = useCallback(() => {
+  const leaveToPage = useCallback((presentation: JoiPresentation) => {
     apertureAnimationRef.current?.cancel();
     apertureAnimationRef.current = null;
+    setJoiPresentation(presentation);
     modeRef.current = "leaving";
     setMode("leaving");
     if (leaveTimerRef.current !== null) window.clearTimeout(leaveTimerRef.current);
@@ -615,6 +622,25 @@ export function WorkExperienceShell({ project }: { project: WorkExperienceProjec
       leaveTimerRef.current = null;
     }, 220);
   }, [restoreActivationFocus]);
+
+  const leaveExperience = useCallback(() => {
+    leaveToPage("docked");
+  }, [leaveToPage]);
+
+  const floatJoi = useCallback(() => {
+    leaveToPage("pet");
+  }, [leaveToPage]);
+
+  const handleJoiPresentationChange = useCallback((next: JoiPresentation) => {
+    const wasPet = joiPresentation === "pet";
+    setJoiPresentation(next);
+    // A character double-click restores the full Joi surface and hands input
+    // back in the same gesture. The visitor should not land behind a second
+    // opaque "enter" gate after explicitly restoring the window.
+    if (wasPet && next === "docked" && modeRef.current === "browse") {
+      enterExperience();
+    }
+  }, [enterExperience, joiPresentation]);
 
   const navigateWithHandoff = useCallback(async (
     event: React.MouseEvent<HTMLAnchorElement>,
@@ -653,7 +679,7 @@ export function WorkExperienceShell({ project }: { project: WorkExperienceProjec
           ? nextRef.current
           : apertureRef.current;
     if (!sourceElement) {
-      router.push(destination, { scroll: true });
+      router.push(destination, { scroll: kind !== "reel" });
       return;
     }
 
@@ -673,7 +699,7 @@ export function WorkExperienceShell({ project }: { project: WorkExperienceProjec
       destination,
       palette: kind === "next" ? targetPalette : palette,
     });
-    router.push(destination, { scroll: true });
+    router.push(destination, { scroll: kind !== "reel" });
   }, [palette, project.index, project.next.index, project.next.title, project.title, router]);
 
   const onPointerMove = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
@@ -853,8 +879,10 @@ export function WorkExperienceShell({ project }: { project: WorkExperienceProjec
               <JoiWebEmbed
                 stage
                 active={active}
+                presentation={joiPresentation}
                 start={experiencePrimed}
                 onExitRequested={leaveExperience}
+                onPresentationChange={handleJoiPresentationChange}
               />
             )}
           </div>
@@ -863,6 +891,11 @@ export function WorkExperienceShell({ project }: { project: WorkExperienceProjec
               <span>{starting ? "ALIGNING SIGNAL" : "CLICK TO HAND OVER INPUT"}</span>
               <strong>{starting ? "···" : "ENTER"}</strong>
             </button>
+          )}
+          {active && !isMobile && (
+            <span className={styles.resizeHandle} aria-hidden="true">
+              <i /> RESIZE
+            </span>
           )}
         </section>
 
@@ -874,7 +907,7 @@ export function WorkExperienceShell({ project }: { project: WorkExperienceProjec
             </button>
             {isMobile && (
               <a
-                href="https://appetize.io/app/b_crwzussfaihmp5aqsmfzxyxwde?device=iphone14pro&osVersion=26.0&orientation=portrait"
+                href={JOI_MOBILE_APPETIZE_URL}
                 target="_blank"
                 rel="noreferrer"
               >
@@ -917,9 +950,16 @@ export function WorkExperienceShell({ project }: { project: WorkExperienceProjec
         </p>
       </div>
       {active && (
-        <button className={styles.exitExperience} type="button" onClick={leaveExperience} ref={exitRef}>
-          RETURN TO PAGE <span aria-hidden="true">ESC</span>
-        </button>
+        <div className={styles.experienceControls}>
+          {!isMobile && (
+            <button type="button" onClick={floatJoi}>
+              FLOAT JOI <span aria-hidden="true">PET</span>
+            </button>
+          )}
+          <button type="button" onClick={leaveExperience} ref={exitRef}>
+            RETURN TO PAGE <span aria-hidden="true">ESC</span>
+          </button>
+        </div>
       )}
     </main>
   );
