@@ -34,9 +34,16 @@ jobs:
           # The script is the deploy: keeping the steps on the box means a
           # hand-run deploy and an automated one are the same thing.
           # The repository migrated from pnpm to npm. Older production boxes can
-          # still carry the pre-migration frozen-lockfile command, so normalize it
-          # in place before running the otherwise unchanged server-side deploy.
+          # still carry the pre-migration install/build commands. Migrate that
+          # server-side script once, refresh dependencies once, then keep using the
+          # same idempotent deploy entry point for every later release.
           script: |
-            sudo -u joi-site sed -n '1,220p' /opt/joi-site/deploy-site.sh
-            sudo -u joi-site sed -i 's/pnpm install --frozen-lockfile/npm install --no-audit --no-fund/' /opt/joi-site/deploy-site.sh
+            if sudo -u joi-site grep -q 'pnpm' /opt/joi-site/deploy-site.sh; then
+              sudo -u joi-site sed -i \
+                -e 's/pnpm install --frozen-lockfile/npm install --no-audit --no-fund/' \
+                -e 's/pnpm-lock.yaml/package-lock.json/' \
+                -e 's/pnpm run build/npm run build/' \
+                /opt/joi-site/deploy-site.sh
+              sudo -u joi-site bash -lc 'cd /opt/joi-site && npm install --no-audit --no-fund'
+            fi
             sudo -u joi-site /opt/joi-site/deploy-site.sh
