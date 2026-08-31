@@ -135,7 +135,6 @@ export function PageTurnCorner({
         if (event.detail === 0) hint();
       }}
     >
-      <span className={styles.pageCurlUnder} aria-hidden="true" />
       <span className={styles.pageCurlFold} aria-hidden="true" />
       <span className={styles.pageCurlHint} aria-hidden="true">PULL&nbsp; ↙</span>
     </button>

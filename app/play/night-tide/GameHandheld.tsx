@@ -7,16 +7,23 @@ import {
   SCREEN_WIDTH,
   arcadeGames,
   getGame,
-  nightTideEntry,
+  godotGames,
   type GameButton,
   type GameHandle,
+  type GodotGame,
 } from "./games";
 import { CONSOLE_ACCENTS, createConsoleScene, type CartridgeSpec, type ConsoleScene } from "./console3d";
 
 type Phase = "boot" | "idle" | "play";
 
+export type GameVisualState = {
+  phase: Phase;
+  carrying: boolean;
+  activeId: string | null;
+};
+
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
-const GAME_BUILD_URL = `${basePath}/games/night-tide/index.html?v=embedded-font-2`;
+const buildUrl = (game: GodotGame) => `${basePath}${game.build}`;
 
 /**
  * Where the synthetic key events are allowed to land.
@@ -26,16 +33,16 @@ const GAME_BUILD_URL = `${basePath}/games/night-tide/index.html?v=embedded-font-
  * if the build URL ever resolves cross-origin, anything that ends up in the frame
  * receives the input stream.
  *
- * Resolved against the document rather than parsed alone, because `GAME_BUILD_URL`
+ * Resolved against the document rather than parsed alone, because the build URL
  * is a path — `basePath` is a path prefix, not a host — and `new URL()` on its own
  * rejects anything without a scheme. Parsing it unresolved throws a TypeError on
  * every keypress, which is a worse bug than the one being fixed.
  */
-const gameOrigin = () =>
-  typeof window === "undefined" ? "*" : new URL(GAME_BUILD_URL, window.location.href).origin;
+const gameOrigin = (game: GodotGame) =>
+  typeof window === "undefined" ? "*" : new URL(buildUrl(game), window.location.href).origin;
 
-/** Every cartridge on the shelf, Godot build first. */
-const shelf = [nightTideEntry, ...arcadeGames];
+/** Every cartridge on the shelf, Godot builds first. */
+const shelf = [...godotGames, ...arcadeGames];
 
 /**
  * Physical keys to shell buttons. One table, used by every screen — the select menu, the
@@ -59,26 +66,6 @@ const KEY_TO_BUTTON: Record<string, GameButton> = {
   backspace: "select",
 };
 
-/**
- * Shell buttons to the keys the Night Tide build listens for.
- * Mirrors `scripts/app/app_state.gd` in the Night Tide source project.
- */
-const BUTTON_TO_GODOT: Partial<Record<GameButton, { key: string; code: string; label: string }>> = {
-  up: { key: "w", code: "KeyW", label: "移动 上" },
-  down: { key: "s", code: "KeyS", label: "移动 下" },
-  left: { key: "a", code: "KeyA", label: "移动 左" },
-  right: { key: "d", code: "KeyD", label: "移动 右" },
-  a: { key: " ", code: "Space", label: "跳跃" },
-  b: { key: "Shift", code: "ShiftLeft", label: "闪避" },
-  x: { key: "j", code: "KeyJ", label: "轻攻击" },
-  y: { key: "k", code: "KeyK", label: "重攻击" },
-  l1: { key: "l", code: "KeyL", label: "弹反" },
-  l2: { key: "q", code: "KeyQ", label: "牵引" },
-  r1: { key: "e", code: "KeyE", label: "相位斩" },
-  r2: { key: "r", code: "KeyR", label: "引力坍缩" },
-  start: { key: "Escape", code: "Escape", label: "暂停" },
-};
-
 const BOOT_LINES = [
   "JOI / POCKET-NT",
   "CHECKING CARTRIDGE BUS",
@@ -88,17 +75,26 @@ const BOOT_LINES = [
 
 /** What the rack holds, in the order it stands in. Shell colours come from the console's
  * own accent palette so the cards visibly belong to the machine's face buttons. */
+const SHELL_ACCENTS: Record<string, string> = {
+  "night-tide": CONSOLE_ACCENTS.periwinkle,
+  "star-vein": CONSOLE_ACCENTS.amethyst,
+  snake: CONSOLE_ACCENTS.sage,
+  tetris: CONSOLE_ACCENTS.salmon,
+  pacman: CONSOLE_ACCENTS.wheat,
+};
+
 const CARTRIDGE_SPECS: CartridgeSpec[] = shelf.map((entry) => ({
   id: entry.id,
   label: entry.titleZh,
   sublabel: entry.title,
-  accent: entry.id === "night-tide" ? CONSOLE_ACCENTS.periwinkle
-    : entry.id === "snake" ? CONSOLE_ACCENTS.sage
-    : entry.id === "tetris" ? CONSOLE_ACCENTS.salmon
-    : CONSOLE_ACCENTS.wheat,
+  accent: SHELL_ACCENTS[entry.id] ?? CONSOLE_ACCENTS.wheat,
 }));
 
-export function GameHandheld() {
+export function GameHandheld({
+  onVisualStateChange,
+}: {
+  onVisualStateChange?: (state: GameVisualState) => void;
+}) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   /** Where the three.js canvas and the CSS3D layer are mounted. */
@@ -129,14 +125,23 @@ export function GameHandheld() {
   activeIdRef.current = activeId;
 
   const activeEntry = useMemo(() => shelf.find((entry) => entry.id === activeId) ?? null, [activeId]);
-  const isNightTide = activeId === nightTideEntry.id;
+  /** Non-null exactly when the thing on the screen is a WebAssembly build in an iframe. */
+  const activeGodot = useMemo(
+    () => godotGames.find((game) => game.id === activeId) ?? null,
+    [activeId],
+  );
+  const activeGodotRef = useRef<GodotGame | null>(activeGodot);
+  activeGodotRef.current = activeGodot;
 
   const postToGodot = useCallback((action: "keydown" | "keyup", button: GameButton) => {
-    const mapping = BUTTON_TO_GODOT[button];
-    if (!mapping) return;
+    const game = activeGodotRef.current;
+    const mapping = game?.buttons[button];
+    // An unmapped button is not an error: a build that binds no downward action simply
+    // never hears about `down`.
+    if (!game || !mapping) return;
     iframeRef.current?.contentWindow?.postMessage(
       { type: "joi-key", action, key: mapping.key, code: mapping.code },
-      gameOrigin(),
+      gameOrigin(game),
     );
   }, []);
 
@@ -160,7 +165,8 @@ export function GameHandheld() {
     setPendingId(null);
     setActiveId(id);
     setPhase("play");
-    setStatus(entry.id === nightTideEntry.id ? "LOADING BUILD" : entry.titleZh);
+    const godot = godotGames.find((game) => game.id === entry.id);
+    setStatus(godot ? godot.loading : entry.titleZh);
   }, []);
 
   const eject = useCallback(() => {
@@ -180,14 +186,14 @@ export function GameHandheld() {
 
     if (phaseRef.current === "play") {
       if (button === "select") { eject(); return; }
-      if (activeIdRef.current === nightTideEntry.id) postToGodot("keydown", button);
+      if (activeGodotRef.current) postToGodot("keydown", button);
     }
   }, [eject, postToGodot]);
 
   const release = useCallback((button: GameButton) => {
     if (!heldRef.current.delete(button)) return;
     sceneRef.current?.setPressed(button, false);
-    if (phaseRef.current === "play" && activeIdRef.current === nightTideEntry.id) {
+    if (phaseRef.current === "play" && activeGodotRef.current) {
       postToGodot("keyup", button);
     }
   }, [postToGodot]);
@@ -320,13 +326,30 @@ export function GameHandheld() {
     const onMessage = (event: MessageEvent) => {
       const data = event.data;
       if (event.source !== iframeRef.current?.contentWindow || !data || data.type !== "joi-game-key") return;
-      const button = KEY_TO_BUTTON[String(data.key ?? "").toLowerCase()];
+      // Resolve against the cartridge that is actually loaded, not one shared table:
+      // `e` is Night Tide's phase cut and Star Vein's inventory, so a single global map
+      // would light the wrong key on the console for one of them.
+      const code = String(data.code ?? "");
+      const keyName = String(data.key ?? "").toLowerCase();
+      let button: GameButton | undefined;
+      let label: string | undefined;
+      const game = activeGodotRef.current;
+      if (game) {
+        for (const [candidate, mapping] of Object.entries(game.buttons)) {
+          if (!mapping) continue;
+          if (mapping.code === code || mapping.key.toLowerCase() === keyName) {
+            button = candidate as GameButton;
+            label = mapping.label;
+            break;
+          }
+        }
+      }
+      button ??= KEY_TO_BUTTON[keyName];
       if (!button) return;
       if (data.action === "keydown") {
         heldRef.current.add(button);
         sceneRef.current?.setPressed(button, true);
-        const mapping = BUTTON_TO_GODOT[button];
-        if (mapping) setStatus(mapping.label);
+        if (label) setStatus(label);
       } else if (data.action === "keyup") {
         heldRef.current.delete(button);
         sceneRef.current?.setPressed(button, false);
@@ -349,7 +372,7 @@ export function GameHandheld() {
 
   // --- canvas game lifecycle ------------------------------------------------
   useEffect(() => {
-    if (phase !== "play" || !activeId || activeId === nightTideEntry.id) return;
+    if (phase !== "play" || !activeId || godotGames.some((game) => game.id === activeId)) return;
     const canvas = canvasRef.current;
     const game = getGame(activeId);
     if (!canvas || !game) return;
@@ -381,17 +404,22 @@ export function GameHandheld() {
     { keys: "BACKSPACE / SELECT", action: "退出卡带" },
   ];
 
+  useEffect(() => {
+    onVisualStateChange?.({ phase, carrying, activeId });
+  }, [activeId, carrying, onVisualStateChange, phase]);
+
   return (
     <div className={styles.stage}>
       {/* The three.js canvas and the CSS3D layer are appended here by the scene. The live
           screen lives inside the CSS3D layer, so this subtree must stay AT-visible; only
           the WebGL canvas marks itself decorative. */}
-      {!sceneFailed && (
-        <div
-          className={[styles.scene, carrying ? styles.sceneCarrying : ""].filter(Boolean).join(" ")}
-          ref={sceneHostRef}
-        />
-      )}
+      <div className={styles.sceneWell} data-game-liquid-shape="scene">
+        {!sceneFailed && (
+          <div
+            className={[styles.scene, carrying ? styles.sceneCarrying : ""].filter(Boolean).join(" ")}
+            ref={sceneHostRef}
+          />
+        )}
 
       {phase === "play" && (
         <button type="button" className={styles.ejectChip} onClick={eject}>
@@ -404,12 +432,12 @@ export function GameHandheld() {
         layer on mount and the cleanup puts it back, so React only ever sees it here. When
         WebGL is unavailable the park stops hiding and becomes the screen's flat frame.
       */}
-      <div ref={screenParkRef} className={sceneFailed ? styles.screenFlat : styles.screenPark}>
-        <div
-          ref={screenRef}
-          className={styles.screen}
-          style={sceneFailed ? undefined : { width: SCREEN_WIDTH, height: SCREEN_HEIGHT }}
-        >
+        <div ref={screenParkRef} className={sceneFailed ? styles.screenFlat : styles.screenPark}>
+          <div
+            ref={screenRef}
+            className={styles.screen}
+            style={sceneFailed ? undefined : { width: SCREEN_WIDTH, height: SCREEN_HEIGHT }}
+          >
           {phase === "boot" && (
             <div className={styles.boot} role="status" aria-live="polite">
               <div className={styles.bootMark} aria-hidden="true"><i /><i /><i /></div>
@@ -446,14 +474,17 @@ export function GameHandheld() {
           )}
 
           {phase === "play" && (
-            isNightTide ? (
+            activeGodot ? (
               <iframe
+                // Keyed by cartridge so switching builds tears the old frame down instead
+                // of pointing one long-lived iframe at a different wasm module.
+                key={activeGodot.id}
                 ref={iframeRef}
-                title="Zero Hour: Night Tide 试玩版"
-                src={GAME_BUILD_URL}
+                title={`${activeGodot.titleZh} 试玩版`}
+                src={buildUrl(activeGodot)}
                 allow="autoplay; fullscreen; gamepad"
                 allowFullScreen
-                onLoad={() => setStatus("NIGHT TIDE ONLINE")}
+                onLoad={() => setStatus(`${activeGodot.title} ONLINE`)}
               />
             ) : (
               <canvas
@@ -465,10 +496,11 @@ export function GameHandheld() {
               />
             )
           )}
+          </div>
         </div>
       </div>
 
-      <div className={styles.rail}>
+      <div className={styles.rail} data-game-liquid-shape="rail">
         <div className={styles.railHead}>
           <span>INPUT MONITOR</span>
           <strong>{status}</strong>
@@ -484,7 +516,7 @@ export function GameHandheld() {
 
         {/*
           The rack is the real way in, but it needs a pointer and a working canvas. These
-          are the same four cartridges as buttons, so the game centre still works from a
+          are the same cartridges as buttons, so the game centre still works from a
           keyboard, a screen reader, or a browser where WebGL failed.
         */}
         <div className={styles.fallbackShelf}>

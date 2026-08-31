@@ -29,7 +29,7 @@ reverse-engineered; see **Research** below before re-deriving anything.
 /about-me        closing panel — copy, the 3D room, the lanyard badge
 /contact         closing panel — the call sheet
 /lab             research and retired prototypes, light editorial
-/play/night-tide Game Center — the 3D handheld and its four cartridges
+/play/night-tide Game Center — the 3D handheld and its five cartridges
 /work/<slug>     project detail — light editorial layout
 /classic         the previous light homepage, kept intact and unlinked
 /joi-signal-lab  redirects to /selected-work (old link)
@@ -67,9 +67,14 @@ app/
   work/[slug]/page.tsx      project detail
   play/night-tide/          Game Center: a WebGL+CSS3D 3D handheld (console3d.ts builds the
     GameHandheld.tsx        machine, drag-a-cartridge to play), games/ holds three canvas
-    console3d.ts, games/    games (snake/tetris/pacman) + the Godot iframe entry. The screen
+    console3d.ts, games/    games (snake/tetris/pacman) + two Godot builds in iframes
+                            (night-tide, star-vein) described by `godotGames`, each carrying
+                            its own build path and its own shell-button-to-key map. The screen
                             stays live DOM (CSS3DRenderer) because an iframe cannot be a
                             WebGL texture; on WebGL failure the shell folds to a flat screen.
+                            Godot exports live in public/games/<id>/ and are re-patched with
+                            scripts/godot/patch-web-shell.mjs after every export — that script
+                            injects the postMessage input bridge the shell talks to.
   classic/page.tsx          previous homepage
   site.ts                   SITE_URL, canonicalPath(), SHARE_CARD   <-- see below
   robots.ts, sitemap.ts     generated /robots.txt and /sitemap.xml
@@ -290,7 +295,7 @@ it has not been through the author yet.
 and why:
 
 - **03 is the Game Center, not a Night Tide screen recording.** The frame renders the actual 3D
-  handheld live into a target and links to `/play/night-tide`, where four cartridges are
+  handheld live into a target and links to `/play/night-tide`, where five cartridges are
   playable. The planned gameplay capture is not needed and not wanted.
 - **04 dropped 司天监.** The lab files four real things instead: the CRT/shader research, the
   Live2D binding work, the particle prologue retrospective, and the leitower postmortem — which

@@ -1,38 +1,16 @@
 import "../../../redesign.css";
-// `styles.css` and `experience.css` used to be imported whole here — 137 KB written for
-// the old homepage, of which 47 selectors out of 1,116 can reach this route. See the
-// header of `work-legacy-base.css`; both originals are untouched because /classic still
-// imports them, and this keeps their surviving rules in their original order.
-//
-// It sits beside them at the repo root rather than in this folder because the bundler
-// orders route-local CSS ahead of root-level CSS: from `./` it landed *before*
-// redesign.css and took `--ink` with it, which is a different colour.
-import "../../../work-legacy-base.css";
-import "./project-detail.css";
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { ArrivalFade } from "../../../components/ArrivalFade";
-import { DetailGallery } from "../../../components/DetailGallery";
-import { RevealRoot } from "../../../components/RevealRoot";
+import { ProjectJsonLd } from "../../../components/JsonLd";
 import { SiteHUD } from "../../../components/SiteHUD";
+import {
+  WorkExperienceShell,
+  type WorkExperienceProject,
+} from "../../../components/work-experience/WorkExperienceShell";
 import { getProject, projects } from "../../../components/projectData";
-import { JoiWebEmbed } from "../../../components/JoiWebEmbed";
-import { JoiMobileIPhoneShowcase } from "../../../components/joi-mobile-iphone/JoiMobileIPhoneShowcase";
-import { PageScrollState } from "../../../components/PageScrollState";
 import { SHARE_CARD, canonicalPath } from "../../site";
 import { fontVariables } from "../../fonts";
-import { ProjectJsonLd } from "../../../components/JsonLd";
-
-/**
- * Project detail — the light editorial layout you land in after stepping out of
- * the CRT.
- *
- * Every content block below is conditional on its data. `components/projectData.ts`
- * currently carries identity only while the project writing is rebuilt, so this
- * page renders as the shell plus, on `/work/joi`, the live Joi session. As data
- * comes back, each block reappears on its own — no template change needed.
- */
 
 type ProjectPageProps = {
   params: Promise<{ slug: string }>;
@@ -55,21 +33,14 @@ export async function generateMetadata({ params }: ProjectPageProps): Promise<Me
     ...(project.summary ? { description: project.summary } : {}),
     alternates: { canonical: url },
     openGraph: {
-      // A page's `openGraph` replaces the layout's rather than merging into it,
-      // so the fields that should survive are repeated here.
       type: "article",
       siteName: "Gallo",
-      // The `%s — Gallo` template applies to `title` and not to this one, so a share
-      // card said "JOI — PRESENCE" where the tab said "JOI — PRESENCE — Gallo". /lab
-      // and the game centre already spell it out; this route was the odd one.
       title: `${project.title} — Gallo`,
       ...(project.summary ? { description: project.summary } : {}),
       url,
       images: [SHARE_CARD],
     },
     twitter: {
-      // Same replacement rule as `openGraph`: without this the card would still
-      // carry the site-level title on every project page.
       card: "summary_large_image",
       title: `${project.title} — Gallo`,
       ...(project.summary ? { description: project.summary } : {}),
@@ -78,269 +49,50 @@ export async function generateMetadata({ params }: ProjectPageProps): Promise<Me
   };
 }
 
+function experienceProject(slug: "joi" | "joi-mobile"): WorkExperienceProject {
+  if (slug === "joi") {
+    return {
+      slug,
+      index: "01",
+      title: "JOI — PRESENCE",
+      tagline: "A machine learning how to live with you.",
+      kind: "AI COMPANION / LIVE WEB",
+      repo: "https://github.com/Gallo233/Joi",
+      next: {
+        href: "/work/joi-mobile",
+        index: "02",
+        title: "JOI MOBILE — WITH YOU",
+      },
+    };
+  }
+  return {
+    slug,
+    index: "02",
+    title: "JOI MOBILE — WITH YOU",
+    tagline: "The same relationship, carried with you.",
+    kind: "NATIVE COMPANION / IPHONE",
+    repo: "https://github.com/Gallo233/Joi-Mobile",
+    poster: sitePath("/work/joi-mobile-home-screen.webp"),
+    next: {
+      href: "/play/night-tide",
+      index: "03",
+      title: "GAME CENTER — 游戏厅",
+    },
+  };
+}
+
 export default async function ProjectPage({ params }: ProjectPageProps) {
   const { slug } = await params;
-  // Slashed, because `trailingSlash: true` would otherwise 308 this a second time.
   if (slug === "joi-map") redirect(sitePath("/work/joi-mobile/"));
   const project = getProject(slug);
-  if (!project) notFound();
-
-  const hasWebExperience = project.slug === "joi";
-  const hasMeta = Boolean(project.date || project.role || project.status || project.stack);
-  const hasCaseFrame = Boolean(project.question || project.caseFrame);
-  const hasLoop = Boolean(project.loop?.length);
-  const hasSections = Boolean(project.sections?.length);
-  const hasFigures = Boolean(project.figures?.length);
-  const nextHref = project.nextHref ?? (project.nextSlug ? `/work/${project.nextSlug}` : null);
-  const hasNext = Boolean(nextHref && project.nextTitle);
-
-  // The metadata card counts what is actually on the page — haoqi's article-card habit.
-  const characterCount = [
-    project.summary,
-    project.summaryZh,
-    ...(project.sections?.flatMap((section) => [...section.body, ...section.bodyZh]) ?? []),
-    ...(project.loop?.map((step) => step.body) ?? []),
-  ]
-    .filter(Boolean)
-    .join("").length;
-  const hasBody = hasLoop || hasSections || hasFigures || hasNext;
+  if (!project || (project.slug !== "joi" && project.slug !== "joi-mobile")) notFound();
 
   return (
-    <main className={`${fontVariables} project-page project-page--${project.slug}`}>
-      {/*
-       * The alpha threshold the melt reveals re-harden through — the melt shape in
-       * globals.css holds this filter over an element only while its type is soft,
-       * and drops it the moment the melt settles. Zero-size: it only supplies defs.
-       */}
-      <svg
-        className="reveal-fx-defs"
-        aria-hidden="true"
-        focusable="false"
-        role="presentation"
-        width="0"
-        height="0"
-      >
-        <filter
-          id="reveal-melt-threshold"
-          x="-60%"
-          y="-300%"
-          width="220%"
-          height="700%"
-          colorInterpolationFilters="sRGB"
-        >
-          <feComponentTransfer>
-            {/* Alpha below ~0.11 vanishes, above ~0.19 saturates: during the blur
-                most of a glyph's halo is eaten and only its peaks survive, which is
-                what makes the type condense instead of focus. Numbers tuned from the
-                viscose morph (blur 8.5 / cut .33 / gain 400) for these heading sizes. */}
-          <feFuncA type="linear" slope={14} intercept={-1.6} />
-          </feComponentTransfer>
-        </filter>
-      </svg>
+    <div className={fontVariables}>
       <ProjectJsonLd project={project} />
-      {project.slug === "joi" && <PageScrollState />}
       <ArrivalFade />
-      <RevealRoot />
       <SiteHUD />
-      <header className="project-detail-nav">
-        {/* Internal links are client navigations — a full document load would reboot
-            both of the lab's WebGL scenes and replay the loader on the way back. */}
-        <Link className="wordmark" href="/">GALLO</Link>
-        <nav aria-label="Project navigation">
-          <Link href="/selected-work">BACK TO REEL</Link>
-          <Link href="/about-me">ABOUT</Link>
-          {project.repo && <a href={project.repo} target="_blank" rel="noreferrer">GITHUB</a>}
-        </nav>
-      </header>
-
-      <article>
-        <section className="project-detail-hero">
-          <div className="project-detail-hero-top">
-            <p className="project-detail-kicker">
-              {project.index}{project.kind ? ` / ${project.kind}` : ""}
-            </p>
-            <h1 data-reveal="melt">
-              <span className="melt-media">{project.title}</span>
-            </h1>
-            {project.tagline && <p className="project-detail-tagline">{project.tagline}</p>}
-          </div>
-
-          {(project.summary || hasMeta) && (
-            <div className="project-detail-summary">
-              {project.summary && (
-                <div className="project-detail-summary-copy">
-                  <p>{project.summary}</p>
-                  {project.summaryZh && <p lang="zh-CN">{project.summaryZh}</p>}
-                </div>
-              )}
-              {hasMeta && (
-                <dl>
-                  {project.date && <div><dt>PERIOD</dt><dd>{project.date}</dd></div>}
-                  {project.role && <div><dt>ROLE</dt><dd>{project.role}</dd></div>}
-                  {project.status && <div><dt>STATUS</dt><dd>{project.status}</dd></div>}
-                  {project.stack && <div><dt>STACK</dt><dd>{project.stack}</dd></div>}
-                </dl>
-              )}
-            </div>
-          )}
-
-          {hasCaseFrame && (
-            <section className="project-case-frame" aria-label="Case study overview" data-reveal>
-              {project.question && (
-                <div>
-                  <span>01 / PROBLEM</span>
-                  <p>{project.question}</p>
-                </div>
-              )}
-              {project.role && (
-                <div>
-                  <span>02 / RESPONSIBILITY</span>
-                  <p>{project.role}</p>
-                </div>
-              )}
-              {project.caseFrame && (
-                <>
-                  <div>
-                    <span>03 / KEY DECISION</span>
-                    <p>{project.caseFrame.decision}</p>
-                  </div>
-                  <div>
-                    <span>04 / OUTCOME</span>
-                    <p>{project.caseFrame.outcome}</p>
-                  </div>
-                </>
-              )}
-            </section>
-          )}
-
-          {hasWebExperience ? (
-            <JoiWebEmbed />
-          ) : project.experience ? (
-            <Link className="project-web-experience" href={project.experience.href}>
-              <span>{project.experience.eyebrow}</span>
-              <div>
-                <h2>{project.experience.title}</h2>
-                <p>{project.experience.body}</p>
-                <p lang="zh-CN">{project.experience.bodyZh}</p>
-              </div>
-              <strong>{project.experience.action} <b aria-hidden="true">↗</b></strong>
-            </Link>
-          ) : null}
-
-          {project.interactiveShowcase?.kind === "joi-mobile-native" && (
-            <JoiMobileIPhoneShowcase
-              poster={sitePath(project.interactiveShowcase.poster)}
-              label={project.interactiveShowcase.label}
-              caption={project.interactiveShowcase.caption}
-            />
-          )}
-
-          {project.motion && (
-            <figure className="project-detail-motion" data-reveal>
-              <video
-                autoPlay
-                controls
-                loop
-                muted
-                playsInline
-                poster={sitePath(project.motion.poster)}
-                preload="auto"
-                aria-describedby={`${project.slug}-motion-caption`}
-              >
-                <source src={sitePath(project.motion.src)} type="video/mp4" />
-              </video>
-              <figcaption id={`${project.slug}-motion-caption`}>
-                <span>{project.motion.label}</span>
-                <p>{project.motion.caption}</p>
-              </figcaption>
-            </figure>
-          )}
-        </section>
-
-        {hasBody && (
-          <div className="project-detail-body">
-            {hasLoop && (
-              <section className="project-detail-loop" aria-labelledby={`${project.slug}-loop-title`}>
-                <header>
-                  <p className="project-detail-kicker" data-reveal>THE PRODUCT LOOP</p>
-                  <div data-reveal="melt">
-                    <div className="melt-media">
-                      <h2 id={`${project.slug}-loop-title`}>{project.loopTitle}</h2>
-                      {project.loopTitleZh && <p lang="zh-CN">{project.loopTitleZh}</p>}
-                    </div>
-                  </div>
-                </header>
-                <ol data-reveal>
-                  {project.loop!.map((step) => (
-                    <li key={step.index}>
-                      <span>{step.index}</span>
-                      <strong>{step.label}</strong>
-                      <h3>{step.title}</h3>
-                      <p>{step.body}</p>
-                    </li>
-                  ))}
-                </ol>
-              </section>
-            )}
-
-            {project.sections?.map((section) => (
-              <section className="project-detail-section" key={section.heading}>
-                <div data-reveal="melt">
-                  <div className="melt-media">
-                    <p className="project-detail-kicker">{section.heading}</p>
-                    <h2 lang="zh-CN">{section.headingZh}</h2>
-                  </div>
-                </div>
-                <div className="project-detail-section-copy" data-reveal>
-                  {section.body.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}
-                  {section.bodyZh.map((paragraph) => <p lang="zh-CN" key={paragraph}>{paragraph}</p>)}
-                </div>
-              </section>
-            ))}
-
-            {hasFigures && (
-              /* Client component: same figure markup, plus the two effects from
-                 the viscose study — the first figure condenses from particles on
-                 first sight, a glyph shadow gathers behind the hovered one. Both
-                 mount nothing unless conditions hold, so the plain gallery is
-                 what ships without them. */
-              <DetailGallery
-                title={project.title}
-                figures={project.figures!.map((figure) => ({
-                  ...figure,
-                  src: sitePath(figure.src),
-                }))}
-              />
-            )}
-
-            <aside className="project-meta-card" data-reveal>
-              <span className="project-meta-card-label">FILE</span>
-              <dl>
-                <div><dt>LAST UPDATED</dt><dd>{project.updated ?? "—"}</dd></div>
-                <div><dt>CHARACTERS</dt><dd>{characterCount.toLocaleString("en-US")}</dd></div>
-                <div><dt>INDEX</dt><dd>{project.index} / {String(projects.length).padStart(2, "0")}</dd></div>
-                {project.repo && (
-                  <div><dt>SOURCE</dt><dd><a href={project.repo} target="_blank" rel="noreferrer">GITHUB ↗</a></dd></div>
-                )}
-              </dl>
-            </aside>
-
-            {hasNext && (
-              <Link className="project-next" href={nextHref!}>
-                <span>NEXT PROJECT</span>
-                <strong>
-                  <span className="project-next-title">
-                    <span className="project-next-static">{project.nextTitle}</span>
-                    <span className="project-next-melt" aria-hidden="true">
-                      <span className="melt-media">{project.nextTitle}</span>
-                    </span>
-                  </span>
-                </strong>
-              </Link>
-            )}
-          </div>
-        )}
-      </article>
-    </main>
+      <WorkExperienceShell project={experienceProject(project.slug)} />
+    </div>
   );
 }

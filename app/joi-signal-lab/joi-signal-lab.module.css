@@ -695,7 +695,6 @@
 .pageTurnCorner:disabled { pointer-events: none; }
 .pageTurnCorner:active { cursor: grabbing; }
 
-.pageCurlUnder,
 .pageCurlFold {
   position: absolute;
   top: 0;
@@ -705,16 +704,6 @@
   height: var(--page-curl-height, clamp(88px, 8vw, 116px));
   transform-origin: 100% 0;
   will-change: width, height, transform, opacity;
-}
-
-/* The lower-left triangle is the page back visible under the lifted dark face. */
-.pageCurlUnder {
-  clip-path: polygon(0 0, 100% 100%, 0 100%);
-  opacity: var(--page-under-opacity, 1);
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, .16), transparent 54%),
-    #747371;
-  filter: drop-shadow(-4px 7px 10px rgba(0, 0, 0, .16));
 }
 
 /* The upper-right triangle is the lifted page face, with light catching the crease. */
@@ -747,10 +736,6 @@
   animation: pageCurlLift 880ms cubic-bezier(.2, .75, .2, 1) both;
 }
 
-.pageTurnCorner[data-hinting="true"] .pageCurlUnder {
-  animation: pageCurlUnderLift 880ms cubic-bezier(.2, .75, .2, 1) both;
-}
-
 .pageTurnCorner[data-hinting="true"] .pageCurlHint {
   animation: pageCurlHint 880ms ease both;
 }
@@ -770,7 +755,6 @@
   transition: opacity 360ms ease;
 }
 
-.experience[data-page-turn="settling"] .pageCurlUnder,
 .experience[data-page-turn="settling"] .pageCurlFold {
   transition:
     width 540ms cubic-bezier(.2, .8, .2, 1),
@@ -782,11 +766,6 @@
   0%, 100% { transform: translate3d(0, 0, 0); }
   38% { transform: translate3d(-11px, 11px, 0) rotate(-1.5deg); }
   62% { transform: translate3d(-7px, 7px, 0) rotate(-.7deg); }
-}
-
-@keyframes pageCurlUnderLift {
-  0%, 100% { transform: scale(1); filter: drop-shadow(-4px 7px 10px rgba(0, 0, 0, .16)); }
-  38% { transform: scale(1.06); filter: drop-shadow(-9px 13px 17px rgba(0, 0, 0, .25)); }
 }
 
 @keyframes pageCurlHint {
@@ -2026,7 +2005,6 @@
   .contactPage,
   .pageTurnCorner { transition: none !important; }
   .pageCurlFold,
-  .pageCurlUnder,
   .pageCurlHint { animation: none !important; transition: none !important; }
   /*
    * The canvas already pins `--velocity` to 0 for a reader who asked for less motion,

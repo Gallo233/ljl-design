@@ -1,0 +1,171 @@
+{
+  "schemaVersion": 3,
+  "source": {
+    "url": "https://jesperlandberg.com/",
+    "canonicalUrl": "https://jesperlandberg.com/",
+    "route": "/",
+    "viewport": { "width": 1280, "height": 720, "dpr": 2 },
+    "browser": "Codex in-app browser",
+    "backend": "WebGL2",
+    "capturedAt": "2026-08-29T13:07:18.265Z"
+  },
+  "candidates": [
+    {
+      "id": "surface-1",
+      "kind": "canvas",
+      "selector": "canvas[data-engine='three.js r185']",
+      "score": 1,
+      "reason": "Only full-viewport canvas; public application source and console identify it as the visible-pixel owner."
+    },
+    {
+      "id": "surface-2",
+      "kind": "dom-layout-group",
+      "selector": "main, nav, [data-id]",
+      "score": 0.9,
+      "reason": "Owns layout, semantics and hit testing; measured rectangles bind WebGL planes."
+    }
+  ],
+  "lockStatus": "locked",
+  "allowedLockStatus": ["unlocked", "provisional", "attributed", "locked"],
+  "allowedTruth": ["SOURCE", "PARTIAL", "GUESS"],
+  "targetSet": ["surface-1", "surface-2"],
+  "alternatives": [
+    { "kind": "iframe", "status": "excluded", "evidenceId": "ev-001" },
+    { "kind": "video-background", "status": "excluded", "evidenceId": "ev-001" },
+    { "kind": "worker-owned-canvas", "status": "excluded", "evidenceId": "ev-003" }
+  ],
+  "effectBoundary": "route-coupled/site-level",
+  "hypotheses": [
+    {
+      "id": "hyp-1",
+      "claim": "A main-thread Three.js WebGL2 renderer owns all visible site pixels.",
+      "status": "supported",
+      "truth": "SOURCE",
+      "evidenceIds": ["ev-001", "ev-002", "ev-003"]
+    },
+    {
+      "id": "hyp-2",
+      "claim": "The canvas is decorative while DOM paints the primary content.",
+      "status": "contradicted",
+      "truth": "SOURCE",
+      "evidenceIds": ["ev-002", "ev-003"]
+    },
+    {
+      "id": "hyp-3",
+      "claim": "A worker or iframe owns the primary animation.",
+      "status": "contradicted",
+      "truth": "SOURCE",
+      "evidenceIds": ["ev-001", "ev-003"]
+    }
+  ],
+  "allowedHypothesisStatus": ["untested", "supported", "contradicted"],
+  "interactions": [
+    "wheel and trackpad virtual scrolling",
+    "horizontal mouse drag",
+    "touch vertical scroll and release impulse",
+    "keyboard arrows, page and space",
+    "project swipe navigation",
+    "route-coupled shared plane flight",
+    "cursor-follow preview and pointer trail"
+  ],
+  "scopeRisk": "high",
+  "blockingUnknowns": [],
+  "nextProbe": {
+    "type": "gpu-frame-capture",
+    "target": "surface-1",
+    "resolves": ["visual-frame-capture"],
+    "distinguishes": ["capture-backend-limitation", "source-render-failure"],
+    "expectedOutcomes": ["non-black WebGL frame in a GPU-aware browser", "same black capture confirms broader capture limitation"]
+  },
+  "evidence": [
+    {
+      "id": "ev-001",
+      "type": "runtime-surface-inventory",
+      "path": "evidence/runtime/initial-surface.json",
+      "truth": "SOURCE",
+      "supports": ["surface-1", "surface-2", "alternatives"]
+    },
+    {
+      "id": "ev-002",
+      "type": "public-runtime-console",
+      "path": "evidence/runtime/render-architecture.md",
+      "truth": "SOURCE",
+      "supports": ["hyp-1", "hyp-2", "effect-boundary"]
+    },
+    {
+      "id": "ev-003",
+      "type": "public-build-source",
+      "path": "evidence/source/build-index.md",
+      "truth": "SOURCE",
+      "supports": ["renderer-owner", "backend", "text-rasterizer", "shared-plane-registry"]
+    },
+    {
+      "id": "ev-004",
+      "type": "route-structure",
+      "path": "evidence/dom/route-structure.md",
+      "truth": "SOURCE",
+      "supports": ["route-coupled/site-level", "surface-2"]
+    },
+    {
+      "id": "ev-005",
+      "type": "interaction-source-analysis",
+      "path": "evidence/interaction/scroll-model.md",
+      "truth": "SOURCE",
+      "supports": ["primary-trace-route", "interactions"]
+    },
+    {
+      "id": "ev-006",
+      "type": "network-asset-inventory",
+      "path": "evidence/network/asset-index.md",
+      "truth": "SOURCE",
+      "supports": ["critical-resources"]
+    },
+    {
+      "id": "ev-007",
+      "type": "failed-gpu-screenshot-record",
+      "path": "evidence/screenshots/README.md",
+      "truth": "PARTIAL",
+      "supports": ["visual-capture-gap"]
+    }
+  ],
+  "gateDecision": {
+    "targetAttributed": true,
+    "targetLocked": true,
+    "requiredEvidence": {
+      "visualAttribution": [
+        { "status": "passed", "evidenceId": "ev-002", "path": "evidence/runtime/render-architecture.md", "truth": "SOURCE", "notes": "Public runtime statement and source identify the canvas as visible-pixel owner; GPU screenshot pixels remain unavailable." }
+      ],
+      "targetSet": [
+        { "status": "passed", "evidenceId": "ev-001", "path": "evidence/runtime/initial-surface.json", "truth": "SOURCE", "notes": "Unique canvas plus its DOM layout/hit-test group are explicitly scoped." }
+      ],
+      "contextAndOwner": [
+        { "status": "passed", "evidenceId": "ev-003", "path": "evidence/source/build-index.md", "truth": "SOURCE", "notes": "Main-thread Three.js WebGL2 renderer." }
+      ],
+      "targetBoundSourceOrFramework": [
+        { "status": "passed", "evidenceId": "ev-003", "path": "evidence/source/build-index.md", "truth": "SOURCE", "notes": "Renderer, rasterizer, scroll and fly anchors are target-bound public chunks." }
+      ],
+      "effectBoundary": [
+        { "status": "passed", "evidenceId": "ev-004", "path": "evidence/dom/route-structure.md", "truth": "SOURCE", "notes": "Persistent renderer and data-id ownership cross route boundaries." }
+      ],
+      "primaryTraceRoute": [
+        { "status": "passed", "evidenceId": "ev-005", "path": "evidence/interaction/scroll-model.md", "truth": "SOURCE", "notes": "Home virtual-scroll model is the primary trace route; detail and full routes are secondary." }
+      ],
+      "alternativesExcluded": [
+        { "status": "passed", "evidenceId": "ev-001", "path": "evidence/runtime/initial-surface.json", "truth": "SOURCE", "notes": "No primary iframe, initial video or worker-owned canvas." }
+      ]
+    },
+    "blockers": [],
+    "decidedAt": "2026-08-29T13:35:00.000Z"
+  },
+  "truthNotes": {
+    "source": [
+      "Surface inventory, renderer construction, scroll equations, route registry, timing constants and resource requests."
+    ],
+    "partial": [
+      "GPU screenshot attribution and the symbolic name of the minified output-color enum."
+    ],
+    "guess": [
+      "Canvas2D colors and card appearance in capture-baseline are an asset-free visual proxy."
+    ]
+  }
+}

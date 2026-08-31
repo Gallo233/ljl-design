@@ -31,7 +31,7 @@ export function SiteHUD() {
   }, []);
 
   return (
-    <div className={styles.hud} aria-hidden="true">
+    <div className={styles.hud} data-site-hud aria-hidden="true">
       <span suppressHydrationWarning>GMT+8 CN {time || "--:--:--"}</span>
       <span className={styles.mid}>GUANGZHOU 23.13°N 113.26°E</span>
       <span>{BUILD_TAG}</span>

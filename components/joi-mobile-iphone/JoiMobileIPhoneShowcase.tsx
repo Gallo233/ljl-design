@@ -11,18 +11,18 @@ const APPETIZE_BUILD_ID = "b_crwzussfaihmp5aqsmfzxyxwde";
 
 type Props = {
   poster: string;
-  label: string;
-  caption: string;
+  active?: boolean;
 };
 
-export function JoiMobileIPhoneShowcase({ poster, label, caption }: Props) {
+export function JoiMobileIPhoneShowcase({ poster, active = false }: Props) {
   const sceneHostRef = useRef<HTMLDivElement>(null);
   const screenParkRef = useRef<HTMLDivElement>(null);
   const screenRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<IPhoneScene | null>(null);
+  const activeRef = useRef(active);
   const [sceneFailed, setSceneFailed] = useState(false);
-  const [exploded, setExploded] = useState(false);
-  const [debug, setDebug] = useState(false);
+  const [motionSupported, setMotionSupported] = useState(false);
+  const [motionOn, setMotionOn] = useState(false);
 
   const nativePlayUrl = useMemo(() => {
     const query = new URLSearchParams({
@@ -39,8 +39,38 @@ export function JoiMobileIPhoneShowcase({ poster, label, caption }: Props) {
   }, [nativePlayUrl]);
 
   useEffect(() => {
-    setDebug(process.env.NODE_ENV !== "production" || new URLSearchParams(window.location.search).has("modelDebug"));
+    activeRef.current = active;
+    sceneRef.current?.setInteractionEnabled(active);
+    if (active) {
+      sceneRef.current?.resetView();
+    } else if (motionOn) {
+      // Leaving the gallery hands the pose back; a phone that keeps answering the
+      // accelerometer while it is a thumbnail in the corner is just noise.
+      void sceneRef.current?.setDeviceOrientation(false);
+      setMotionOn(false);
+    }
+  }, [active, motionOn]);
+
+  /*
+   * Only offered where it can work: a desktop browser has no orientation sensor, and
+   * `DeviceOrientationEvent` existing is not the same as it firing. Checked once on
+   * mount so the control never appears as a button that does nothing.
+   */
+  useEffect(() => {
+    const supported = typeof window !== "undefined"
+      && "DeviceOrientationEvent" in window
+      && window.matchMedia("(pointer: coarse)").matches;
+    setMotionSupported(supported);
   }, []);
+
+  const toggleMotion = useCallback(async () => {
+    const scene = sceneRef.current;
+    if (!scene) return;
+    const next = !motionOn;
+    const ok = await scene.setDeviceOrientation(next);
+    setMotionOn(next && ok);
+    if (next && !ok) setMotionSupported(false);
+  }, [motionOn]);
 
   useEffect(() => {
     const host = sceneHostRef.current;
@@ -59,10 +89,9 @@ export function JoiMobileIPhoneShowcase({ poster, label, caption }: Props) {
     };
 
     try {
-      sceneRef.current = createIPhone17ProScene({
+      const scene = createIPhone17ProScene({
         container: host,
         screenElement: screen,
-        posterUrl: poster,
         onScreenTap: openNativeDemo,
         onLiveReady: () => undefined,
         onFatal: () => {
@@ -72,6 +101,8 @@ export function JoiMobileIPhoneShowcase({ poster, label, caption }: Props) {
           setSceneFailed(true);
         },
       });
+      scene.setInteractionEnabled(activeRef.current);
+      sceneRef.current = scene;
     } catch {
       handBackScreen();
       setSceneFailed(true);
@@ -82,68 +113,54 @@ export function JoiMobileIPhoneShowcase({ poster, label, caption }: Props) {
       sceneRef.current = null;
       handBackScreen();
     };
-  }, [openNativeDemo, poster]);
-
-  const toggleExploded = useCallback(() => {
-    setExploded((value) => {
-      sceneRef.current?.setExploded(!value);
-      return !value;
-    });
-  }, []);
+  }, [openNativeDemo]);
 
   return (
-    <figure className={styles.showcase} aria-labelledby="joi-mobile-device-title">
-      <header className={styles.header}>
-        <div>
-          <span>{label}</span>
-          <h2 id="joi-mobile-device-title">THE LINK, INSIDE THE OBJECT.</h2>
-        </div>
-        <p>
-          Rotate Apple&apos;s official iPhone 17 Pro product-viewer model. The screen is intentionally left untouched so the hardware and materials can be reviewed without a soft simulator capture.
-        </p>
-      </header>
-
-      <div className={`${styles.stage} ${styles["mode-preview"]} ${sceneFailed ? styles.failed : ""}`}>
-        <div className={styles.sceneHost} ref={sceneHostRef} aria-hidden={sceneFailed ? "true" : undefined} />
-
-        <div className={styles.screenPark} ref={screenParkRef}>
-          <div className={styles.liveScreen} ref={screenRef}>
-            <img className={styles.parkedPoster} src={poster} alt="iPhone 17 Pro Home Screen" />
-          </div>
-        </div>
-
-        {sceneFailed && (
-          <button className={styles.flatPhone} type="button" onClick={openNativeDemo} aria-label="Open the Joi Mobile native demo">
-            <img src={poster} alt="iPhone 17 Pro Home Screen" />
-            <span>OPEN NATIVE DEMO ↗</span>
-          </button>
-        )}
-
-        <div className={styles.status} aria-live="polite">
-          <span className={styles.statusDot} />
-          DRAG TO TURN / TAP TO OPEN NATIVE DEMO
-        </div>
-
-        <div className={styles.controls}>
-          <button type="button" onClick={() => sceneRef.current?.resetView()}>RESET VIEW</button>
-          <a className={styles.primary} href={nativePlayUrl} target="_blank" rel="noreferrer">OPEN JOI MOBILE ↗</a>
-          {debug && <button type="button" onClick={toggleExploded}>{exploded ? "ASSEMBLE" : "EXPLODE"}</button>}
-        </div>
+    <figure className={`${styles.showcase} ${active ? styles.active : ""}`}>
+      <div className={styles.sceneHost} ref={sceneHostRef} aria-hidden={sceneFailed ? "true" : undefined} />
+      {/* The scene lifts this element into its own layer and hands it back on dispose, so
+          it has to exist — but nothing is drawn in it. It used to hold a copy of the home
+          screen that no one ever saw: the scene sets it to opacity 0 on construction, and
+          a scene that fails renders the flat card below instead. */}
+      <div className={styles.screenPark} ref={screenParkRef}>
+        <div className={styles.liveScreen} ref={screenRef} />
       </div>
 
-      <figcaption className={styles.caption}>
-        <p>{caption}</p>
-        <dl>
-          <div><dt>MODEL</dt><dd>APPLE PRODUCT VIEWER</dd></div>
-          <div><dt>BODY</dt><dd>150 × 71.9 × 8.75 MM</dd></div>
-          <div><dt>FINISH</dt><dd>COSMIC ORANGE</dd></div>
-          <div><dt>SCREEN</dt><dd>APPLE ORIGINAL / NO OVERLAY</dd></div>
-          <div><dt>ACTION</dt><dd>EXTERNAL NATIVE LINK</dd></div>
-        </dl>
-        <small>
-          The phone geometry, display surface and PBR maps come from Apple&apos;s product viewer. The transparent screen hit-area still opens the uploaded iOS Simulator build in a new tab.
-        </small>
-      </figcaption>
+      <noscript>
+        <a className={styles.noScriptPhone} href={nativePlayUrl} target="_blank" rel="noreferrer">
+          <img src={poster} alt="Joi Mobile home screen" />
+          <span>OPEN IOS BUILD ↗</span>
+        </a>
+      </noscript>
+
+      {sceneFailed && (
+        <button className={styles.flatPhone} type="button" onClick={openNativeDemo}>
+          <img src={poster} alt="Joi Mobile home screen" />
+          <span>OPEN IOS BUILD ↗</span>
+        </button>
+      )}
+
+      <div className={styles.controls} aria-hidden={!active}>
+        {motionSupported && (
+          <button
+            type="button"
+            onClick={() => void toggleMotion()}
+            tabIndex={active ? 0 : -1}
+            aria-pressed={motionOn}
+          >
+            {motionOn ? "RELEASE DEVICE" : "TILT TO TURN"}
+          </button>
+        )}
+        <button type="button" onClick={() => sceneRef.current?.resetView()} tabIndex={active ? 0 : -1}>
+          RESET VIEW
+        </button>
+        <a href={nativePlayUrl} target="_blank" rel="noreferrer" tabIndex={active ? 0 : -1}>
+          OPEN IOS BUILD ↗
+        </a>
+      </div>
+      <p className={styles.hint} aria-hidden="true">
+        {active ? "DRAG TO TURN · WHEEL TO ZOOM · TAP SCREEN TO OPEN" : "DEVICE PREVIEW"}
+      </p>
     </figure>
   );
 }

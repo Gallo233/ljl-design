@@ -2,7 +2,12 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { DRACOLoader } from "three/examples/jsm/loaders/DRACOLoader.js";
 import { ROOM_OBJECTS, type RoomObjectId } from "./roomObjects";
-import { retireCapturedDeck } from "./roomPlatter";
+import { boardSurface, ensureBoard, onBoardChange } from "./roomBoard";
+import {
+  clearDeckOfDeskProps,
+  retireCapturedDeck,
+  seatPropsOnDesk,
+} from "./roomPlatter";
 import {
   createRoomTurntable,
   type DeckControlId,
@@ -14,6 +19,8 @@ import {
   BASE_ATLAS_IDS,
   BASE_HOTSPOT_NODES,
   BASE_NODE_ATLAS,
+  BASE_NODE_FLAT,
+  BASE_NODE_IMAGE,
   BASE_NODE_UV,
   BASE_TRANSFORM,
   sanitizeNodeName,
@@ -154,6 +161,42 @@ const BAKED_FRAGMENT_SHADER = /* glsl */ `
 
 /** A restrained toe lift, shared by every atlas. */
 const BAKE_LIFT = 0.006;
+
+/** The drawable quad in the capture, sanitized the way the loader renames it. */
+const BOARD_FACE_NODE = sanitizeNodeName("whiteboard face");
+
+/**
+ * The whiteboard face: the bake, with the drawing laid over it.
+ *
+ * The drawing multiplies rather than replaces, so the board keeps the room's own light
+ * and shadow across it and the ink reads as ink on a lit surface instead of as a bright
+ * rectangle pasted into the wall. Where nothing has been drawn the alpha is zero and the
+ * bake comes through untouched.
+ *
+ * The remap exists because the face's atlas island is turned a quarter: its `u` runs up
+ * the wall and its `v` runs along it, and `v` grows in the direction the viewer reads as
+ * left. Read off the quad's four corners rather than guessed — see the audit note.
+ */
+const BOARD_FRAGMENT_SHADER = /* glsl */ `
+  precision highp float;
+  uniform sampler2D uBake;
+  uniform sampler2D uDraw;
+  uniform vec2 uBoardMin;
+  uniform vec2 uBoardSize;
+  uniform float uExposure;
+  uniform float uLift;
+  varying vec2 vBakeUv;
+  void main() {
+    vec3 surface = max(texture2D(uBake, vBakeUv).rgb, vec3(0.0)) * uExposure + uLift;
+    vec2 board = (vBakeUv - uBoardMin) / uBoardSize;
+    vec2 drawUv = vec2(1.0 - board.y, 1.0 - board.x);
+    if (drawUv.x >= 0.0 && drawUv.x <= 1.0 && drawUv.y >= 0.0 && drawUv.y <= 1.0) {
+      vec4 ink = texture2D(uDraw, drawUv);
+      surface = mix(surface, surface * ink.rgb, ink.a);
+    }
+    gl_FragColor = vec4(surface, 1.0);
+  }
+`;
 
 /**
  * A single physical frame of 35 mm stock.
@@ -433,6 +476,10 @@ export function createRoomScene(filmSources?: RoomFilmSources): RoomScene {
   const ownedTextures: any[] = [];
   let model: any = null;
   let deck: DeckRig | null = null;
+  let boardTexture: any = null;
+  let boardMaterial: any = null;
+  let unbindBoard: (() => void) | null = null;
+  const pictureMaterials = new Map<string, any>();
 
   const disposeObject = (root: any) => {
     const geometries = new Set<any>();
@@ -501,6 +548,127 @@ export function createRoomScene(filmSources?: RoomFilmSources): RoomScene {
         return material;
       };
 
+      /*
+       * A stand-in for a mesh the capture never baked.
+       *
+       * The colour goes through the atlas shader on a 1x1 texture rather than into a
+       * plain material, so it takes the same colour space, exposure and lift a sampled
+       * texel would. That is the whole point: the chair has to sit in the same tonal
+       * world as the objects around it, and matching that by eye against a lifted,
+       * exposed bake is guesswork.
+       */
+      const flatMaterials = new Map<string, any>();
+      const flatMaterialFor = (colour: string, id: BaseAtlasId) => {
+        const key = `${colour}:${id}`;
+        let material = flatMaterials.get(key);
+        if (!material) {
+          const rgb = new THREE.Color(colour);
+          const texture = new THREE.DataTexture(
+            new Uint8Array([
+              Math.round(rgb.r * 255), Math.round(rgb.g * 255), Math.round(rgb.b * 255), 255,
+            ]),
+            1,
+            1,
+            THREE.RGBAFormat,
+          );
+          texture.colorSpace = THREE.SRGBColorSpace;
+          texture.needsUpdate = true;
+          material = new THREE.ShaderMaterial({
+            name: `About room · ${id} · flat ${colour}`,
+            uniforms: {
+              uBake: { value: texture },
+              uExposure: { value: BASE_ATLAS_EXPOSURE[id] },
+              uLift: { value: BAKE_LIFT },
+            },
+            vertexShader: BAKED_VERTEX_SHADER[0],
+            fragmentShader: BAKED_FRAGMENT_SHADER,
+          });
+          material.toneMapped = false;
+          flatMaterials.set(key, material);
+        }
+        return material;
+      };
+
+      /*
+       * Bind the drawable surface to the board's own quad.
+       *
+       * The bounds come from the mesh so the drawing lands exactly on the face however
+       * the capture packed it, and the texture is left unflipped so canvas row 0 is the
+       * top of the board rather than the bottom.
+       */
+      const bindBoard = (node: any) => {
+        const uv = node.geometry?.attributes?.uv;
+        if (!uv || uv.count === 0) return;
+        let minU = Infinity, minV = Infinity, maxU = -Infinity, maxV = -Infinity;
+        for (let i = 0; i < uv.count; i += 1) {
+          const u = uv.getX(i);
+          const v = uv.getY(i);
+          if (u < minU) minU = u;
+          if (u > maxU) maxU = u;
+          if (v < minV) minV = v;
+          if (v > maxV) maxV = v;
+        }
+        const width = maxU - minU;
+        const height = maxV - minV;
+        if (!(width > 0.0001 && height > 0.0001)) return;
+
+        boardTexture = new THREE.CanvasTexture(boardSurface());
+        boardTexture.flipY = false;
+        boardTexture.colorSpace = THREE.SRGBColorSpace;
+        boardTexture.generateMipmaps = false;
+        boardTexture.minFilter = THREE.LinearFilter;
+        boardTexture.anisotropy = 4;
+
+        const atlas = BASE_NODE_ATLAS[node.name] ?? "group3";
+        boardMaterial = new THREE.ShaderMaterial({
+          name: "About room · whiteboard",
+          uniforms: {
+            uBake: { value: atlases.get(atlas) },
+            uDraw: { value: boardTexture },
+            uBoardMin: { value: new THREE.Vector2(minU, minV) },
+            uBoardSize: { value: new THREE.Vector2(width, height) },
+            uExposure: { value: BASE_ATLAS_EXPOSURE[atlas] },
+            uLift: { value: BAKE_LIFT },
+          },
+          vertexShader: BAKED_VERTEX_SHADER[0],
+          fragmentShader: BOARD_FRAGMENT_SHADER,
+        });
+        boardMaterial.toneMapped = false;
+        node.material = boardMaterial;
+
+        const flag = () => { if (boardTexture) boardTexture.needsUpdate = true; };
+        unbindBoard = onBoardChange(flag);
+        void ensureBoard().then(flag);
+      };
+
+      /*
+       * A picture, on a mesh that was authored to hold one.
+       *
+       * Shown as it is rather than multiplied into the bake: the sheet's UVs cover the
+       * whole atlas, so there is no bake to read at those coordinates in the first
+       * place. The print is dark, so an unlit surface still sits in the room.
+       */
+      const pictureLoader = new THREE.TextureLoader();
+      const pictureMaterialFor = (spec: { url: string; mirrorU?: boolean }) => {
+        let material = pictureMaterials.get(spec.url);
+        if (!material) {
+          const texture = pictureLoader.load(spec.url);
+          texture.colorSpace = THREE.SRGBColorSpace;
+          texture.flipY = false;
+          texture.wrapS = THREE.ClampToEdgeWrapping;
+          texture.wrapT = THREE.ClampToEdgeWrapping;
+          texture.anisotropy = 4;
+          if (spec.mirrorU) {
+            texture.repeat.x = -1;
+            texture.offset.x = 1;
+          }
+          material = new THREE.MeshBasicMaterial({ map: texture, toneMapped: false });
+          material.name = `About room · picture ${spec.url}`;
+          pictureMaterials.set(spec.url, material);
+        }
+        return material;
+      };
+
       model = gltf.scene;
       model.name = "about-room-desk";
       const placeholders = new Set<any>();
@@ -514,7 +682,19 @@ export function createRoomScene(filmSources?: RoomFilmSources): RoomScene {
         previous.filter(Boolean).forEach((material: any) => placeholders.add(material));
         const atlas = BASE_NODE_ATLAS[node.name];
         if (!atlas) unmapped.add(node.name);
-        node.material = materialFor(atlas ?? "group1", BASE_NODE_UV[node.name] ?? 0);
+        const picture = BASE_NODE_IMAGE[node.name];
+        if (picture) {
+          node.material = pictureMaterialFor(picture);
+          return;
+        }
+        const flat = BASE_NODE_FLAT[node.name];
+        if (node.name === BOARD_FACE_NODE) {
+          bindBoard(node);
+          if (boardMaterial) return;
+        }
+        node.material = flat
+          ? flatMaterialFor(flat, atlas ?? "group1")
+          : materialFor(atlas ?? "group1", BASE_NODE_UV[node.name] ?? 0);
       });
       placeholders.forEach((material) => material.dispose());
       if (unmapped.size > 0 && process.env.NODE_ENV !== "production") {
@@ -650,6 +830,22 @@ export function createRoomScene(filmSources?: RoomFilmSources): RoomScene {
         model.add(deck.group);
         deck.group.updateMatrixWorld(true);
 
+        /*
+         * Reconcile the room with the machine now standing in it.
+         *
+         * Both passes measure the scene rather than carrying numbers, so they stay
+         * correct if the capture is re-exported or the deck model changes shape. A
+         * margin scaled off the record keeps the clearance proportional to the room.
+         */
+        seatPropsOnDesk(model);
+        const cleared = clearDeckOfDeskProps(model, deck.group, slot.recordRadius * 0.04);
+        if (cleared && cleared.shift === 0 && process.env.NODE_ENV !== "production") {
+          console.warn(
+            `[about-room] the deck still overlaps ${cleared.against.join(", ")} and cannot`
+            + " give way on either side; it has outgrown the space on the desk",
+          );
+        }
+
         // Fit the object that is actually here. The previous fixed 6.15-unit orbit was
         // calibrated on the platter alone, so the plinth and its right-side controls fell
         // outside the view as soon as the canvas became narrower than that calibration.
@@ -668,6 +864,7 @@ export function createRoomScene(filmSources?: RoomFilmSources): RoomScene {
         // while this radius keeps the whole plinth and every physical control prominent.
         playerBoundsRadius = playerSphere.radius * 0.84;
         if (pendingLabel) deck.setLabel(pendingLabel);
+
       }
 
       Object.entries(BASE_HOTSPOT_NODES).forEach(([id, names]) => {
@@ -995,6 +1192,17 @@ export function createRoomScene(filmSources?: RoomFilmSources): RoomScene {
       ownedTextures.forEach((texture) => texture.dispose());
       scene.clear();
       handoffScene.clear();
+      unbindBoard?.();
+      unbindBoard = null;
+      pictureMaterials.forEach((material) => {
+        material.map?.dispose();
+        material.dispose();
+      });
+      pictureMaterials.clear();
+      boardTexture?.dispose();
+      boardTexture = null;
+      boardMaterial?.dispose();
+      boardMaterial = null;
       pickables.clear();
       interactiveMeshes.length = 0;
     },

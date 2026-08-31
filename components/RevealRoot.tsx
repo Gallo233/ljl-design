@@ -32,18 +32,16 @@ export function RevealRoot() {
 
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
 
+    const documentRoot = document.documentElement;
+    documentRoot.classList.remove("reveal-lights-on");
+
     // Wall-clock fail-open. Some embedded panes freeze the document timeline
     // at zero while setTimeout keeps working, which leaves every load and
-    // reveal animation on its first frame — copy at opacity 0 — forever. Three
-    // seconds after mount, CSS keyed on `reveal-lights-on` retires those
+    // reveal animation on its first frame — copy at opacity 0 — forever. After
+    // the normal reveal window, CSS keyed on `reveal-lights-on` retires those
     // animations and shows the content; in a real browser every affected
     // animation has finished by then, so this changes nothing there. Removed
     // on cleanup so the next page's entrances still play.
-    document.documentElement.classList.remove("reveal-lights-on");
-    const lightsOn = window.setTimeout(() => {
-      document.documentElement.classList.add("reveal-lights-on");
-    }, 3000);
-
     const settlers = new Set<number>();
     // Observer callbacks hand back Element; everything armed here is an HTMLElement
     // by construction, so the melt state machine narrows once at the top.
@@ -71,19 +69,32 @@ export function RevealRoot() {
       target.classList.add("reveal-armed");
       armed.push(target);
     });
-    if (armed.length === 0) return;
+    if (armed.length === 0) {
+      return () => documentRoot.classList.remove("reveal-lights-on");
+    }
 
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (!entry.isIntersecting) return;
-          reveal(entry.target);
-          observer.unobserve(entry.target);
-        });
-      },
-      { rootMargin: "0px 0px -8% 0px", threshold: 0.06 },
-    );
-    armed.forEach((target) => observer.observe(target));
+    let observer: IntersectionObserver | null = null;
+    if ("IntersectionObserver" in window) {
+      try {
+        observer = new IntersectionObserver(
+          (entries) => {
+            entries.forEach((entry) => {
+              if (!entry.isIntersecting) return;
+              reveal(entry.target);
+              observer?.unobserve(entry.target);
+            });
+          },
+          { rootMargin: "0px 0px -8% 0px", threshold: 0.06 },
+        );
+        armed.forEach((target) => observer?.observe(target));
+      } catch {
+        // The animation is optional. If the observer cannot take responsibility for
+        // the targets, hand the content back immediately instead of hiding it.
+        armed.forEach(reveal);
+      }
+    } else {
+      armed.forEach(reveal);
+    }
 
     // Fallback for browsers where the observer reports some targets but silently
     // misses a later one. Keep sweeping until every armed target is visible; a
@@ -100,6 +111,18 @@ export function RevealRoot() {
     };
     window.addEventListener("scroll", sweep, { passive: true });
 
+    // Recheck after route scroll restoration and font/layout settling. Next navigation
+    // can move the viewport after this effect's first measurement.
+    const layoutFrame = window.requestAnimationFrame(sweep);
+    const layoutCheck = window.setTimeout(sweep, 120);
+
+    const restore = () => {
+      if (document.visibilityState === "visible") sweep();
+    };
+    const restoreFromHistory = () => armed.forEach(reveal);
+    document.addEventListener("visibilitychange", restore);
+    window.addEventListener("pageshow", restoreFromHistory);
+
     // Final net: a block sitting inside the viewport that is still armed means nothing
     // is reporting. Stop trusting the machinery and show everything.
     const failsafe = window.setTimeout(() => {
@@ -109,15 +132,25 @@ export function RevealRoot() {
         return bounds.top < window.innerHeight && bounds.bottom > 0;
       });
       if (stranded) armed.forEach(reveal);
-    }, 3000);
+    }, 1600);
+
+    // CSS owns the final fail-open. It still works if an exception after arming leaves
+    // a class behind, or if a browser freezes the transition timeline itself.
+    const lightsOn = window.setTimeout(() => {
+      documentRoot.classList.add("reveal-lights-on");
+    }, 1800);
 
     return () => {
       settlers.forEach((id) => window.clearTimeout(id));
       window.clearTimeout(failsafe);
       window.clearTimeout(lightsOn);
-      document.documentElement.classList.remove("reveal-lights-on");
+      window.clearTimeout(layoutCheck);
+      window.cancelAnimationFrame(layoutFrame);
+      documentRoot.classList.remove("reveal-lights-on");
       window.removeEventListener("scroll", sweep);
-      observer.disconnect();
+      window.removeEventListener("pageshow", restoreFromHistory);
+      document.removeEventListener("visibilitychange", restore);
+      observer?.disconnect();
       armed.forEach(reveal);
     };
   }, []);

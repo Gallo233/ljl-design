@@ -27,6 +27,16 @@ body {
   text-rendering: optimizeLegibility;
 }
 
+/* A Work experience explicitly owns the whole viewport in INTERACT mode. The
+   persistent site controls keep playing/keeping time, but yield visually and
+   do not compete with the product's exit control. */
+body[data-work-experience-interact="true"] [data-global-music-sticker],
+body[data-work-experience-interact="true"] [data-site-hud] {
+  visibility: hidden;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
 img,
 video,
 canvas {
@@ -40,7 +50,7 @@ canvas {
 }
 
 /*
- * The landing half of the reel→detail transition (components/ArrivalFade.tsx).
+ * The landing half of the reel→Work transition (components/ArrivalFade.tsx).
  * Global because it renders on routes from both CSS worlds.
  */
 .arrival-veil {
@@ -48,8 +58,53 @@ canvas {
   inset: 0;
   z-index: 90;
   background: #fff6e8;
+  overflow: hidden;
   pointer-events: none;
-  animation: arrival-fade .46s ease forwards;
+  animation: arrival-fade .74s ease forwards;
+}
+
+.arrival-frame {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  display: grid;
+  align-content: space-between;
+  width: min(72vw, 90.6667svh, 820px);
+  aspect-ratio: 4 / 3;
+  padding: clamp(28px, 4vw, 58px);
+  overflow: hidden;
+  border-radius: 12px;
+  background:
+    radial-gradient(circle at 74% 28%, rgba(114,201,189,.18), transparent 28%),
+    #111c20;
+  color: #fff;
+  box-shadow: 0 28px 100px rgba(28, 25, 22, .2);
+  transform: translate(-50%, -50%);
+}
+
+.arrival-frame::after {
+  position: absolute;
+  inset: 8px 0;
+  border-top: 9px dotted rgba(255,246,232,.72);
+  border-bottom: 9px dotted rgba(255,246,232,.72);
+  content: "";
+}
+
+.arrival-frame span {
+  position: relative;
+  z-index: 1;
+  color: #72c9bd;
+  font: 500 10px/1.3 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: .16em;
+}
+
+.arrival-frame strong {
+  position: relative;
+  z-index: 1;
+  align-self: end;
+  max-width: 10ch;
+  font: 400 clamp(46px, 7vw, 110px)/.84 Georgia, "Times New Roman", serif;
+  letter-spacing: -.055em;
 }
 
 @keyframes arrival-fade {
@@ -76,6 +131,31 @@ canvas {
 
 [data-reveal="2"] { transition-delay: .08s; }
 [data-reveal="3"] { transition-delay: .16s; }
+
+/*
+ * Last-resort visibility guarantee. RevealRoot adds this only after the normal
+ * observer, scroll sweep and layout recheck have had time to run. A browser that
+ * strands a composited opacity/transform layer must never strand the content with it.
+ */
+html.reveal-lights-on [data-reveal].reveal-armed {
+  opacity: 1 !important;
+  transform: none !important;
+  transition: none !important;
+}
+
+html.reveal-lights-on [data-reveal="clip"].reveal-armed {
+  clip-path: inset(-25% -25% -25% -25%) !important;
+}
+
+html.reveal-lights-on [data-reveal="melt"].reveal-armed {
+  filter: none !important;
+}
+
+html.reveal-lights-on [data-reveal="melt"].reveal-armed .melt-media {
+  opacity: 1 !important;
+  filter: none !important;
+  animation: none !important;
+}
 
 /*
  * A second reveal shape, for headings.

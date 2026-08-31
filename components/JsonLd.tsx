@@ -66,7 +66,6 @@ export function ProjectJsonLd({ project }: { project: ProjectCase }) {
         ...(project.summary ? { abstract: project.summary } : {}),
         ...(project.kind ? { genre: project.kind } : {}),
         ...(project.updated ? { dateModified: project.updated } : {}),
-        ...(project.role ? { creditText: project.role } : {}),
         inLanguage: ["en", "zh-CN"],
         author: PERSON,
         isPartOf: {

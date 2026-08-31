@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 3,
+  "replayId": "viscose-mechanism-baseline-2026-08",
+  "entry": "capture-baseline/index.html",
+  "run": "python3 -m http.server 4178 --directory .web-shader-extractor/capture-baseline",
+  "viewport": { "width": 1512, "height": 870, "dpr": 1 },
+  "inputs": [
+    "wheel on canvas",
+    "horizontal pointer drag",
+    "pointer hover and fast pointer sweep"
+  ],
+  "source": {
+    "repository": "https://github.com/Yousuf-developer/Viscose-carousel",
+    "commit": "4b9ac8c6c60ab593c791a40855b61da78b5d9c8e",
+    "license": "MIT, code only"
+  },
+  "assetPolicy": "No upstream images or commercial fonts are included. The baseline is monochrome and mechanism-only.",
+  "expected": {
+    "rest": "three rounded cards settle on discrete slots",
+    "merge": "cards fuse through smooth-min and swept-box bridges",
+    "break": "bridge radius passes below zero and disappears without a hairline",
+    "pointer": "the field softens locally and a decaying radial wake remains after a fast sweep"
+  }
+}

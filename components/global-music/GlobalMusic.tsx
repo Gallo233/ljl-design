@@ -474,6 +474,7 @@ function GlobalMusicSticker() {
     <button
       type="button"
       className={styles.sticker}
+      data-global-music-sticker
       data-playing={isPlaying ? "true" : "false"}
       data-switching={isSwitching ? "true" : "false"}
       onClick={() => { void toggle(); }}

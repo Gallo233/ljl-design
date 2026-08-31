@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Jesper Landberg scroll behavior baseline</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <canvas id="stage" aria-hidden="true"></canvas>
+
+    <header class="hud hud--top">
+      <span>Source-derived scroll lab</span>
+      <button id="reset" type="button">Reset</button>
+    </header>
+
+    <main id="viewport" aria-label="循环项目轨道">
+      <div id="track" class="track">
+        <article class="card" data-title="Nathan Riley" data-tone="#ff6b36"></article>
+        <article class="card card--wide" data-title="Casa Di Solare" data-tone="#ffc44d"></article>
+        <article class="card" data-title="The Lookback" data-tone="#7f72ff"></article>
+        <article class="card card--wide" data-title="Book of Happiness" data-tone="#5ad8a6"></article>
+        <article class="card card--narrow" data-title="Dogelon Mars" data-tone="#eb6e9d"></article>
+        <article class="card" data-title="Gil Huybrecht" data-tone="#5cb8ff"></article>
+        <article class="card card--narrow" data-title="Discoveryland" data-tone="#efefef"></article>
+        <article class="card" data-title="Griflan" data-tone="#ff8c62"></article>
+      </div>
+    </main>
+
+    <aside class="metrics" aria-live="polite">
+      <div><span>target</span><output id="target">0.00</output></div>
+      <div><span>current</span><output id="current">0.00</output></div>
+      <div><span>lag</span><output id="lag">0.00</output></div>
+      <div><span>velocity</span><output id="velocity">0.000</output></div>
+    </aside>
+
+    <footer class="hud hud--bottom">
+      <span>滚轮 / 触摸板 / 左右拖拽 / 方向键</span>
+      <span>DOM 排版，Canvas 绘制</span>
+    </footer>
+
+    <script type="module" src="./motion-baseline.js"></script>
+  </body>
+</html>

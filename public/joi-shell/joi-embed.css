@@ -39,6 +39,63 @@
     box-shadow 260ms ease;
 }
 
+.joi-embed-frame:not(.is-input-enabled) {
+  pointer-events: none;
+}
+
+.joi-experience--stage,
+.joi-experience--stage .joi-embed-placeholder {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  border-radius: inherit;
+}
+
+.joi-experience--stage {
+  position: relative;
+  overflow: hidden;
+}
+
+.joi-experience--stage .joi-experience-mount {
+  width: 100%;
+  height: 100%;
+}
+
+.joi-experience-fallback--stage {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: grid;
+  place-content: center;
+  gap: 10px;
+  padding: 28px;
+  color: #172033;
+  text-align: center;
+  font-family: system-ui, sans-serif;
+}
+
+.joi-experience-fallback--stage strong {
+  font-size: clamp(18px, 2vw, 30px);
+  font-weight: 500;
+}
+
+.joi-experience-fallback--stage p {
+  max-width: 34ch;
+  margin: 0;
+  color: rgba(23, 32, 51, .6);
+}
+
+.joi-experience--stage .joi-embed-placeholder {
+  border: 0;
+  background: rgba(237, 241, 248, .96);
+  box-shadow: none;
+}
+
+.joi-embed-frame.is-stage-docked {
+  border: 0;
+  box-shadow: none;
+}
+
 /* Set for one frame while the wrapper crosses between the two coordinate
    systems; see setFloating() in joi-embed.js. */
 .joi-embed-frame.is-switching {

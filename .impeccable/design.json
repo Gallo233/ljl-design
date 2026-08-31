@@ -1,0 +1,140 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-08-30T15:05:00Z",
+  "title": "Design System: Gallo Living Signal",
+  "extensions": {
+    "colorMeta": {
+      "living-graphite": {
+        "role": "primary",
+        "displayName": "Living Graphite",
+        "canonical": "#191b22",
+        "tonalRamp": ["#0e0f14", "#191b22", "#2a2d36", "#454953", "#686c75", "#94979e", "#c7c9cd", "#f1f2f3"]
+      },
+      "warm-paper": {
+        "role": "neutral",
+        "displayName": "Warm Silver Paper",
+        "canonical": "#f1eee6",
+        "tonalRamp": ["#29261f", "#4a4439", "#6e6655", "#948b79", "#bab2a0", "#d8d2c4", "#f1eee6", "#fffaf3"]
+      },
+      "frost-paper": {
+        "role": "neutral",
+        "displayName": "Frost Paper",
+        "canonical": "#f0edf3",
+        "tonalRamp": ["#252329", "#454149", "#67616d", "#8d8695", "#b3acb9", "#d3ced8", "#f0edf3", "#fcfaff"]
+      },
+      "joi-teal": {
+        "role": "secondary",
+        "displayName": "Joi Phosphor Teal",
+        "canonical": "#72c9bd",
+        "tonalRamp": ["#102824", "#19423d", "#28635c", "#3d847a", "#57a69a", "#72c9bd", "#b5e3dc", "#eefaf8"]
+      },
+      "mobile-violet": {
+        "role": "secondary",
+        "displayName": "Companion Violet",
+        "canonical": "#a798e8",
+        "tonalRamp": ["#211d36", "#382f59", "#54477e", "#7264a5", "#8d7fc8", "#a798e8", "#d3cbf4", "#f5f2fd"]
+      },
+      "archive-coral": {
+        "role": "secondary",
+        "displayName": "Archive Coral",
+        "canonical": "#e0733f",
+        "tonalRamp": ["#35180e", "#572718", "#7f3922", "#aa4f2c", "#cd6235", "#e0733f", "#efb294", "#fbeadd"]
+      },
+      "game-periwinkle": {
+        "role": "secondary",
+        "displayName": "Pocket Periwinkle",
+        "canonical": "#9ba4cf",
+        "tonalRamp": ["#202438", "#353b59", "#50577d", "#6d76a1", "#858fba", "#9ba4cf", "#c8cde2", "#f1f2f8"]
+      }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Editorial Signal", "purpose": "Project identities and destination titles." },
+      "body": { "displayName": "Quiet Product Copy", "purpose": "Short positioning, instructions and dossiers." },
+      "label": { "displayName": "Machine Metadata", "purpose": "Navigation, state, ownership and indices." }
+    },
+    "shadows": [
+      { "name": "living-surface-lift", "value": "0 30px 80px rgba(25,27,34,0.15)", "purpose": "Fallback depth before the liquid field draws." },
+      { "name": "evidence-preview-lift", "value": "0 18px 44px -18px rgba(25,23,20,0.35)", "purpose": "Lab pointer preview only." }
+    ],
+    "motion": [
+      { "name": "state-settle", "value": "cubic-bezier(.2,.8,.2,1)", "purpose": "Aperture expansion and product state handoff." },
+      { "name": "fast-grab-slow-release", "value": "presence 0.22–0.24 in / 0.07–0.075 out", "purpose": "Sticky pointer hysteresis." }
+    ],
+    "breakpoints": [
+      { "name": "compact", "value": "800px" },
+      { "name": "mobile", "value": "700px" },
+      { "name": "game-landscape", "value": "orientation: landscape and max-height: 600px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Aperture Surface",
+      "kind": "custom",
+      "refersTo": "aperture-surface",
+      "description": "The CSS fallback for a DOM-aligned living surface.",
+      "html": "<section class=\"ds-aperture\"><h2>REAL EXPERIENCE</h2><p>The product remains independent from the material.</p></section>",
+      "css": ".ds-aperture{max-width:42rem;padding:2rem;border-radius:2.625rem;background:#191b22;color:#f1eee6;box-shadow:0 30px 80px rgba(25,27,34,.15);font-family:system-ui,sans-serif}.ds-aperture h2{margin:0;font-family:Georgia,serif;font-size:3rem;font-weight:400;line-height:.9}.ds-aperture p{max-width:42ch;margin:1.5rem 0 0;color:rgba(255,255,255,.66);line-height:1.5}"
+    },
+    {
+      "name": "Action Pill",
+      "kind": "button",
+      "refersTo": "action-pill",
+      "description": "Compact product action on a graphite surface.",
+      "html": "<button class=\"ds-action-pill\">OPEN EXPERIENCE</button>",
+      "css": ".ds-action-pill{min-height:36px;padding:0 14px;border:1px solid rgba(255,255,255,.27);border-radius:999px;background:transparent;color:#fff;font:500 9px/1 ui-monospace,monospace;letter-spacing:.1em;transition:background-color .18s,color .18s}.ds-action-pill:hover,.ds-action-pill:focus-visible{background:#fff;color:#191b22;outline:none}.ds-action-pill:focus-visible{box-shadow:0 0 0 3px rgba(114,201,189,.35)}"
+    },
+    {
+      "name": "Signal Status Chip",
+      "kind": "chip",
+      "refersTo": "signal-chip",
+      "description": "Literal project, archive or machine state.",
+      "html": "<span class=\"ds-signal-chip\">ONGOING</span>",
+      "css": ".ds-signal-chip{display:inline-flex;padding:5px 10px;border:1px solid #e0733f;border-radius:999px;color:#e0733f;font:500 9px/1 ui-monospace,monospace;letter-spacing:.14em}"
+    },
+    {
+      "name": "Fixed Signal Navigation",
+      "kind": "nav",
+      "description": "High-tracking route navigation that crosses both paper and graphite.",
+      "html": "<nav class=\"ds-signal-nav\"><a href=\"#\">GALLO</a><a href=\"#\">BACK TO REEL</a></nav>",
+      "css": ".ds-signal-nav{display:flex;justify-content:space-between;color:#191b22;font:500 10px/1 ui-monospace,monospace;letter-spacing:.15em}.ds-signal-nav a{position:relative;padding:12px 0;color:inherit;text-decoration:none}.ds-signal-nav a:after{position:absolute;right:0;bottom:7px;left:0;height:1px;background:currentColor;transform:scaleX(0);transform-origin:right;transition:transform .24s;content:\"\"}.ds-signal-nav a:hover:after,.ds-signal-nav a:focus-visible:after{transform:scaleX(1);transform-origin:left}"
+    },
+    {
+      "name": "Next Signal",
+      "kind": "card",
+      "description": "A destination that remains part of the same responsive medium.",
+      "html": "<a class=\"ds-next-signal\" href=\"#\"><span>NEXT / 04</span><strong>THE LAB</strong><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M5 12h13M13 6l6 6-6 6\"/></svg></a>",
+      "css": ".ds-next-signal{display:grid;grid-template-columns:1fr auto;align-content:center;min-height:156px;padding:32px;border-radius:32px;background:#191b22;color:#fff;text-decoration:none}.ds-next-signal span{grid-column:1/-1;color:#9ba4cf;font:500 9px/1 ui-monospace,monospace;letter-spacing:.15em}.ds-next-signal strong{align-self:end;font:400 48px/.88 Georgia,serif}.ds-next-signal svg{align-self:end;width:46px;fill:none;stroke:#9ba4cf;stroke-width:1.5;transition:transform .24s}.ds-next-signal:hover svg,.ds-next-signal:focus-visible svg{transform:translateX(8px)}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Living Signal",
+    "overview": "Gallo has two deliberately connected worlds. The homepage, reel, About and Contact live inside an old CRT machine; project experiences emerge onto bright paper while carrying a responsive signal medium out of that machine. Living Aperture is the reusable signature outside the CRT and the real product always stays independent from the effect.",
+    "keyCharacteristics": [
+      "Bright paper grounds carrying graphite living surfaces.",
+      "Editorial display type paired with restrained body copy and operational mono labels.",
+      "One real product or research object leads each destination.",
+      "Motion communicates ownership, connection, release and state rather than decorating every element.",
+      "CRT closing panels retain their own denser, darker world."
+    ],
+    "rules": [
+      { "name": "The One Signal Rule", "body": "A destination uses one project accent at a time; graphite and paper remain the majority of the frame.", "section": "colors" },
+      { "name": "The Truthful State Rule", "body": "Offline, retired, killed and loading states name themselves directly; color never pretends a product is available.", "section": "colors" },
+      { "name": "The Clear Text Rule", "body": "Semantic headings and controls remain crisp DOM text. Melting, blur and signal softening belong only to aria-hidden visual copies.", "section": "typography" },
+      { "name": "The Shader Owns the Surface Rule", "body": "Once a liquid renderer has completed a real frame, matching DOM fills and shadows become transparent; never stack a glass card over the aperture.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do let one real experience, device or body of research dominate the destination.",
+      "Do derive liquid geometry from the visible DOM so fallback and enhanced layouts share one structure.",
+      "Do cap render resolution to actual screen coverage and stop hidden or offscreen loops.",
+      "Do preserve project-specific composition inside the shared material language.",
+      "Do keep About and Contact in the CRT closing-panel world unless a future brief explicitly reopens them."
+    ],
+    "donts": [
+      "Don't flatten an iframe, live canvas or interactive DOM screen into a decorative WebGL texture.",
+      "Don't restore cleared case-study prose, screenshots or metrics as placeholders.",
+      "Don't add independent liquid canvases to every element; one shared field owns a surface family.",
+      "Don't add particle fog or a decorative grid unless the product surface itself is an operational workspace that requires it.",
+      "Don't hide essential content behind shader readiness, entrance animation or remote service availability."
+    ]
+  }
+}

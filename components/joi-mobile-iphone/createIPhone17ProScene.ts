@@ -1,13 +1,18 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
-import { KTX2Loader } from "three/examples/jsm/loaders/KTX2Loader.js";
 
 export type IPhoneShowcaseMode = "preview" | "entering" | "live";
 
 export type IPhoneScene = {
   setMode: (mode: IPhoneShowcaseMode) => void;
+  setInteractionEnabled: (enabled: boolean) => void;
   resetView: () => void;
   setExploded: (exploded: boolean) => void;
+  /**
+   * Hand the phone's pose to the visitor's own device. Returns false when the browser
+   * has no motion sensors or the permission was declined.
+   */
+  setDeviceOrientation: (enabled: boolean) => Promise<boolean>;
   getDiagnostics: () => { meshes: number; triangles: number; parts: string[]; selectedPart: string | null };
   dispose: () => void;
 };
@@ -15,7 +20,6 @@ export type IPhoneScene = {
 type SceneOptions = {
   container: HTMLElement;
   screenElement: HTMLElement;
-  posterUrl: string;
   onScreenTap: () => void;
   onLiveReady: () => void;
   onFatal?: () => void;
@@ -31,6 +35,7 @@ export const IPHONE_17_PRO = {
 } as const;
 
 const APPLE_MODEL_URL = "/models/apple/iphone-17-pro/iphone-17-pro.gltf";
+const APPLE_MODEL_BASE = "/models/apple/iphone-17-pro/";
 const SCREEN_W = 6.78;
 const SCREEN_H = SCREEN_W * (2622 / 1206);
 const SCREEN_R = 0.8;
@@ -64,6 +69,39 @@ function roundedPlane(width: number, height: number, radius: number) {
   }
   uvs.needsUpdate = true;
   return geometry;
+}
+
+/**
+ * Apple's viewer package stores precompressed ASTC KTX2 maps. Desktop WebGL
+ * implementations without ASTC reject every map even though the geometry is
+ * valid, creating dozens of console errors and leaving the finish inconsistent.
+ * The gallery owns a procedural PBR Cosmic Orange finish below, so remove only
+ * texture references before GLTFLoader sees the JSON; geometry, hierarchy,
+ * dimensions and material slots remain Apple's original data.
+ */
+function stripUnsupportedTextureBindings(source: any) {
+  const gltf = structuredClone(source);
+  delete gltf.images;
+  delete gltf.textures;
+  delete gltf.samplers;
+  const strip = (value: any) => {
+    if (!value || typeof value !== "object") return;
+    for (const key of Object.keys(value)) {
+      if (/texture/i.test(key)) {
+        delete value[key];
+      } else {
+        strip(value[key]);
+      }
+    }
+  };
+  for (const material of gltf.materials ?? []) strip(material);
+  gltf.extensionsUsed = (gltf.extensionsUsed ?? []).filter(
+    (name: string) => !/texture/i.test(name),
+  );
+  gltf.extensionsRequired = (gltf.extensionsRequired ?? []).filter(
+    (name: string) => !/texture/i.test(name),
+  );
+  return gltf;
 }
 
 function disposeObject(root: any) {
@@ -132,6 +170,8 @@ export function createIPhone17ProScene(options: SceneOptions): IPhoneScene {
   const reviewView = new URLSearchParams(window.location.search).get("modelReview");
   const fixedReviewView = reviewView === "front" || reviewView === "rear" || reviewView === "left" || reviewView === "right";
   const screenStyleSnapshot = screenElement.style.cssText;
+  const compactViewport = window.innerWidth < 700;
+  const basePixelRatio = Math.min(window.devicePixelRatio || 1, compactViewport ? 1.25 : 1.6);
 
   container.dataset.modelSource = "apple-official";
   container.dataset.modelReady = "loading";
@@ -142,12 +182,17 @@ export function createIPhone17ProScene(options: SceneOptions): IPhoneScene {
 
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: "high-performance" });
   renderer.setClearColor(0x000000, 0);
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75));
+  // The aperture is transform-scaled in browse mode. Rendering the phone at
+  // the unscaled layout box wastes several times the pixels without adding any
+  // visible detail. The scale is synchronized to actual screen coverage below.
+  renderer.setPixelRatio(basePixelRatio * 0.3);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.06;
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.shadowMap.autoUpdate = false;
+  renderer.shadowMap.needsUpdate = true;
   renderer.domElement.style.cssText = "position:absolute;inset:0;width:100%;height:100%;touch-action:pan-y pinch-zoom;cursor:grab;";
   renderer.domElement.setAttribute("aria-hidden", "true");
   container.appendChild(renderer.domElement);
@@ -180,7 +225,7 @@ export function createIPhone17ProScene(options: SceneOptions): IPhoneScene {
   const key = new THREE.DirectionalLight(0xf5f7ff, 2.8);
   key.position.set(-7, 12, 11);
   key.castShadow = true;
-  key.shadow.mapSize.set(1536, 1536);
+  key.shadow.mapSize.set(compactViewport ? 1024 : 1536, compactViewport ? 1024 : 1536);
   key.shadow.camera.near = 5;
   key.shadow.camera.far = 52;
   key.shadow.camera.left = -10;
@@ -215,12 +260,24 @@ export function createIPhone17ProScene(options: SceneOptions): IPhoneScene {
   phone.add(officialFrame);
   scene.add(phone);
 
+  /*
+   * There is no display plane.
+   *
+   * Apple's model already has one. What used to sit here was a second, separate panel
+   * standing 0.024 in front of it — first carrying a screenshot, then dark glass — and
+   * from any angle off-axis you could see it float: a black slab with a lit seam down
+   * the side where it parted company with the body.
+   *
+   * The only thing still needed at this depth is somewhere for a tap to land, and that
+   * is invisible.
+   */
+  const screenHitGeometry = roundedPlane(SCREEN_W, SCREEN_H, SCREEN_R);
   const screenHit = new THREE.Mesh(
-    roundedPlane(SCREEN_W, SCREEN_H, SCREEN_R),
+    screenHitGeometry,
     new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false }),
   );
   screenHit.name = "joi-mobile-screen-hit-area";
-  screenHit.position.z = SCREEN_Z - 0.015;
+  screenHit.position.z = SCREEN_Z - 0.03;
   screenHit.rotation.y = Math.PI;
   screenHit.material.side = THREE.DoubleSide;
   phone.add(screenHit);
@@ -232,8 +289,7 @@ export function createIPhone17ProScene(options: SceneOptions): IPhoneScene {
   const explodeTargets: ExplodeTarget[] = [];
   let officialModel: any = null;
   let disposed = false;
-  const ktx2Loader = new KTX2Loader().setTranscoderPath("/basis/").detectSupport(renderer);
-  const gltfLoader = new GLTFLoader().setKTX2Loader(ktx2Loader);
+  const gltfLoader = new GLTFLoader();
 
   let selectedPart: string | null = null;
   let namedParts: string[] = [];
@@ -257,9 +313,7 @@ export function createIPhone17ProScene(options: SceneOptions): IPhoneScene {
   };
   publishDiagnostics();
 
-  gltfLoader.load(
-    APPLE_MODEL_URL,
-    (gltf: any) => {
+  const acceptModel = (gltf: any) => {
       if (disposed) {
         disposeObject(gltf.scene);
         return;
@@ -295,16 +349,31 @@ export function createIPhone17ProScene(options: SceneOptions): IPhoneScene {
       namedParts = Array.from(new Set(namedParts));
       phone.userData.sculptRuntime = { source: "apple-official", parts: namedParts, getDiagnostics: collectDiagnostics };
       container.dataset.modelReady = "true";
+      renderer.shadowMap.needsUpdate = true;
       publishDiagnostics();
-    },
-    undefined,
-    (error: unknown) => {
+  };
+  const rejectModel = (error: unknown) => {
       if (disposed) return;
       container.dataset.modelReady = "false";
       console.error("Unable to load Apple iPhone 17 Pro product-viewer model", error);
       options.onFatal?.();
-    },
-  );
+  };
+
+  fetch(APPLE_MODEL_URL, { cache: "force-cache" })
+    .then((response) => {
+      if (!response.ok) throw new Error(`iPhone model request failed (${response.status})`);
+      return response.json();
+    })
+    .then((source) => {
+      if (disposed) return;
+      gltfLoader.parse(
+        JSON.stringify(stripUnsupportedTextureBindings(source)),
+        APPLE_MODEL_BASE,
+        acceptModel,
+        rejectModel,
+      );
+    })
+    .catch(rejectModel);
 
   const raycaster = new THREE.Raycaster();
   const pointer = new THREE.Vector2();
@@ -322,8 +391,8 @@ export function createIPhone17ProScene(options: SceneOptions): IPhoneScene {
   let targetPitch = pitch;
   let yawVelocity = 0;
   let pitchVelocity = 0;
-  let cameraDistance = 33;
-  let targetDistance = 33;
+  let cameraDistance = 36;
+  let targetDistance = 36;
   let liveReadySent = false;
   let explodedMix = 0;
   let explodedTarget = 0;
@@ -335,18 +404,29 @@ export function createIPhone17ProScene(options: SceneOptions): IPhoneScene {
   let lastY = 0;
   let dragging = false;
   let horizontalTouch = false;
-  let suppressNextClick = false;
   let frame = 0;
+  let frameCount = 0;
   let idleSince = performance.now();
+  let interactionEnabled = false;
+  let pageVisible = !document.hidden;
+  let visibleInViewport = true;
+  let layoutWidth = 1;
+  let layoutHeight = 1;
+  let renderScale = 0.3;
+  let shadowYaw = Number.POSITIVE_INFINITY;
+  let shadowPitch = Number.POSITIVE_INFINITY;
+  let shadowY = Number.POSITIVE_INFINITY;
+  let shadowExploded = Number.POSITIVE_INFINITY;
 
   const setLiveDom = () => {
-    // Deliberately show Apple's native display material with no simulator art.
+    // The simulator capture is rendered by the rounded Three.js screen plane;
+    // the parked DOM copy exists only for the static fallback path.
     screenElement.style.opacity = "0";
     screenElement.style.pointerEvents = "none";
   };
 
   const onPointerDown = (event: PointerEvent) => {
-    if (mode === "live" || event.button > 0) return;
+    if (!interactionEnabled || mode === "live" || event.button > 0) return;
     pointerId = event.pointerId;
     pointerType = event.pointerType;
     downX = lastX = event.clientX;
@@ -359,7 +439,7 @@ export function createIPhone17ProScene(options: SceneOptions): IPhoneScene {
   };
 
   const onPointerMove = (event: PointerEvent) => {
-    if (event.pointerId !== pointerId || mode === "live") return;
+    if (!interactionEnabled || event.pointerId !== pointerId || mode === "live") return;
     const totalX = event.clientX - downX;
     const totalY = event.clientY - downY;
     if (!dragging && Math.hypot(totalX, totalY) >= 6) {
@@ -399,8 +479,8 @@ export function createIPhone17ProScene(options: SceneOptions): IPhoneScene {
   };
 
   const onPointerUp = (event: PointerEvent) => {
-    if (event.pointerId !== pointerId) return;
-    suppressNextClick = dragging || (!dragging && mode === "preview" && tapScreen(event));
+    if (!interactionEnabled || event.pointerId !== pointerId) return;
+    if (!dragging && mode === "preview") tapScreen(event);
     if (renderer.domElement.hasPointerCapture(event.pointerId)) renderer.domElement.releasePointerCapture(event.pointerId);
     pointerId = null;
     dragging = false;
@@ -409,18 +489,10 @@ export function createIPhone17ProScene(options: SceneOptions): IPhoneScene {
     idleSince = performance.now();
   };
 
-  const onClick = () => {
-    if (suppressNextClick) {
-      suppressNextClick = false;
-      return;
-    }
-    if (mode === "preview") options.onScreenTap();
-  };
-
   const onWheel = (event: WheelEvent) => {
-    if (mode === "live") return;
+    if (!interactionEnabled || mode === "live") return;
     event.preventDefault();
-    targetDistance = THREE.MathUtils.clamp(targetDistance + event.deltaY * 0.012, 27, 39.5);
+    targetDistance = THREE.MathUtils.clamp(targetDistance + event.deltaY * 0.012, 30, 43);
     idleSince = performance.now();
   };
 
@@ -428,38 +500,128 @@ export function createIPhone17ProScene(options: SceneOptions): IPhoneScene {
   renderer.domElement.addEventListener("pointermove", onPointerMove);
   renderer.domElement.addEventListener("pointerup", onPointerUp);
   renderer.domElement.addEventListener("pointercancel", onPointerUp);
-  renderer.domElement.addEventListener("click", onClick);
   renderer.domElement.addEventListener("wheel", onWheel, { passive: false });
   const onContextLost = (event: Event) => { event.preventDefault(); options.onFatal?.(); };
   renderer.domElement.addEventListener("webglcontextlost", onContextLost);
 
-  const resize = () => {
+  /*
+   * The visitor's own device as an input.
+   *
+   * Adapted from AetherTwin Studio's calibration: the first sample after enabling
+   * becomes the zero, and every later one is read against it. That is what makes
+   * "hold the phone however you are already holding it, then tap" work — there is no
+   * absolute frame to agree on, only the change since you started.
+   *
+   * It drives the same yaw/pitch targets the drag does rather than a quaternion, so
+   * the smoothing, the clamps and the reset button all keep working unchanged.
+   */
+  let orientationEnabled = false;
+  let orientationZero: { beta: number; gamma: number } | null = null;
+
+  const onDeviceOrientation = (event: DeviceOrientationEvent) => {
+    if (!orientationEnabled || event.beta === null || event.gamma === null) return;
+    if (!orientationZero) orientationZero = { beta: event.beta, gamma: event.gamma };
+    targetYaw = Math.PI - 0.42 + THREE.MathUtils.degToRad(event.gamma - orientationZero.gamma) * 1.7;
+    targetPitch = THREE.MathUtils.clamp(
+      THREE.MathUtils.degToRad(event.beta - orientationZero.beta) * 1.1,
+      -0.49,
+      0.49,
+    );
+    yawVelocity = 0;
+    pitchVelocity = 0;
+    // Hold off the idle drift for as long as the device is being held.
+    idleSince = performance.now();
+    ensureAnimation();
+  };
+
+  const setDeviceOrientation = async (enabled: boolean) => {
+    if (!enabled) {
+      orientationEnabled = false;
+      orientationZero = null;
+      window.removeEventListener("deviceorientation", onDeviceOrientation);
+      return false;
+    }
+    const constructor = (window as any).DeviceOrientationEvent;
+    if (!constructor) return false;
+    // iOS 13+ gates the sensors behind a prompt that only opens from a user gesture,
+    // which is why this is a control the visitor presses rather than something the
+    // page turns on for them.
+    if (typeof constructor.requestPermission === "function") {
+      try {
+        if (await constructor.requestPermission() !== "granted") return false;
+      } catch {
+        return false;
+      }
+    }
+    orientationEnabled = true;
+    orientationZero = null;
+    window.addEventListener("deviceorientation", onDeviceOrientation);
+    return true;
+  };
+
+  const chooseRenderScale = () => {
+    if (interactionEnabled) return 1;
+    const rect = container.getBoundingClientRect();
+    const visualScale = Math.min(
+      rect.width / Math.max(1, container.clientWidth),
+      rect.height / Math.max(1, container.clientHeight),
+    );
+    if (visualScale < 0.41) return 0.3;
+    if (visualScale < 0.62) return 0.56;
+    if (visualScale < 0.82) return 0.78;
+    return 1;
+  };
+
+  const syncRendererSize = (layoutChanged = false) => {
     const width = Math.max(1, container.clientWidth);
     const height = Math.max(1, container.clientHeight);
+    const nextScale = chooseRenderScale();
+    const sizeChanged = layoutChanged || width !== layoutWidth || height !== layoutHeight;
+    const scaleChanged = Math.abs(nextScale - renderScale) > 0.001;
+    layoutWidth = width;
+    layoutHeight = height;
+    renderScale = nextScale;
     camera.aspect = width / height;
     camera.updateProjectionMatrix();
-    renderer.setSize(width, height, false);
+    if (scaleChanged) renderer.setPixelRatio(basePixelRatio * renderScale);
+    if (sizeChanged || scaleChanged) renderer.setSize(width, height, false);
+    const drawingBuffer = renderer.getDrawingBufferSize(new THREE.Vector2());
+    container.dataset.renderScale = renderScale.toFixed(2);
+    container.dataset.drawingBuffer = `${Math.round(drawingBuffer.x)}x${Math.round(drawingBuffer.y)}`;
   };
+  const resize = () => syncRendererSize(true);
   const resizeObserver = new ResizeObserver(resize);
   resizeObserver.observe(container);
   resize();
 
-  const animate = (now: number) => {
-    if (disposed) return;
+  const ensureAnimation = () => {
+    if (disposed || frame || !pageVisible || !visibleInViewport) return;
     frame = requestAnimationFrame(animate);
+  };
+
+  const animate = (now: number) => {
+    frame = 0;
+    if (disposed || !pageVisible || !visibleInViewport) return;
+    frameCount += 1;
+    // Transform changes do not trigger ResizeObserver. Sample at a low cadence
+    // and resize only when crossing a coarse screen-coverage tier, avoiding
+    // per-frame layout reads and framebuffer reallocations.
+    if (frameCount % 10 === 0) syncRendererSize();
     const returning = mode === "entering" || mode === "live";
     if (fixedReviewView) {
       targetYaw = reviewYaw;
       targetPitch = 0;
-      targetDistance = 33;
+      targetDistance = 36;
       yawVelocity = 0;
       pitchVelocity = 0;
     } else if (returning) {
       targetYaw = 0;
       targetPitch = 0;
-      targetDistance = 33;
+      targetDistance = 36;
       yawVelocity = 0;
       pitchVelocity = 0;
+    } else if (orientationEnabled) {
+      // The sensor owns the targets; nothing else may add to them.
     } else if (!reducedMotion && !dragging && now - idleSince > 2400) {
       targetYaw += 0.0017;
     } else if (!dragging) {
@@ -473,7 +635,8 @@ export function createIPhone17ProScene(options: SceneOptions): IPhoneScene {
     pitch += (targetPitch - pitch) * smoothing;
     cameraDistance += (targetDistance - cameraDistance) * 0.12;
     phone.rotation.set(pitch, yaw, 0);
-    phone.position.y = reducedMotion || fixedReviewView ? 0 : Math.sin(now * 0.00075) * 0.055;
+    const phoneY = reducedMotion || fixedReviewView ? 0 : Math.sin(now * 0.00075) * 0.055;
+    phone.position.y = phoneY;
     camera.position.z = cameraDistance;
     camera.lookAt(0, 0, 0);
 
@@ -488,9 +651,34 @@ export function createIPhone17ProScene(options: SceneOptions): IPhoneScene {
       setLiveDom();
       options.onLiveReady();
     }
+    const shadowThreshold = dragging ? 0.018 : 0.036;
+    if (
+      Math.abs(yaw - shadowYaw) > shadowThreshold
+      || Math.abs(pitch - shadowPitch) > shadowThreshold
+      || Math.abs(phoneY - shadowY) > 0.024
+      || Math.abs(explodedMix - shadowExploded) > 0.035
+    ) {
+      renderer.shadowMap.needsUpdate = true;
+      shadowYaw = yaw;
+      shadowPitch = pitch;
+      shadowY = phoneY;
+      shadowExploded = explodedMix;
+    }
     renderer.render(scene, camera);
+    ensureAnimation();
   };
-  frame = requestAnimationFrame(animate);
+
+  const onVisibilityChange = () => {
+    pageVisible = !document.hidden;
+    if (pageVisible) ensureAnimation();
+  };
+  document.addEventListener("visibilitychange", onVisibilityChange);
+  const intersectionObserver = new IntersectionObserver((entries) => {
+    visibleInViewport = entries.some((entry) => entry.isIntersecting);
+    if (visibleInViewport) ensureAnimation();
+  });
+  intersectionObserver.observe(container);
+  ensureAnimation();
 
   return {
     setMode(nextMode) {
@@ -498,23 +686,43 @@ export function createIPhone17ProScene(options: SceneOptions): IPhoneScene {
       liveReadySent = false;
       if (nextMode === "preview") {
         setLiveDom();
-        renderer.domElement.style.pointerEvents = "auto";
-        renderer.domElement.style.cursor = "grab";
+        renderer.domElement.style.pointerEvents = interactionEnabled ? "auto" : "none";
+        renderer.domElement.style.cursor = interactionEnabled ? "grab" : "default";
         idleSince = performance.now();
       } else {
         renderer.domElement.style.cursor = "default";
         if (nextMode === "live") setLiveDom();
       }
     },
+    setInteractionEnabled(enabled) {
+      interactionEnabled = enabled;
+      renderer.domElement.style.pointerEvents = enabled ? "auto" : "none";
+      renderer.domElement.style.cursor = enabled ? "grab" : "default";
+      renderer.domElement.style.touchAction = enabled ? "none" : "pan-y pinch-zoom";
+      if (!enabled) {
+        pointerId = null;
+        dragging = false;
+        horizontalTouch = false;
+      }
+      idleSince = performance.now();
+      syncRendererSize();
+      ensureAnimation();
+    },
     resetView() {
       targetYaw = Math.PI - 0.42;
       targetPitch = 0.08;
-      targetDistance = 33;
+      targetDistance = 36;
       yawVelocity = 0;
       pitchVelocity = 0;
+      idleSince = performance.now();
+      ensureAnimation();
     },
     setExploded(exploded) {
       explodedTarget = exploded ? 1 : 0;
+      ensureAnimation();
+    },
+    setDeviceOrientation(enabled) {
+      return setDeviceOrientation(enabled);
     },
     getDiagnostics() {
       return collectDiagnostics();
@@ -522,24 +730,30 @@ export function createIPhone17ProScene(options: SceneOptions): IPhoneScene {
     dispose() {
       disposed = true;
       cancelAnimationFrame(frame);
+      frame = 0;
       resizeObserver.disconnect();
+      intersectionObserver.disconnect();
+      document.removeEventListener("visibilitychange", onVisibilityChange);
       renderer.domElement.removeEventListener("pointerdown", onPointerDown);
       renderer.domElement.removeEventListener("pointermove", onPointerMove);
       renderer.domElement.removeEventListener("pointerup", onPointerUp);
       renderer.domElement.removeEventListener("pointercancel", onPointerUp);
-      renderer.domElement.removeEventListener("click", onClick);
       renderer.domElement.removeEventListener("wheel", onWheel);
       renderer.domElement.removeEventListener("webglcontextlost", onContextLost);
-      ktx2Loader.dispose();
+      window.removeEventListener("deviceorientation", onDeviceOrientation);
+      orientationEnabled = false;
       environment.dispose();
       disposeObject(scene);
       renderer.dispose();
+      renderer.forceContextLoss?.();
       renderer.domElement.remove();
       delete container.dataset.modelMeshes;
       delete container.dataset.modelTriangles;
       delete container.dataset.modelParts;
       delete container.dataset.modelSource;
       delete container.dataset.modelReady;
+      delete container.dataset.renderScale;
+      delete container.dataset.drawingBuffer;
       delete container.dataset.reviewView;
       if (fixedReviewView) delete document.documentElement.dataset.modelReview;
       screenElement.style.cssText = screenStyleSnapshot;

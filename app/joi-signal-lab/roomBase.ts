@@ -120,17 +120,72 @@ for (let i = 1; i <= 4; i += 1) {
 /**
  * Meshes whose atlas layout lives in TEXCOORD_1 rather than TEXCOORD_0.
  *
- * The chair came into the original scene from a different source than the desk did and
- * kept its own texture UVs in slot 0; its bake was packed into slot 1. Sampling slot 0
- * paints the atlas's whole packing layout across the seat, which is unmistakable.
+ * Some of the capture's objects arrived from a different source than the desk did and
+ * kept their own texture UVs in slot 0, with the bake packed into slot 1. Sampling slot
+ * 0 on those paints the atlas's packing layout across them, which is unmistakable.
+ *
+ * Which slot holds the bake is a question with an answer, not a guess: read the mesh's
+ * UVs and sample the atlas at them. A bake layout lands on ink; a texture layout strays
+ * onto the light grey the packer leaves between islands. The ceiling tubes were the ones
+ * still getting it wrong — slot 0 straddles the background, slot 1 is solid ink.
  */
 const AUTHORED_NODE_UV: Record<string, 0 | 1> = {
-  "top chair": 1,
-  "top chair.002": 1,
+  "Tube_Light Grey_0.001": 1,
+  "Tube_Light Grey_0.002": 1,
+  "Tube_Light Grey_0.003": 1,
+};
+
+/**
+ * Meshes the capture ships geometry for but never baked, and the colour to stand in.
+ *
+ * The chair is the one object here with no lightmap at all. Its slot 0 UVs span the full
+ * 0..1 of the atlas — no bake layout does that, since a bake gives every mesh its own
+ * island — and its slot 1 UVs are broken two different ways: `top chair` runs from
+ * -1.3994 to 2.3994, so it wraps the atlas several times over and smears it into bands,
+ * and `top chair.002` is degenerate, every vertex sitting on exactly (0, 1) so the whole
+ * panel samples a single texel. Both land on the packer's grey background rather than on
+ * ink, which is why the backrest read as a pale streaked panel instead of as a chair.
+ *
+ * There is nothing to recover, so the panels take the median ink of the atlas they
+ * belong to — the same near-black the turntable and the tubes beside them bake to. It
+ * runs through the same exposure and lift as a sampled texel would, so it sits in the
+ * room's tonal world rather than beside it.
+ */
+const AUTHORED_NODE_FLAT: Record<string, string> = {
+  "top chair": "#1f1d19",
+  "top chair.002": "#1f1d19",
 };
 
 export const BASE_NODE_UV: Record<string, 0 | 1> = Object.fromEntries(
   Object.entries(AUTHORED_NODE_UV).map(([name, channel]) => [sanitizeNodeName(name), channel]),
+);
+
+/**
+ * Meshes the original site put a picture on rather than a bake, and the picture to hang.
+ *
+ * `poster.002` is the sheet inside the frame beside the bookshelf — the original hung a
+ * film poster there. It is authored for it: sixteen vertices whose UVs run the full 0..1,
+ * which is what a mesh meant to carry one whole image looks like and is nothing like a
+ * bake island. Routed to the atlas it samples the entire 2048px sheet and comes out as
+ * the packing layout, which is the garble that was in the frame.
+ *
+ * `mirrorU` because the sheet's `u` grows toward the viewer's left: read off its corners,
+ * where u=0 sits at z=+2.02 and the room is viewed from +X, so +Z is the viewer's right.
+ * Without it the picture hangs back to front.
+ */
+const AUTHORED_NODE_IMAGE: Record<string, { url: string; mirrorU?: boolean }> = {
+  "poster.002": { url: "/work/about-room/poster-art.jpg", mirrorU: true },
+};
+
+/** The same table, keyed the way the nodes actually arrive. */
+export const BASE_NODE_IMAGE: Record<string, { url: string; mirrorU?: boolean }> =
+  Object.fromEntries(
+    Object.entries(AUTHORED_NODE_IMAGE).map(([name, spec]) => [sanitizeNodeName(name), spec]),
+  );
+
+/** The same table, keyed the way the nodes actually arrive. */
+export const BASE_NODE_FLAT: Record<string, string> = Object.fromEntries(
+  Object.entries(AUTHORED_NODE_FLAT).map(([name, colour]) => [sanitizeNodeName(name), colour]),
 );
 
 /** The same table, keyed the way the nodes actually arrive. */
@@ -201,6 +256,12 @@ const AUTHORED_HOTSPOT_NODES: Partial<Record<RoomObjectId, string[]>> = {
    * invisible machine catching every click meant for the real one.
    */
   "joi-music-box": ["about-room-deck", "headphones"],
+  /*
+   * The board and its face. The face is the drawable surface — a single quad whose
+   * atlas island `room3d` reads at load so the drawing can be laid over the bake in
+   * the right place and the right way up.
+   */
+  whiteboard: ["whiteboard", "whiteboard face"],
 };
 
 /** Same lists, sanitized to the names `getObjectByName` will actually see. */

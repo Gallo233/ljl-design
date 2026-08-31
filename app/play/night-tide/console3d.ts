@@ -95,6 +95,7 @@ export const CONSOLE_ACCENTS = {
   sage: "#a9c9b6",
   salmon: "#e0968a",
   wheat: "#e8c68d",
+  amethyst: "#b6a2cf",
 } as const;
 
 /**
@@ -872,7 +873,7 @@ export function createConsoleScene(options: ConsoleSceneOptions): ConsoleScene {
     camera.updateProjectionMatrix();
 
     renderer.setPixelRatio(
-      Math.min(window.devicePixelRatio || 1, tier.dprCap, aspect < 1 ? 1.6 : Infinity),
+      Math.min(window.devicePixelRatio || 1, tier.dprCap, 1.4),
     );
     renderer.setSize(w, h, false);
     css.setSize(w, h);

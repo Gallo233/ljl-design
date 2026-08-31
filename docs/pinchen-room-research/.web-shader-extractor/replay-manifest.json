@@ -1,0 +1,176 @@
+{
+  "schemaVersion": 3,
+  "source": {
+    "url": "https://jesperlandberg.com/",
+    "canonicalUrl": "https://jesperlandberg.com/",
+    "route": "/",
+    "permissionBoundary": "public",
+    "allowedPermissionBoundaries": ["public", "user-authorized", "external-blocked"],
+    "viewport": { "width": 1280, "height": 720, "dpr": 2 }
+  },
+  "targetSurfaces": [
+    {
+      "id": "surface-1",
+      "role": "visible-pixel WebGL surface",
+      "replayDisposition": "not visually replayed; behavior represented by Canvas2D proxy"
+    },
+    {
+      "id": "surface-2",
+      "role": "DOM layout and hit-test group",
+      "replayDisposition": "recreated with accessible DOM cards"
+    }
+  ],
+  "runtime": {
+    "backend": "WebGL2 (source); Canvas2D (baseline downgrade)",
+    "framework": "Three.js r185 + Nuxt/Vue + GSAP (source); vanilla DOM/Canvas2D (baseline)",
+    "platform": "browser",
+    "owner": "main-thread"
+  },
+  "renderGraph": {
+    "passes": [
+      { "name": "source-direct", "order": 1, "truth": "SOURCE", "description": "scene then overlay" },
+      { "name": "source-post", "order": 2, "truth": "SOURCE", "description": "scene target, pointer feedback/distortion, overlay, canvas" },
+      { "name": "baseline-draw", "order": 1, "truth": "GUESS", "description": "clear, draw wrapped proxy cards and labels in Canvas2D" }
+    ],
+    "framebuffers": [
+      { "name": "source-scene-target", "truth": "SOURCE", "size": "drawing buffer" },
+      { "name": "source-trail-ping-pong", "truth": "SOURCE", "size": "256px width" },
+      { "name": "source-ground-reflection", "truth": "SOURCE", "size": "approximately 10% drawing buffer" }
+    ],
+    "dependencies": [
+      "DOM measured rectangles drive source planes",
+      "virtual scroll lag drives source deformation",
+      "baseline DOM rectangles drive Canvas2D proxy cards"
+    ]
+  },
+  "resources": [
+    { "kind": "public-js", "role": "source analysis", "path": "evidence/source/build-index.md", "truth": "SOURCE" },
+    { "kind": "ktx2-manifest", "role": "source texture pipeline", "path": "evidence/network/asset-index.md", "truth": "SOURCE" },
+    { "kind": "baseline-assets", "role": "none; gradients and text are generated locally", "path": "capture-baseline/", "truth": "GUESS" }
+  ],
+  "state": {
+    "gl": {
+      "source": "WebGLRenderer antialias true, alpha false, high-performance, DPR cap 2",
+      "truth": "SOURCE"
+    },
+    "webgpu": {},
+    "canvas2d": {
+      "baseline": "DPR-capped fixed canvas, DOM-measured card rectangles",
+      "truth": "GUESS"
+    }
+  },
+  "timeline": {
+    "timeOrigin": "requestAnimationFrame timestamp",
+    "unit": "milliseconds with 60Hz frameRatio normalization",
+    "deltaRule": "input follower caps frameRatio at 2; inertia at 4; renderer delta at 50ms",
+    "random": "none required by the interaction-only baseline"
+  },
+  "inputs": {
+    "pointer": {
+      "drag": "10px horizontal-intent threshold, movement ×1.5, release ×12 inside 100ms",
+      "baseline": "mouse pointer drag only"
+    },
+    "scroll": {
+      "wheel": "deltaMode normalized; ×1.25; isolated notches may enter ×2 inertia",
+      "touch": "source ×3.25 with ×35 release; documented but not implemented in desktop baseline",
+      "keyboard": "arrows ±100; page/space ±0.9 viewport height"
+    },
+    "resize": "remeasure DOM cards and resize DPR-capped canvas",
+    "route": "source uses persistent data-id planes; omitted from interaction-only baseline"
+  },
+  "output": {
+    "colorSpace": "source explicit output-color setting, symbolically PARTIAL; baseline browser Canvas2D",
+    "toneMapping": "not required for behavior baseline",
+    "premultipliedAlpha": false,
+    "domComposite": "source DOM visible paint transparent with WebGL pixels; baseline DOM supplies transparent layout and Canvas2D supplies visible proxy"
+  },
+  "pageBindings": [
+    { "binding": "card DOMRect → wrapped visual rectangle", "truth": "SOURCE" },
+    { "binding": "target-current lag → signed squared tanh velocity", "truth": "SOURCE" },
+    { "binding": "baseline velocity → small proxy vertical offset", "truth": "GUESS" }
+  ],
+  "routes": [
+    { "path": "/", "coverage": "primary source analysis and behavior baseline" },
+    { "path": "/projects/the-lookback", "coverage": "source inspection only" },
+    { "path": "/full/", "coverage": "source inspection only" }
+  ],
+  "evidence": [
+    { "id": "ev-001", "path": "evidence/runtime/initial-surface.json", "truth": "SOURCE" },
+    { "id": "ev-002", "path": "evidence/runtime/render-architecture.md", "truth": "SOURCE" },
+    { "id": "ev-003", "path": "evidence/source/build-index.md", "truth": "SOURCE" },
+    { "id": "ev-004", "path": "evidence/dom/route-structure.md", "truth": "SOURCE" },
+    { "id": "ev-005", "path": "evidence/interaction/scroll-model.md", "truth": "SOURCE" },
+    { "id": "ev-006", "path": "evidence/network/asset-index.md", "truth": "SOURCE" },
+    { "id": "ev-007", "path": "evidence/screenshots/README.md", "truth": "PARTIAL" },
+    { "id": "ev-008", "path": "evidence/qa/baseline-verification.json", "truth": "SOURCE" }
+  ],
+  "truth": {
+    "leafFacts": [
+      { "fact": "input constants and thresholds", "truth": "SOURCE", "evidenceId": "ev-005" },
+      { "fact": "Three.js r185 full-viewport canvas", "truth": "SOURCE", "evidenceId": "ev-001" },
+      { "fact": "baseline colors, typography and proxy motion amplitude", "truth": "GUESS", "evidenceId": "baseline-code" }
+    ],
+    "wiringFacts": [
+      { "fact": "input → target → current → lag → velocity → deformation", "truth": "SOURCE", "evidenceId": "ev-005" },
+      { "fact": "DOM rectangle → source plane placement", "truth": "SOURCE", "evidenceId": "ev-003" },
+      { "fact": "route data-id → persistent shared plane flight", "truth": "SOURCE", "evidenceId": "ev-004" }
+    ],
+    "defaultLabel": "GUESS",
+    "allowedTruth": ["SOURCE", "PARTIAL", "GUESS"]
+  },
+  "unknowns": {
+    "blocking": [],
+    "important": [
+      "GPU-aware source frame capture for visual shader comparison",
+      "exact symbolic name of the minified output-color enum",
+      "mobile visual validation on a physical device"
+    ],
+    "deferred": [
+      "full shader and post-processing replay",
+      "cross-route shared-plane replay",
+      "original imagery and font reproduction"
+    ],
+    "external": []
+  },
+  "replay": {
+    "route": "BEHAVIOR_REBUILD",
+    "allowedRoutes": ["SOURCE_REPLAY", "PIPELINE_REPLAY", "BEHAVIOR_REBUILD"],
+    "fidelityTier": "interaction-only/source-derived-scroll",
+    "fallbacks": [
+      "Canvas2D visual proxy instead of WebGL shader replay",
+      "explicitly omit route transitions and original assets",
+      "document GPU capture failure as a visual evidence gap"
+    ]
+  },
+  "gateDecision": {
+    "replayReady": true,
+    "requiredEvidence": {
+      "targetSurfaces": [
+        { "status": "passed", "evidenceId": "ev-001", "path": "evidence/runtime/initial-surface.json", "truth": "SOURCE", "notes": "Canvas and DOM layout group locked." }
+      ],
+      "runtimeOwnerBackend": [
+        { "status": "passed", "evidenceId": "ev-003", "path": "evidence/source/build-index.md", "truth": "SOURCE", "notes": "Main-thread Three/WebGL2 source; Canvas2D downgrade explicit." }
+      ],
+      "renderGraphOrFallback": [
+        { "status": "passed", "evidenceId": "ev-003", "path": "evidence/runtime/render-architecture.md", "truth": "SOURCE", "notes": "Source graph documented and behavior-rebuild fallback bounded." }
+      ],
+      "criticalResources": [
+        { "status": "passed", "evidenceId": "ev-006", "path": "evidence/network/asset-index.md", "truth": "SOURCE", "notes": "Source pipeline inventoried; baseline is asset-free." }
+      ],
+      "timelineAndInputs": [
+        { "status": "passed", "evidenceId": "ev-005", "path": "evidence/interaction/scroll-model.md", "truth": "SOURCE", "notes": "Frame normalization, follower, inertia, drag and keyboard captured." }
+      ],
+      "outputComposite": [
+        { "status": "passed", "evidenceId": "ev-002", "path": "evidence/runtime/render-architecture.md", "truth": "PARTIAL", "notes": "DOM/WebGL composite is known; visual shader output intentionally downgraded." }
+      ],
+      "truthLabels": [
+        { "status": "passed", "evidenceId": "manifest-truth", "path": "replay-manifest.json", "truth": "SOURCE", "notes": "Leaf, wiring and proxy facts are separated." }
+      ],
+      "blockingUnknownsResolvedOrDowngraded": [
+        { "status": "passed", "evidenceId": "qa-gap", "path": "known-gaps.md", "truth": "PARTIAL", "notes": "GPU visual replay downgraded to an explicit interaction-only behavior rebuild." }
+      ]
+    },
+    "blockers": [],
+    "decidedAt": "2026-08-29T13:50:00.000Z"
+  }
+}

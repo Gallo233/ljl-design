@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 3,
+  "target": {
+    "name": "Viscose Carousel / ICE WORKS",
+    "urls": [
+      "https://github.com/Yousuf-developer/Viscose-carousel",
+      "https://github.com/MegD1/Ice-works-showcase"
+    ],
+    "lockedAt": "2026-08-30T00:00:00+08:00",
+    "sourceCommits": {
+      "viscose": "4b9ac8c6c60ab593c791a40855b61da78b5d9c8e",
+      "ice": "bed3534a43125f6ef93890c75854427ed6a261a1"
+    }
+  },
+  "objective": "Extract the liquid topology, bridge breakage, inertia/snap, pointer hysteresis/wake, and text morph mechanisms for a short portfolio work experience.",
+  "targetLock": {
+    "rendering": "single fullscreen fragment shader over CPU supplied rest geometry",
+    "interaction": "wheel and drag angular inertia with late slot snap; fast acquire and slow release hover",
+    "motion": "birth, spread, stage, steady interaction; ICE particle additions are optional and bounded",
+    "outOfScope": [
+      "upstream project images",
+      "PP Neue Montreal",
+      "the 18-card ring composition",
+      "ambient particle fog"
+    ]
+  },
+  "hypotheses": [
+    {
+      "id": "H1",
+      "claim": "The liquid silhouette is a polynomial smooth-min union of rounded-box SDFs plus explicit swept-box bridges.",
+      "status": "confirmed",
+      "evidence": "evidence/source/mechanism-map.md"
+    },
+    {
+      "id": "H2",
+      "claim": "Life-like hover comes primarily from asymmetric acquire/release and a velocity-driven radial wake, not from particles.",
+      "status": "confirmed",
+      "evidence": "evidence/source/mechanism-map.md"
+    },
+    {
+      "id": "H3",
+      "claim": "ICE retains the Viscose material and adds a bounded ASCII particle layer.",
+      "status": "confirmed",
+      "evidence": "../EXTRACTION-REPORT.md"
+    }
+  ]
+}

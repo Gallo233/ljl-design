@@ -1,0 +1,55 @@
+{
+  "verifiedAt": "2026-08-29T21:37:00+08:00",
+  "server": "python3 -m http.server 4173 --bind 127.0.0.1",
+  "url": "http://127.0.0.1:4173/",
+  "checks": [
+    {
+      "name": "syntax",
+      "result": "passed",
+      "evidence": "node --check motion-baseline.js exited 0"
+    },
+    {
+      "name": "load",
+      "result": "passed",
+      "evidence": "HTML, styles.css and motion-baseline.js returned 200; only favicon.ico returned a non-functional 404"
+    },
+    {
+      "name": "initial-state",
+      "result": "passed",
+      "evidence": { "target": "0.00", "current": "0.00", "lag": "0.00", "velocity": "0.000" }
+    },
+    {
+      "name": "wheel",
+      "result": "passed",
+      "input": "scrollY 520 at viewport center",
+      "evidenceAt500ms": { "target": "900.88", "current": "846.32", "lag": "54.56", "velocity": "0.010" },
+      "notes": "Target/current separation, decaying lag and wrapped-card parking were observed."
+    },
+    {
+      "name": "keyboard",
+      "result": "passed",
+      "input": "ArrowRight",
+      "evidence": { "normalizedStep": "100", "targetBefore": "900.88", "targetAfterFollowerAndSoftLimit": "1001.15" }
+    },
+    {
+      "name": "drag-and-release",
+      "result": "passed",
+      "input": "horizontal drag from x780 to x570",
+      "evidenceAt180ms": { "target": "2070.57", "current": "1724.06", "lag": "346.51", "velocity": "0.311" }
+    },
+    {
+      "name": "reset",
+      "result": "passed",
+      "evidenceAt220ms": { "target": "0.00", "current": "0.00", "lag": "0.00", "velocity": "0.000" }
+    },
+    {
+      "name": "console",
+      "result": "passed",
+      "evidence": "No browser console errors after load, wheel, keyboard, drag and reset."
+    }
+  ],
+  "visual": {
+    "result": "passed-for-declared-tier",
+    "notes": "Canvas2D proxy cards, HUD and metrics rendered at 1280x720. No source pixel-fidelity claim is made."
+  }
+}

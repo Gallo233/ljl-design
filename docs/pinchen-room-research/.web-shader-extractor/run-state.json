@@ -1,0 +1,96 @@
+{
+  "schemaVersion": 3,
+  "state": "BASELINE_VERIFIED",
+  "gateStatus": {
+    "targetAttributed": true,
+    "targetLocked": true,
+    "replayReady": true,
+    "baselineVerified": true,
+    "projectVerified": false
+  },
+  "strategy": {
+    "primaryTraceRoute": "Profile A runtime surface attribution + Profile D public source analysis",
+    "replayRoute": "BEHAVIOR_REBUILD",
+    "toolProfile": "in-app browser DOM/runtime/assets + public bundle analysis + local browser QA"
+  },
+  "attempts": [
+    {
+      "category": "gpu-screenshot",
+      "count": 4,
+      "result": "black WebGL layer",
+      "progress": "established a capture limitation and forced an explicit fidelity downgrade"
+    },
+    {
+      "category": "source-analysis",
+      "count": 1,
+      "result": "renderer, scroll, route, timing and resource paths attributed",
+      "progress": "target and replay gates passed"
+    },
+    {
+      "category": "behavior-baseline",
+      "count": 1,
+      "result": "local build and interactions passed",
+      "progress": "baseline verify passed with documented visual gaps"
+    }
+  ],
+  "targetSet": ["surface-1", "surface-2"],
+  "unknowns": {
+    "blocking": [],
+    "important": [
+      "GPU-aware visual capture",
+      "physical mobile gesture validation",
+      "exact symbolic output color enum"
+    ],
+    "deferred": [
+      "shader pipeline replay",
+      "shared route-plane replay",
+      "original assets"
+    ],
+    "external": []
+  },
+  "evidenceIndex": [
+    "evidence/runtime/initial-surface.json",
+    "evidence/runtime/render-architecture.md",
+    "evidence/source/build-index.md",
+    "evidence/interaction/scroll-model.md",
+    "evidence/dom/route-structure.md",
+    "evidence/network/asset-index.md",
+    "evidence/screenshots/README.md",
+    "evidence/qa/baseline-verification.json"
+  ],
+  "allowedGateArtifactStatuses": ["missing", "incomplete", "passed", "blocked"],
+  "artifacts": {
+    "scoutCard": "scout-card.json",
+    "manifest": "replay-manifest.json",
+    "qaReport": "qa-report.md",
+    "knownGaps": "known-gaps.md"
+  },
+  "gateArtifacts": {
+    "targetAttribution": { "artifact": "scout-card.json", "status": "passed" },
+    "targetLock": { "artifact": "scout-card.json", "status": "passed" },
+    "replayReady": { "artifact": "replay-manifest.json", "status": "passed" },
+    "baselineVerify": { "artifact": "qa-report.md", "status": "passed" },
+    "projectVerify": { "artifact": "qa-report.md", "status": "missing" }
+  },
+  "budgets": {
+    "sameStrategyMax": 2,
+    "captureStrategyCategoriesMax": 3,
+    "repairRoundsMax": 6,
+    "plateauRoundsMax": 2
+  },
+  "plateau": {
+    "roundsWithoutProgress": 0,
+    "lastProgress": "Local interaction baseline passed wheel, keyboard, drag/release, wrap, reset and console-error checks."
+  },
+  "nextAction": {
+    "state": "DONE_BASELINE_WITH_GAPS",
+    "unknown": "none blocking",
+    "action": "Stop; implementation in the Gallo site requires a separate change request.",
+    "expectedEvidence": "n/a"
+  },
+  "replayTier": "interaction-only/source-derived-scroll",
+  "qa": {
+    "sourceToBaseline": ["build", "structural", "temporal", "interaction", "visual-with-gap"],
+    "baselineToEditable": []
+  }
+}

@@ -1,0 +1,48 @@
+{
+  "capturedAt": "2026-08-29T13:07:18.265Z",
+  "url": "https://jesperlandberg.com/",
+  "viewport": {
+    "cssWidth": 1280,
+    "cssHeight": 720,
+    "devicePixelRatio": 2
+  },
+  "document": {
+    "scrollWidth": 1280,
+    "scrollHeight": 720,
+    "scrollX": 0,
+    "scrollY": 0,
+    "visibilityState": "visible"
+  },
+  "surfaces": [
+    {
+      "id": "surface-1",
+      "kind": "canvas",
+      "selector": "canvas[data-engine='three.js r185']",
+      "count": 1,
+      "cssRect": { "x": 0, "y": 0, "width": 1280, "height": 720 },
+      "backingSize": { "width": 2560, "height": 1440 },
+      "position": "absolute",
+      "pointerEvents": "none",
+      "owner": "main-thread",
+      "context": "webgl2",
+      "engine": "three.js r185"
+    },
+    {
+      "id": "surface-2",
+      "kind": "dom-layout-group",
+      "role": "layout, semantics and hit testing",
+      "paint": "transparent; visible pixels mirrored into surface-1",
+      "owner": "main-thread"
+    }
+  ],
+  "otherMedia": {
+    "iframes": 0,
+    "videosInitially": 0,
+    "workersObserved": 0
+  },
+  "effectBoundary": "route-coupled/site-level",
+  "notes": [
+    "The page is a fixed viewport; movement is virtual rather than document scroll.",
+    "The in-app browser screenshot path returned black frames for the WebGL layer; this is a capture limitation, not evidence of a black source page."
+  ]
+}

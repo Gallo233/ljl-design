@@ -11,6 +11,7 @@ import { createPostChain } from "./postfx";
 import { detectQuality } from "./quality";
 import { LanyardBadge } from "./badge/LanyardBadge";
 import { JoiMusicPlayer } from "./JoiMusicPlayer";
+import { WhiteboardSheet } from "./WhiteboardSheet";
 import { PageTurnCorner } from "./PageTurnCorner";
 import { createScrollSignal } from "./scrollSignal";
 import { ROOM_OBJECTS, type RoomObjectId } from "./roomObjects";
@@ -50,7 +51,9 @@ const applyPageTurnStyle = (
   const revealSize = amount < 0.8
     ? amount * 140
     : 112 + ((amount - 0.8) / 0.2) * 108;
-  const cornerOpacity = 1 - smoothStep((amount - 0.76) / 0.2);
+  // The draggable affordance starts the turn, then yields almost immediately to the
+  // upper Contact reveal. Keeping it through the hand-off draws a second, lower curl.
+  const cornerOpacity = 1 - smoothStep(amount / 0.1);
   const style = root.style;
   style.setProperty("--contact-turn", amount.toFixed(4));
   style.setProperty("--contact-turn-size", `${revealSize.toFixed(2)}%`);
@@ -60,7 +63,6 @@ const applyPageTurnStyle = (
   style.setProperty("--page-curl-width", `${(restingCorner + curlX).toFixed(1)}px`);
   style.setProperty("--page-curl-height", `${(restingCorner + curlY).toFixed(1)}px`);
   style.setProperty("--page-fold-opacity", (1 - smoothStep((amount - 0.82) / 0.15)).toFixed(4));
-  style.setProperty("--page-under-opacity", (1 - smoothStep(amount / 0.32)).toFixed(4));
   style.setProperty("--page-corner-opacity", cornerOpacity.toFixed(4));
 };
 import { SiteHUD } from "../../components/SiteHUD";
@@ -96,17 +98,36 @@ const BORDER_Y = 0.07;
 const LIVE_FRAME_WIDTH = 1280;
 const LIVE_FRAME_HEIGHT = 960;
 
-function ProjectTitleContent({ project }: { project: ProjectSignal }) {
+function ProjectTitleContent({
+  project,
+  onProjectOpen,
+}: {
+  project: ProjectSignal;
+  onProjectOpen: (href: string) => void;
+}) {
   return (
     <>
       <span>{project.index} / {String(projects.length).padStart(2, "0")}</span>
       <h2>{project.title}</h2>
-      <p>{project.subtitle} <i>·</i> <a href={project.href}>View project <b>→</b></a></p>
+      <p>{project.subtitle} <i>·</i> <a
+        href={project.href}
+        onClick={(event) => {
+          if (event.button !== 0 || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
+          event.preventDefault();
+          onProjectOpen(project.href);
+        }}
+      >View project <b>→</b></a></p>
     </>
   );
 }
 
-function RollingProjectTitle({ step }: { step: number }) {
+function RollingProjectTitle({
+  step,
+  onProjectOpen,
+}: {
+  step: number;
+  onProjectOpen: (href: string) => void;
+}) {
   const active = projects[modulo(step, projects.length)];
   const previousStepRef = useRef(step);
   const currentProjectRef = useRef<ProjectSignal>(active);
@@ -141,11 +162,11 @@ function RollingProjectTitle({ step }: { step: number }) {
       <span className={styles.srOnly}>{transition.current.title} — {transition.current.subtitle}</span>
       {transition.outgoing && (
         <div key={`out-${transition.id}`} className={`${styles.titleLayer} ${styles.titleOutgoing} ${exitClass}`} aria-hidden="true">
-          <ProjectTitleContent project={transition.outgoing} />
+          <ProjectTitleContent project={transition.outgoing} onProjectOpen={onProjectOpen} />
         </div>
       )}
       <div key={`in-${transition.id}`} className={`${styles.titleLayer} ${transition.id > 0 ? enterClass : ""}`}>
-        <ProjectTitleContent project={transition.current} />
+        <ProjectTitleContent project={transition.current} onProjectOpen={onProjectOpen} />
       </div>
     </section>
   );
@@ -1608,6 +1629,7 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
   /** Which room object the reader picked — lights the matching interest chip. */
   const [hoveredInterest, setHoveredInterest] = useState<RoomObjectId | null>(null);
   const [musicPlayerOpen, setMusicPlayerOpen] = useState(false);
+  const [whiteboardOpen, setWhiteboardOpen] = useState(false);
   const [computerReady, setComputerReady] = useState(false);
   const [fontsReady, setFontsReady] = useState(false);
   /** True when this mount is the way back from a detail page rather than an arrival. */
@@ -1936,6 +1958,27 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
     document.title = section.title;
   }, [activeSection]);
 
+  const openProject = (href: string) => {
+    // Frames whose destination is a section of this page scroll instead of
+    // navigating — a route push would remount the lab and replay the boot.
+    const section = SECTIONS.find((entry) => entry.path === href);
+    if (section) {
+      scrollToSection.current(section.id);
+      return;
+    }
+    if (leaving) return;
+    // Canvas clicks and the explicit "View project" link share this exact
+    // transport. Otherwise the accessible link bypasses reel:return/arrive and
+    // the Work page cannot receive the frame it is supposed to continue.
+    try {
+      sessionStorage.setItem("reel:return", JSON.stringify({ step }));
+      sessionStorage.setItem("reel:arrive", "1");
+    } catch {}
+    setLeavingTo(href);
+    setLeaving(true);
+    window.setTimeout(() => router.push(href), 300);
+  };
+
   return (
     <main
       ref={experienceRef}
@@ -2014,6 +2057,7 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
             onRoomHover={setHoveredInterest}
             onRoomPick={(id) => {
               if (id === "joi-music-box") setMusicPlayerOpen(true);
+              if (id === "whiteboard") setWhiteboardOpen(true);
             }}
             recordPlaying={recordPlaying}
             onDeckVolumeChange={setDeckVolume}
@@ -2021,25 +2065,7 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
             onDeckToggle={() => { void toggleDeck(); }}
             onDeckRpmToggle={() => setDeckRpm(deckRpm > 39 ? 33 + 1 / 3 : 45)}
             onStepChange={setStep}
-            onProjectOpen={(href) => {
-              // Frames whose destination is a section of this page scroll instead of
-              // navigating — a route push would remount the lab and replay the boot.
-              const section = SECTIONS.find((entry) => entry.path === href);
-              if (section) {
-                scrollToSection.current(section.id);
-                return;
-              }
-              if (leaving) return;
-              // Stepping out of the machine: remember the frame for the way back, veil
-              // the stage in the detail pages' own paper colour, then navigate under it.
-              try {
-                sessionStorage.setItem("reel:return", JSON.stringify({ step }));
-                sessionStorage.setItem("reel:arrive", "1");
-              } catch {}
-              setLeavingTo(href);
-              setLeaving(true);
-              window.setTimeout(() => router.push(href), 300);
-            }}
+            onProjectOpen={openProject}
             onReady={() => setFilmReady(true)}
             onDragStateChange={(active: boolean) => { dragActiveRef.current = active; }}
           />
@@ -2051,11 +2077,13 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
           onResetView={() => resetDeckViewRef.current()}
         />
 
+        <WhiteboardSheet open={whiteboardOpen} onClose={() => setWhiteboardOpen(false)} />
+
         <section
           className={`${styles.filmUi} ${activeSection === "selected-work" ? styles.filmLayerActive : ""}`}
           aria-label="Selected Joi work"
         >
-          <RollingProjectTitle step={step} />
+          <RollingProjectTitle step={step} onProjectOpen={openProject} />
 
           <div className={styles.controls}>
             <button type="button" onClick={() => setStep((value) => value - 1)} aria-label="Previous project"><span>←</span></button>

@@ -76,6 +76,14 @@ export async function mountJoi(options) {
     ? document.querySelector(options.container)
     : options?.container
   if (!(container instanceof HTMLElement)) throw new Error('A Joi container element is required')
+  // A normal article may opt into automatic dock -> corner behaviour. The
+  // Work Experience owns that transition explicitly: it keeps the frame
+  // docked while browsing, then releases it as a real desktop pet only after
+  // the visitor hands input over.
+  const floatingEnabled = options?.floatingEnabled !== false
+  const autoFloat = floatingEnabled && options?.autoFloat !== false
+  let interactionEnabled = options?.interactionEnabled !== false
+  const onEscape = typeof options?.onEscape === 'function' ? options.onEscape : null
 
   const storageKey = `${STORAGE_PREFIX}${new URL(brokerBase, window.location.href).origin}`
   let stored = null
@@ -106,6 +114,29 @@ export async function mountJoi(options) {
   frame.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms')
   wrapper.appendChild(frame)
   document.body.appendChild(wrapper)
+
+  function onFrameKeyDown(event) {
+    if (event.key === 'Escape') onEscape?.()
+  }
+
+  function bindFrameKeys() {
+    try { frame.contentWindow?.addEventListener('keydown', onFrameKeyDown) } catch (_) {}
+  }
+
+  frame.addEventListener('load', bindFrameKeys)
+
+  function setInteractionEnabled(next) {
+    interactionEnabled = Boolean(next)
+    wrapper.style.pointerEvents = interactionEnabled ? 'auto' : 'none'
+    frame.tabIndex = interactionEnabled ? 0 : -1
+    wrapper.classList.toggle('is-input-enabled', interactionEnabled)
+    frame.contentWindow?.postMessage(
+      { source: 'joi-embed', type: 'joi.set_interactive', interactive: interactionEnabled },
+      shellOrigin,
+    )
+  }
+
+  setInteractionEnabled(interactionEnabled)
 
   const margin = Math.max(8, finite(options?.petMargin, 24))
   const positionKey = `${storageKey}:position`
@@ -167,6 +198,7 @@ export async function mountJoi(options) {
   }
 
   function setFloating(next) {
+    if (next && !floatingEnabled) return
     if (floating === next) return
     floating = next
     wrapper.classList.toggle('is-floating', floating)
@@ -190,10 +222,12 @@ export async function mountJoi(options) {
   }
 
   apply()
-  const observer = new IntersectionObserver(([entry]) => {
-    setFloating(!(entry?.isIntersecting ?? true))
-  }, { threshold: 0.12 })
-  observer.observe(placeholder)
+  const observer = autoFloat
+    ? new IntersectionObserver(([entry]) => {
+        setFloating(!(entry?.isIntersecting ?? true))
+      }, { threshold: 0.12 })
+    : null
+  observer?.observe(placeholder)
 
   // The docked box tracks its placeholder's size, not the window's: the article
   // around it can reflow without the window ever changing.
@@ -268,13 +302,19 @@ export async function mountJoi(options) {
   return {
     session,
     frame,
+    setInteractionEnabled,
+    setPresentation(next) {
+      setFloating(next === 'pet')
+    },
     async destroy({ endSession = false } = {}) {
-      observer.disconnect()
+      observer?.disconnect()
       resizeObserver.disconnect()
       window.removeEventListener('message', receive)
       window.removeEventListener('resize', schedule)
       window.removeEventListener('scroll', schedule)
       window.removeEventListener('pagehide', releaseOnPageHide)
+      frame.removeEventListener('load', bindFrameKeys)
+      try { frame.contentWindow?.removeEventListener('keydown', onFrameKeyDown) } catch (_) {}
       if (frameId) window.cancelAnimationFrame(frameId)
       wrapper.remove()
       placeholder.remove()
