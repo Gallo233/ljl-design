@@ -13,6 +13,8 @@ import {
   type GodotGame,
 } from "./games";
 import { CONSOLE_ACCENTS, createConsoleScene, type CartridgeSpec, type ConsoleScene } from "./console3d";
+import { createGameAudio, type GameAudio } from "./games/gameAudio";
+import { useGlobalMusic } from "../../../components/global-music/GlobalMusic";
 
 type Phase = "boot" | "idle" | "play";
 
@@ -105,6 +107,14 @@ export function GameHandheld({
   const screenParkRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<ConsoleScene | null>(null);
 
+  /*
+   * The site's record player lives in the root layout, so it is still spinning on this
+   * page. Now that the builds actually make sound, that is two soundtracks at once —
+   * star-vein opens on a music loop. The cartridge wins while it is in the machine;
+   * the sticker is right there to start the record again afterwards.
+   */
+  const { isPlaying: recordPlaying, stop: stopRecord } = useGlobalMusic();
+
   const [phase, setPhase] = useState<Phase>("boot");
   /** WebGL is unavailable or died: the screen renders flat in flow, the shelf takes over. */
   const [sceneFailed, setSceneFailed] = useState(false);
@@ -132,6 +142,14 @@ export function GameHandheld({
   );
   const activeGodotRef = useRef<GodotGame | null>(activeGodot);
   activeGodotRef.current = activeGodot;
+  /** The running cartridge's sound, so the record player can be told about it. */
+  const gameAudioRef = useRef<GameAudio | null>(null);
+
+  // Every cartridge makes sound now, so the record yields to all five rather than only
+  // to the two Godot builds.
+  useEffect(() => {
+    if (phase === "play" && activeId && recordPlaying) stopRecord();
+  }, [activeId, phase, recordPlaying, stopRecord]);
 
   const postToGodot = useCallback((action: "keydown" | "keyup", button: GameButton) => {
     const game = activeGodotRef.current;
@@ -143,6 +161,25 @@ export function GameHandheld({
       { type: "joi-key", action, key: mapping.key, code: mapping.code },
       gameOrigin(game),
     );
+  }, []);
+
+  /*
+   * Ask the build to start its audio.
+   *
+   * The handheld is driven entirely from buttons on *this* page, so nothing ever
+   * touches the iframe, and a frame that has never been activated does not get to
+   * start an AudioContext — which is why both builds shipped silent despite both
+   * carrying their sound. Chrome propagates activation to same-origin descendants,
+   * so once a real finger has landed here the frame is allowed; this is the message
+   * that tells it to try. `scripts/godot/patch-web-shell.mjs` holds the other end.
+   *
+   * Safe to call as often as it is convenient: resuming a running context is a no-op,
+   * and the contexts may not exist for the first few asks.
+   */
+  const nudgeGodotAudio = useCallback(() => {
+    const game = activeGodotRef.current;
+    if (!game) return;
+    iframeRef.current?.contentWindow?.postMessage({ type: "joi-audio-resume" }, gameOrigin(game));
   }, []);
 
   /** Released over the slot: the machine acknowledges before the card has finished seating. */
@@ -186,9 +223,14 @@ export function GameHandheld({
 
     if (phaseRef.current === "play") {
       if (button === "select") { eject(); return; }
-      if (activeGodotRef.current) postToGodot("keydown", button);
+      if (activeGodotRef.current) {
+        // Before the key, not after: an unmapped button still counts as the gesture
+        // that lets the build's audio start.
+        nudgeGodotAudio();
+        postToGodot("keydown", button);
+      }
     }
-  }, [eject, postToGodot]);
+  }, [eject, nudgeGodotAudio, postToGodot]);
 
   const release = useCallback((button: GameButton) => {
     if (!heldRef.current.delete(button)) return;
@@ -378,6 +420,15 @@ export function GameHandheld({
     if (!canvas || !game) return;
 
     edgeRef.current.clear();
+    /*
+     * One audio rig per cartridge, built here rather than inside the game.
+     *
+     * This effect runs off a real click — dropping a card into the slot — so the
+     * AudioContext is allowed to start. Tearing it down with the game is what stops a
+     * loop outliving the cartridge that owns it.
+     */
+    const audio = createGameAudio();
+    gameAudioRef.current = audio;
     const handle: GameHandle = game.mount(canvas, {
       input: {
         isDown: (button) => heldRef.current.has(button),
@@ -386,8 +437,13 @@ export function GameHandheld({
         pressed: (button) => edgeRef.current.delete(button),
       },
       setStatus,
+      audio,
     });
-    return () => handle.destroy();
+    return () => {
+      handle.destroy();
+      audio.dispose();
+      if (gameAudioRef.current === audio) gameAudioRef.current = null;
+    };
   }, [phase, activeId]);
 
   // A held button must not survive into the next cartridge.
@@ -484,7 +540,12 @@ export function GameHandheld({
                 src={buildUrl(activeGodot)}
                 allow="autoplay; fullscreen; gamepad"
                 allowFullScreen
-                onLoad={() => setStatus(`${activeGodot.title} ONLINE`)}
+                onLoad={() => {
+                  setStatus(`${activeGodot.title} ONLINE`);
+                  // star-vein opens on its surface loop, which would otherwise wait
+                  // for the first button press to become audible.
+                  nudgeGodotAudio();
+                }}
               />
             ) : (
               <canvas

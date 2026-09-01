@@ -41,7 +41,7 @@ export const snake: ArcadeGame = {
     { keys: "WASD / D-PAD", action: "转向" },
     { keys: "A / SPACE", action: "重开" },
   ],
-  mount(canvas: HTMLCanvasElement, { input, setStatus }: GameContext) {
+  mount(canvas: HTMLCanvasElement, { input, setStatus, audio }: GameContext) {
     const context = canvas.getContext("2d");
     if (!context) return { destroy: () => {} };
 
@@ -81,20 +81,32 @@ export const snake: ArcadeGame = {
       dead = false;
       placeFood();
       setStatus("SNAKE / 000");
+      audio.music("snake");
+      audio.sfx("start");
     };
     reset();
 
-    const turn = (x: number, y: number) => {
+    /** Reports whether the turn was taken, so only an accepted one makes a sound. */
+    const turn = (x: number, y: number): boolean => {
       // A 180° turn would drive straight into the neck, so it is refused rather than fatal.
-      if (direction.x === -x && direction.y === -y) return;
+      if (direction.x === -x && direction.y === -y) return false;
       queued = { x, y };
+      return true;
     };
 
     const step = (delta: number) => {
-      if (input.pressed("up")) turn(0, -1);
-      if (input.pressed("down")) turn(0, 1);
-      if (input.pressed("left")) turn(-1, 0);
-      if (input.pressed("right")) turn(1, 0);
+      /*
+       * Read each direction exactly once. `pressed` is edge-triggered — it consumes the
+       * press — so asking a second time to decide whether to make a sound would eat the
+       * turn itself and the snake would never change direction.
+       */
+      const steered = [
+        input.pressed("up") && turn(0, -1),
+        input.pressed("down") && turn(0, 1),
+        input.pressed("left") && turn(-1, 0),
+        input.pressed("right") && turn(1, 0),
+      ];
+      if (!dead && steered.some(Boolean)) audio.sfx("turn");
 
       if (dead) {
         if (input.pressed("a") || input.pressed("start")) reset();
@@ -112,6 +124,8 @@ export const snake: ArcadeGame = {
       const hitSelf = body.slice(0, -1).some((part) => part.x === head.x && part.y === head.y);
       if (hitWall || hitSelf) {
         dead = true;
+        audio.music(null);
+        audio.sfx("die");
         const record = bestScore.submit(score);
         setStatus(
           `GAME OVER / ${String(score).padStart(3, "0")}${record ? " · NEW BEST" : ""} · A 重开`,
@@ -122,6 +136,7 @@ export const snake: ArcadeGame = {
       body.unshift(head);
       if (head.x === food.x && head.y === food.y) {
         score += 1;
+        audio.sfx("eat");
         interval = Math.max(MIN_INTERVAL, START_INTERVAL - score * 0.004);
         placeFood();
         setStatus(`SNAKE / ${String(score).padStart(3, "0")}`);

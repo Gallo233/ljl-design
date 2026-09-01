@@ -109,7 +109,7 @@ export const tetris: ArcadeGame = {
     { keys: "B", action: "硬降" },
     { keys: "START", action: "重开" },
   ],
-  mount(canvas: HTMLCanvasElement, { input, setStatus }: GameContext) {
+  mount(canvas: HTMLCanvasElement, { input, setStatus, audio }: GameContext) {
     const context = canvas.getContext("2d");
     if (!context) return { destroy: () => {} };
 
@@ -160,6 +160,8 @@ export const tetris: ArcadeGame = {
       if (collides(candidate)) {
         dead = true;
         piece = null;
+        audio.music(null);
+        audio.sfx("die");
         // The record only means anything at the end of a run, so that is where it shows.
         const record = bestScore.submit(score);
         setStatus(
@@ -182,6 +184,8 @@ export const tetris: ArcadeGame = {
       fallTimer = 0;
       spawn();
       setStatus("TETRIS / 0");
+      audio.music("tetris");
+      audio.sfx("start");
     };
 
     const clearLines = () => {
@@ -193,9 +197,12 @@ export const tetris: ArcadeGame = {
         ...kept,
       ];
       lines += cleared;
+      audio.sfx("clear");
       // The classic curve: clearing four at once is worth far more than four singles.
       score += [0, 100, 300, 500, 800][cleared] * level;
+      const previousLevel = level;
       level = Math.floor(lines / 10) + 1;
+      if (level > previousLevel) audio.sfx("levelUp");
       setStatus(`TETRIS / ${score} · LV${level}`);
     };
 
@@ -204,6 +211,7 @@ export const tetris: ArcadeGame = {
       cellsOf(piece).forEach(({ x, y }) => {
         if (y >= 0) board[y][x] = SHAPES[piece!.key].color;
       });
+      audio.sfx("lock");
       clearLines();
       spawn();
     };
@@ -216,14 +224,16 @@ export const tetris: ArcadeGame = {
       return true;
     };
 
-    const tryRotate = () => {
-      if (!piece) return;
+    /** Reports whether the rotation was taken, so a refused one stays silent. */
+    const tryRotate = (): boolean => {
+      if (!piece) return false;
       const candidate = { ...piece, rotation: (piece.rotation + 1) % 4 };
       // A minimal wall kick: try in place, then nudged off each wall, then up one.
       for (const dx of [0, -1, 1, -2, 2]) {
         const kicked = { ...candidate, x: candidate.x + dx };
-        if (!collides(kicked)) { piece = kicked; return; }
+        if (!collides(kicked)) { piece = kicked; return true; }
       }
+      return false;
     };
 
     reset();
@@ -235,8 +245,8 @@ export const tetris: ArcadeGame = {
       }
       if (!piece) return;
 
-      if (input.pressed("left")) { tryMove(-1, 0); repeatTimer = -0.18; }
-      if (input.pressed("right")) { tryMove(1, 0); repeatTimer = -0.18; }
+      if (input.pressed("left")) { if (tryMove(-1, 0)) audio.sfx("move"); repeatTimer = -0.18; }
+      if (input.pressed("right")) { if (tryMove(1, 0)) audio.sfx("move"); repeatTimer = -0.18; }
       // Auto-repeat after a short hold, so a held direction slides instead of stuttering.
       if (input.isDown("left") || input.isDown("right")) {
         repeatTimer += delta;
@@ -248,7 +258,9 @@ export const tetris: ArcadeGame = {
         repeatTimer = 0;
       }
 
-      if (input.pressed("a") || input.pressed("x") || input.pressed("up")) tryRotate();
+      if (input.pressed("a") || input.pressed("x") || input.pressed("up")) {
+        if (tryRotate()) audio.sfx("rotate");
+      }
 
       if (input.pressed("b")) {
         let dropped = 0;

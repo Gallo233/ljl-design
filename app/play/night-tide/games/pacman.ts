@@ -94,7 +94,7 @@ export const pacman: ArcadeGame = {
     { keys: "WASD / D-PAD", action: "移动" },
     { keys: "A", action: "重开" },
   ],
-  mount(canvas: HTMLCanvasElement, { input, setStatus }: GameContext) {
+  mount(canvas: HTMLCanvasElement, { input, setStatus, audio }: GameContext) {
     const context = canvas.getContext("2d");
     if (!context) return { destroy: () => {} };
 
@@ -174,6 +174,8 @@ export const pacman: ArcadeGame = {
       dead = false;
       chainMultiplier = 1;
       setStatus(`PAC-MAN / ${score} · ♥${lives}`);
+      audio.music("pacman");
+      audio.sfx("start");
     };
     reset(true);
 
@@ -251,6 +253,7 @@ export const pacman: ArcadeGame = {
         const power = tiles[tileY][tileX] === "o";
         tiles[tileY][tileX] = " ";
         pelletsLeft -= 1;
+        audio.sfx(power ? "power" : "eat");
         score += power ? 50 : 10;
         if (power) {
           chainMultiplier = 1;
@@ -281,6 +284,7 @@ export const pacman: ArcadeGame = {
         if (ghost.frightened > 0) {
           ghost.eaten = true;
           ghost.frightened = 0;
+          audio.sfx("hit");
           score += 200 * chainMultiplier;
           chainMultiplier = Math.min(8, chainMultiplier * 2);
           setStatus(`PAC-MAN / ${score} · ♥${lives}`);
@@ -288,6 +292,10 @@ export const pacman: ArcadeGame = {
           lives -= 1;
           dead = true;
           respawnTimer = 1.1;
+          audio.sfx("die");
+          // The run is over, not just this life — stop the loop rather than let it play
+          // under the game-over readout.
+          if (lives <= 0) audio.music(null);
           setStatus(lives > 0 ? `CAUGHT / ♥${lives}` : `GAME OVER / ${score} · A 重开`);
         }
       });

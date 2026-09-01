@@ -1,3 +1,5 @@
+import type { GameAudio } from "./gameAudio";
+
 /**
  * The contract between the handheld shell and whatever is on its screen.
  *
@@ -40,6 +42,11 @@ export type GameContext = {
   input: GameInput;
   /** Shown on the shell's readout — score, state, whatever the game wants to say. */
   setStatus: (status: string) => void;
+  /**
+   * Sound, the same way input arrives: the shell owns it, the game asks for it. A game
+   * never builds an AudioContext of its own — see `gameAudio.ts` for why that matters.
+   */
+  audio: GameAudio;
 };
 
 export type ArcadeGame = {
