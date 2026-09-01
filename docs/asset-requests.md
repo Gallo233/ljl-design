@@ -12,6 +12,18 @@
 | 5 | Joi Mobile iOS 截图 ×4 | `/work/joi-mobile` 的 figures（对话舞台 / 半身 / 记忆空状态 / 角色库） | 该区块暂不渲染 | iPhone 原生截图即可，我来裁 |
 | 6 | （可选）微信 / LinkedIn | Contact 面板追加动作 | 只有邮箱 / GitHub / 简历 | 给出即加 |
 | 7 | （可选）英文简历 PDF | About / Contact 的 RESUME 双语切换 | 仅中文简历 | — |
+| 8 | （可选）中文版《金枝》封面 | 书架面板选中书的封面（`roomLibrary.ts` 的 `art` 字段，落位 `public/work/about-room/library/<id>.jpg`） | 8 本封面已全部到位，`golden-bough` 用的是英文删节本 | 竖版，≥600px 宽，你读书 app 里导出的那版即可 |
+
+> 第 8 项的说明：封面走 Open Library 的封面 API（唯一免费、不需要抓站的来源）。它一开始
+> 每张都返回 1×1 空图，原因是默认的 curl User-Agent 被 archive.org（CDN 的重定向目标）
+> 拒绝；换成浏览器 UA、请求之间隔约 4 秒就正常了。**每一张都人工看过再接进去**——封面 API
+> 会不吭声地给你一本似是而非的错书。
+>
+> 《春风之雪女》在 Open Library 里没有（那儿只有沙村广明的《无限之住人》），作者据此把书单
+> 上的那本换成了《无限之住人》，封面是第 1 卷 *Blood of a Thousand*。
+>
+> 还剩一条：`golden-bough` 接的是英文的 *The Illustrated Golden Bough* 删节本，不是你那本
+> 黑金封面的中文版——书脊配色是照你那本取的，所以换成你自己的更配。
 
 ## 已到位
 

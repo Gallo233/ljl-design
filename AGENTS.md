@@ -55,11 +55,17 @@ app/
     quality.ts              device tiers: DPR caps, bloom levels, persistence, shadows
     badge/                  the lanyard: verlet rope + the CSS holographic card
     roomBase.ts             the desk capture: node names and atlas ids, pure data
+    roomSurface.ts          the shading model the code-built props share  <-- no lights
+    roomBasketball.ts       the ball that replaced the capture's guitar and its stand
+    roomBookshelf.ts        the shelf's books, built from roomLibrary.ts  <-- the data
+    TerminalSheet.tsx       the desk terminal's shell; terminalProgram.ts is what it knows
+    BookshelfSheet.tsx      the reading timeline over the room
     roomRecords.ts          the record rig — retired, see the note in its header
     oceanScene.ts           the sea behind the hero, tier-aware throughout
     solarSystem.ts          the hero's sky: planets, nebula, star field
     heroLightOrb.ts         the orb the reader can pick up in the hero
     JoiMusicPlayer.tsx      the deck UI over the room
+    WhiteboardSheet.tsx     the drawable board over the room
     useScrollDriver.ts      smoothing, velocity, snapping, the boot lock
     sections.ts             section table and scroll math   <-- start here
     joi-signal-lab.module.css

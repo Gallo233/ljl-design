@@ -3,10 +3,11 @@
  *
  * The reference keeps the same two switches — `isMobileDevice` and `reducedMemoryMode` —
  * and gates the expensive half of its post chain on them. Ours does the same, plus the
- * pixel-ratio clamp. The stage used to stop at 1.5 even on a 2x desktop display, so
- * the browser enlarged every finished frame by a third and softened the video, drawn
- * atlas and typography baked into those images together. Full-density desktop output
- * is worth more than four-sample MSAA here; the post chain uses two samples instead.
+ * pixel-ratio clamp. A nine-pass full-viewport chain at DPR 2 shades four times as many
+ * pixels as DPR 1, and its last draw is a fullscreen quad — canvas MSAA cannot improve
+ * an edge that is not there. The measured compromise is DPR 1.5 on a capable desktop,
+ * with one more step down on memory-limited hardware and phones. Five bloom levels
+ * keep the wide glow while removing two down/up passes from the former six-level tier.
  *
  * Read once at startup. A device does not stop being a phone mid-session, and a tier
  * that changes under a running renderer means reallocating every target.
@@ -34,10 +35,10 @@ export function detectQuality(): QualityTier {
       isMobile: false,
       reducedMemory: false,
       reducedMotion: false,
-      dprCap: 2,
-      bloomLevels: 7,
+      dprCap: 1.5,
+      bloomLevels: 5,
       persistence: true,
-      antialias: true,
+      antialias: false,
       shadows: true,
     };
   }
@@ -53,12 +54,13 @@ export function detectQuality(): QualityTier {
     isMobile,
     reducedMemory,
     reducedMotion,
-    dprCap: isMobile ? 1.25 : reducedMemory ? 1.5 : 2,
-    bloomLevels: isMobile || reducedMemory ? 5 : 7,
+    dprCap: isMobile ? 1.25 : reducedMemory ? 1.25 : 1.5,
+    bloomLevels: 5,
     // Two viewport-sized HalfFloat targets is the single largest allocation in the
     // chain, and the effect it buys is the one nobody misses on a small screen.
     persistence: !isMobile && !reducedMemory && !reducedMotion,
-    antialias: !isMobile,
+    // The renderer presents the post chain's fullscreen quad, not raw scene edges.
+    antialias: false,
     shadows: !isMobile,
   };
 }

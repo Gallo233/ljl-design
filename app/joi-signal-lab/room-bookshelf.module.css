@@ -1,0 +1,270 @@
+/*
+ * The shelf, opened.
+ *
+ * Same sheet as the whiteboard and the terminal — fixed veil, a dark panel that rises —
+ * because they are three apps on the same desk. Inside it is the one panel in the room
+ * that is a reading surface rather than a machine: the year rail is set in the mono the
+ * rest of the room's chrome uses, and the selected book is set in the site's serif, at
+ * the size a title wants.
+ */
+
+.root {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: grid;
+  place-items: center;
+  padding: clamp(16px, 4vh, 48px);
+}
+
+.backdrop {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  background: rgba(6, 8, 12, .62);
+  cursor: pointer;
+  animation: shelf-veil .22s ease forwards;
+}
+
+@keyframes shelf-veil {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: min(860px, 100%);
+  max-height: 100%;
+  padding: 14px;
+  border-radius: 14px;
+  background: #14161c;
+  box-shadow: 0 40px 90px -40px rgba(0, 0, 0, .8);
+  animation: shelf-rise .28s cubic-bezier(.2,.8,.2,1) forwards;
+}
+
+@keyframes shelf-rise {
+  from { opacity: 0; transform: translateY(30px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  color: rgba(255,255,255,.62);
+  font: 500 9px/1 var(--font-signal-mono), ui-monospace, monospace;
+  letter-spacing: .16em;
+}
+
+.close {
+  padding: 6px 10px;
+  border: 1px solid rgba(255,255,255,.22);
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  transition: background-color .18s ease, color .18s ease;
+}
+
+.close:hover,
+.close:focus-visible { background: #f2f0ec; color: #14161c; }
+
+.body {
+  display: grid;
+  grid-template-columns: minmax(0, 268px) minmax(0, 1fr);
+  gap: 18px;
+  min-height: 0;
+}
+
+/* ── the axis ─────────────────────────────────────────────────────────────── */
+
+.rail {
+  overflow-y: auto;
+  max-height: min(58vh, 460px);
+  padding-right: 6px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,.16) transparent;
+}
+
+.rail:focus-visible {
+  outline: 1px solid rgba(255,255,255,.3);
+  outline-offset: 4px;
+  border-radius: 6px;
+}
+
+.yearGroup + .yearGroup { margin-top: 18px; }
+
+/* The year is the tick on the axis, so it carries the rule rather than sitting above one. */
+.year {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 8px;
+  color: rgba(255,255,255,.5);
+  font: 500 10px/1 var(--font-signal-mono), ui-monospace, monospace;
+  letter-spacing: .18em;
+}
+
+.year::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: rgba(255,255,255,.12);
+}
+
+.books {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.entry {
+  /* The year heading sits directly above the first entry of its group, and
+     `scrollIntoView` would otherwise park that entry flush at the top of the rail and cut
+     the heading off — which is how the newest year's tick went missing. */
+  scroll-margin-top: 30px;
+  display: grid;
+  grid-template-columns: 4px minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  column-gap: 12px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: rgba(255,255,255,.72);
+  cursor: pointer;
+  text-align: left;
+  transition: background-color .16s ease, color .16s ease;
+}
+
+.entry:hover { background: rgba(255,255,255,.05); }
+.entryOn { background: rgba(255,255,255,.09); color: #f2f0ec; }
+
+/* The spine's own colour, standing on end — the list is the shelf, seen flat. */
+.swatch {
+  grid-row: 1 / span 2;
+  align-self: stretch;
+  border-radius: 1px;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.18);
+}
+
+.entryTitle {
+  font: 500 13px/1.35 var(--font-signal-body), system-ui, sans-serif;
+}
+
+.entryAuthor {
+  color: rgba(255,255,255,.42);
+  font: 400 10px/1.4 var(--font-signal-mono), ui-monospace, monospace;
+  letter-spacing: .06em;
+}
+
+/* ── the selected book ────────────────────────────────────────────────────── */
+
+/*
+ * A block, not a flex column, because the cover floats and a float is not a thing a flex
+ * item can do — as a flex child the jacket simply stacked above the title and pushed the
+ * quotation out of the panel. Every child below already carries its own margins, which is
+ * what the flex `gap` was duplicating.
+ */
+.detail {
+  overflow-y: auto;
+  max-height: min(58vh, 460px);
+  padding: 22px 22px 24px;
+  border-radius: 8px;
+  background: rgba(255,255,255,.035);
+}
+
+/* The cover, when the entry has one. Ranged right so the type keeps its own column. */
+.art {
+  float: right;
+  width: clamp(96px, 26%, 150px);
+  height: auto;
+  margin: 0 0 14px 18px;
+  border-radius: 3px;
+  box-shadow: 0 14px 30px -14px rgba(0,0,0,.9);
+}
+
+.detailYear {
+  margin: 0 0 6px;
+  color: rgba(255,255,255,.44);
+  font: 500 10px/1 var(--font-signal-mono), ui-monospace, monospace;
+  letter-spacing: .22em;
+}
+
+.detailTitle {
+  margin: 0;
+  color: #f4f1ea;
+  font: 400 clamp(28px, 4.4vw, 40px)/1.15 var(--font-signal-display), Georgia, serif;
+}
+
+.detailOriginal {
+  margin: 2px 0 0;
+  color: rgba(255,255,255,.5);
+  font: 400 12px/1.45 var(--font-signal-body), system-ui, sans-serif;
+  font-style: italic;
+}
+
+.detailAuthor {
+  margin: 10px 0 0;
+  color: rgba(255,255,255,.72);
+  font: 500 11px/1.5 var(--font-signal-mono), ui-monospace, monospace;
+  letter-spacing: .1em;
+}
+
+.detailAuthor span { color: rgba(255,255,255,.42); }
+
+/* Below the jacket rather than beside it: a pull quote in a 100px gutter is not a quote. */
+.quote {
+  clear: right;
+  margin: 20px 0 0;
+  padding-left: 14px;
+  border-left: 1px solid rgba(255,255,255,.2);
+}
+
+.quoteZh {
+  margin: 0;
+  color: #efeade;
+  font: 400 16px/1.7 var(--font-signal-display), Georgia, serif;
+}
+
+.quoteEn {
+  margin: 6px 0 0;
+  color: rgba(255,255,255,.46);
+  font: 400 11px/1.6 var(--font-signal-mono), ui-monospace, monospace;
+}
+
+.quoteEmpty {
+  clear: right;
+  margin: 20px 0 0;
+  color: rgba(255,255,255,.3);
+  font: 400 12px/1.6 var(--font-signal-body), system-ui, sans-serif;
+}
+
+.hint {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  margin: 0;
+  color: rgba(255,255,255,.34);
+  font: 500 9px/1.5 var(--font-signal-mono), ui-monospace, monospace;
+  letter-spacing: .1em;
+}
+
+@media (max-width: 700px) {
+  /* The rail becomes a strip above the book rather than a column beside it. */
+  .body { grid-template-columns: minmax(0, 1fr); }
+  .rail { max-height: 30vh; }
+  .detail { max-height: none; padding: 16px; }
+  .hintEn { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .backdrop,
+  .panel { animation: none; }
+}

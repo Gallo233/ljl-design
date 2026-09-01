@@ -257,6 +257,96 @@
   text-shadow: 0 1px 3px rgba(0, 0, 0, .7);
 }
 
+/* Pasted art stays on the physical face it was dropped on. The source PNGs already
+   carry their die-cut paper edge, so a small shadow is enough; the former SVG blur +
+   morphology filter forced every moving sticker through an extra raster pass. */
+.stickerPasteLayer {
+  position: absolute;
+  inset: 0;
+  z-index: 9;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.stickerPasteLayer img {
+  position: absolute;
+  height: auto;
+  filter: drop-shadow(0 3px 3px rgba(15, 23, 42, .22));
+  user-select: none;
+  animation: stickerStamp .36s cubic-bezier(.2, .88, .2, 1) both;
+}
+
+@keyframes stickerStamp {
+  0% { opacity: 0; scale: 1.42; }
+  55% { opacity: 1; scale: .92; }
+  100% { opacity: 1; scale: 1; }
+}
+
+/* Falling sticker lives in a body portal so Contact's page-curl clip does not cut it
+   off. Only the sticker itself receives events; the rest of the viewport remains free. */
+.stickerDropLayer {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.fallingSticker {
+  position: fixed;
+  left: 0;
+  top: 0;
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  appearance: none;
+  background: transparent;
+  color: #1b1a17;
+  cursor: grab;
+  pointer-events: auto;
+  touch-action: none;
+  will-change: transform;
+  filter: drop-shadow(0 14px 12px rgba(53, 37, 14, .18));
+}
+
+.fallingSticker:active,
+.fallingSticker[data-dragging="true"] {
+  cursor: grabbing;
+}
+
+.fallingSticker img {
+  display: block;
+  width: 100%;
+  height: auto;
+  transition: transform .18s cubic-bezier(.2, .8, .2, 1), filter .18s ease;
+  user-select: none;
+}
+
+.fallingSticker span {
+  padding: 4px 7px 3px;
+  border: 1px solid rgba(27, 26, 23, .4);
+  background: rgba(251, 250, 244, .88);
+  font-family: var(--font-signal-mono), monospace;
+  font-size: 7px;
+  line-height: 1;
+  letter-spacing: .15em;
+  white-space: nowrap;
+  opacity: .72;
+}
+
+.fallingSticker[data-dragging="true"] img {
+  transform: scale(1.08) rotate(-1deg);
+  filter: saturate(1.08);
+}
+
+.fallingSticker:focus-visible {
+  outline: 2px solid #c0fe04;
+  outline-offset: 8px;
+}
+
 /* ── small screens ───────────────────────────────────────────────────────── */
 
 @media (max-width: 760px) {
@@ -270,4 +360,6 @@
 
 @media (prefers-reduced-motion: reduce) {
   .card { transition: none; }
+  .stickerPasteLayer img { animation: none; }
+  .fallingSticker img { transition: none; }
 }

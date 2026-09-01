@@ -169,12 +169,14 @@ export const BASE_NODE_UV: Record<string, 0 | 1> = Object.fromEntries(
  * bake island. Routed to the atlas it samples the entire 2048px sheet and comes out as
  * the packing layout, which is the garble that was in the frame.
  *
- * `mirrorU` because the sheet's `u` grows toward the viewer's left: read off its corners,
- * where u=0 sits at z=+2.02 and the room is viewed from +X, so +Z is the viewer's right.
- * Without it the picture hangs back to front.
+ * No `mirrorU`: the sheet's `u = 0` sits at `z = +2.02`, and the camera looks from
+ * (36, 17.5, 26) toward (4.2, 5.6, −4.4), which puts its right vector down −Z — so +Z is
+ * the viewer's *left* and the image's left edge already hangs there. The flag was set on
+ * the opposite claim, the same one that had the whiteboard's ink coming out mirrored; it
+ * is kept in the type because a future sheet may genuinely need it.
  */
 const AUTHORED_NODE_IMAGE: Record<string, { url: string; mirrorU?: boolean }> = {
-  "poster.002": { url: "/work/about-room/poster-art.jpg", mirrorU: true },
+  "poster.002": { url: "/work/about-room/poster-art.jpg" },
 };
 
 /** The same table, keyed the way the nodes actually arrive. */
@@ -241,12 +243,13 @@ export const BASE_ATLAS_EXPOSURE: Record<BaseAtlasId, number> = {
 const AUTHORED_HOTSPOT_NODES: Partial<Record<RoomObjectId, string[]>> = {
   "crt-monitor": ["screen", "screen.001", "macbook", "Cube.008", "Cylinder", "Curve"],
   camera: ["camera", "film", "film.001"],
-  bookshelf: [
-    "bookshelf",
-    "bookshelf.001",
-    ...Array.from({ length: 10 }, (_, i) => `book${i + 1}`),
-    ...Array.from({ length: 10 }, (_, i) => `book${i + 1} outer`),
-  ],
+  /*
+   * The board, its bracket, and the row `roomBookshelf.ts` stands on it. The capture's
+   * twenty book meshes are deliberately absent: they are hidden now, and hidden geometry
+   * still answers a raycast — naming them here would leave twenty invisible books
+   * catching every click meant for a real one, the same fault the captured deck had.
+   */
+  bookshelf: ["bookshelf", "bookshelf.001", "about-room-bookshelf"],
   /*
    * The deck is not the capture's any more. `roomPlatter.ts` hides the machine that came
    * in the file and `room3d.ts` stands `about-room-deck` in its place, under `model` and
@@ -262,6 +265,14 @@ const AUTHORED_HOTSPOT_NODES: Partial<Record<RoomObjectId, string[]>> = {
    * the right place and the right way up.
    */
   whiteboard: ["whiteboard", "whiteboard face"],
+  /*
+   * The ball, and only the ball. `roomBasketball.ts` puts its contact shadow in the same
+   * group; naming the group here would lift the shadow with the ball on hover, and the
+   * point of that lift is a ball leaving the floor its shadow stays on. The retired
+   * guitar and its stand are deliberately absent for the same reason the captured deck
+   * is — hidden geometry still answers a raycast.
+   */
+  basketball: ["about-room-basketball"],
 };
 
 /** Same lists, sanitized to the names `getObjectByName` will actually see. */

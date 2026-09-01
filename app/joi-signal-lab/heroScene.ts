@@ -348,6 +348,10 @@ const scene = new THREE.Scene();
     undefined,
     (error: unknown) => {
       console.error("JOI9000 model failed to load", error);
+      // Readiness means the loader has settled, not that the optional shell mesh must
+      // exist. The screen rig and the rest of the scene remain usable, and deep links
+      // must not keep the boot lock or the render loop alive forever after a 404.
+      modelLoaded = true;
     },
   );
 

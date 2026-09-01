@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import styles from "./badge.module.css";
+import { BadgeStickerRain, type PastedSticker } from "./BadgeStickerRain";
 import { createRope } from "./verletRope";
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
@@ -42,12 +43,21 @@ export function LanyardBadge({ active }: { active: boolean }) {
   const cardRef = useRef<HTMLDivElement>(null);
   const [flipped, setFlipped] = useState(false);
   const [hasBackArt, setHasBackArt] = useState(true);
+  const [pastedStickers, setPastedStickers] = useState<PastedSticker[]>([]);
+  const pastedStickerIdRef = useRef(0);
   const backArtRef = useRef<HTMLImageElement>(null);
   const wakeRef = useRef<() => void>(() => {});
   // The pointer listeners are window-level and mount once, so they cannot read
   // the `active` prop directly — it would be whatever it was on mount forever.
   const activeRef = useRef(active);
   activeRef.current = active;
+
+  const pasteSticker = useCallback((sticker: Omit<PastedSticker, "id">) => {
+    setPastedStickers((current) => [
+      ...current.slice(-7),
+      { ...sticker, id: ++pastedStickerIdRef.current },
+    ]);
+  }, []);
 
   // An image that 404s before hydration errors into the void — onError never fires.
   // One post-mount check catches that case; the art appears the moment the author
@@ -185,10 +195,8 @@ export function LanyardBadge({ active }: { active: boolean }) {
       const targetAngle = Math.max(-MAX_CARD_ANGLE, Math.min(MAX_CARD_ANGLE, ropeAngle));
       cardAngle += (targetAngle - cardAngle) * (dragging ? 0.34 : 0.16);
       if (!dragging && Math.abs(targetAngle) < 0.03 && Math.abs(cardAngle) < 0.03) cardAngle = 0;
-      const vx = tail.x - tail.px;
       card.style.transform =
         `translate(${tail.x.toFixed(1)}px, ${tail.y.toFixed(1)}px) rotate(${cardAngle.toFixed(2)}deg)`;
-      card.style.setProperty("--swing", (Math.max(-1, Math.min(1, vx * 0.14))).toFixed(3));
     };
 
     const tick = (time: number) => {
@@ -224,6 +232,7 @@ export function LanyardBadge({ active }: { active: boolean }) {
     }
 
     const onPointerDown = (event: PointerEvent) => {
+      if (!activeRef.current) return;
       const point = localPoint(event);
       dragging = true;
       moved = 0;
@@ -242,13 +251,8 @@ export function LanyardBadge({ active }: { active: boolean }) {
       wake();
     };
     const onPointerMove = (event: PointerEvent) => {
-      // The holo layers chase the pointer whether or not a drag is on — but only
-      // while the badge is on screen. Off About it is `visibility: hidden` and
-      // aria-hidden, and this listener is on the window, so every pointer move
-      // anywhere on the site was measuring a card nobody could see. The read is a
-      // forced layout, interleaved with two style writes; that is a whole-page
-      // thrash bought for an invisible element. A drag still wins, because a drag
-      // that survives the section leaving should still track the hand holding it.
+      // Preserve the initial card: its holographic finish follows the pointer across
+      // Contact, while inactive sections return before performing any layout work.
       if (!dragging && !activeRef.current) return;
       const cardBounds = card.getBoundingClientRect();
       const relX = Math.max(
@@ -347,7 +351,12 @@ export function LanyardBadge({ active }: { active: boolean }) {
   }, [active]);
 
   return (
-    <div ref={rootRef} className={styles.lanyard} aria-hidden={!active}>
+    <div
+      ref={rootRef}
+      className={styles.lanyard}
+      aria-hidden={!active}
+      inert={active ? undefined : true}
+    >
       <svg className={styles.rope} aria-hidden="true">
         <path ref={svgPathRef} className={styles.strap} d="" />
         <path ref={braidLeftRef} className={`${styles.braid} ${styles.braidLeft}`} d="" />
@@ -358,9 +367,10 @@ export function LanyardBadge({ active }: { active: boolean }) {
         ref={cardRef}
         className={`${styles.cardRig} ${flipped ? styles.flipped : ""}`}
         role="button"
-        tabIndex={0}
+        tabIndex={active ? 0 : -1}
         aria-label={flipped ? "工牌背面 — 点按翻回正面" : "访客工牌 — 点按翻到背面"}
         onKeyDown={(event) => {
+          if (!active) return;
           if (event.key !== "Enter" && event.key !== " ") return;
           event.preventDefault();
           setFlipped((value) => !value);
@@ -377,6 +387,22 @@ export function LanyardBadge({ active }: { active: boolean }) {
             </div>
             <span className={styles.barcode} aria-hidden="true" />
             <span className={styles.visitorTag}>VISITOR /// JOI LAB</span>
+            <span className={styles.stickerPasteLayer} aria-hidden="true">
+              {pastedStickers.filter((sticker) => sticker.face === "front").map((sticker) => (
+                <img
+                  key={sticker.id}
+                  src={sticker.src}
+                  alt=""
+                  draggable={false}
+                  style={{
+                    left: `${sticker.x * 100}%`,
+                    top: `${sticker.y * 100}%`,
+                    width: `${sticker.width * 100}%`,
+                    transform: `translate(-50%, -50%) rotate(${sticker.rotation}deg)`,
+                  }}
+                />
+              ))}
+            </span>
           </div>
           <div className={`${styles.face} ${styles.back}`}>
             <span className={styles.punchHole} aria-hidden="true" />
@@ -394,9 +420,31 @@ export function LanyardBadge({ active }: { active: boolean }) {
             <span className={styles.laser} aria-hidden="true" />
             <span className={styles.glare} aria-hidden="true" />
             <span className={styles.backTag}>JOI LAB · 2026</span>
+            <span className={styles.stickerPasteLayer} aria-hidden="true">
+              {pastedStickers.filter((sticker) => sticker.face === "back").map((sticker) => (
+                <img
+                  key={sticker.id}
+                  src={sticker.src}
+                  alt=""
+                  draggable={false}
+                  style={{
+                    left: `${sticker.x * 100}%`,
+                    top: `${sticker.y * 100}%`,
+                    width: `${sticker.width * 100}%`,
+                    transform: `translate(-50%, -50%) rotate(${sticker.rotation}deg)`,
+                  }}
+                />
+              ))}
+            </span>
           </div>
         </div>
       </div>
+      <BadgeStickerRain
+        active={active}
+        cardRef={cardRef}
+        face={flipped ? "back" : "front"}
+        onPaste={pasteSticker}
+      />
     </div>
   );
 }

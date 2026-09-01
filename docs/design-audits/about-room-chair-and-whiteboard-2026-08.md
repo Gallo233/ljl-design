@@ -49,10 +49,17 @@ Two things it does that the reference does not:
 
 **The drawing is on the board, in the room.** `whiteboard face` is a four-vertex quad, so its
 atlas island could be read exactly and the drawing laid over the bake in place. The island is
-turned a quarter — `u` runs up the wall, `v` runs along it and grows toward what the viewer reads
-as left — which is why the remap is `vec2(1 - board.y, 1 - board.x)` rather than a guess. The
-drawing *multiplies* the bake rather than replacing it, so the board keeps the room's own light
-across it and ink reads as ink on a lit surface instead of as a bright rectangle in the wall.
+turned a quarter — `u` runs up the wall, `v` runs along it toward −Z — which is why the remap is
+`vec2(board.y, 1 - board.x)` rather than a guess. The drawing *multiplies* the bake rather than
+replacing it, so the board keeps the room's own light across it and ink reads as ink on a lit
+surface instead of as a bright rectangle in the wall.
+
+*Corrected 2026-09-01.* The remap shipped as `vec2(1 - board.y, 1 - board.x)` on the claim that
+`v` grows toward the viewer's left, and every mark came out mirrored on the wall. The claim was
+the error, not the reading: the camera stands at `FULL_HOME` (36, 17.5, 26) and looks at
+`HOME_LOOK` (4.2, 5.6, −4.4), so `cross(forward, up)` is (0.667, 0, −0.698) — **−Z is the
+viewer's right**, and `v` therefore grows to the right. Decoded off the quad: `u` is 0.447 at
+y 9.43 and 0.027 at y 5.23; `v` is 0.001 at z 4.35 and 0.342 at z 0.94.
 
 **The board is a board.** The surface holds ink and nothing else — transparent where untouched,
 so the 3D board shows its own bake through it and the sheet shows its own white. One canvas,
@@ -77,10 +84,13 @@ So it takes a picture, not a bake: a plain textured material, shown as it is rat
 multiplied into the atlas, because at those coordinates there is no bake to read. The print is
 dark, so an unlit surface still sits in the room rather than glowing out of it.
 
-`mirrorU` is set, and derived rather than guessed: on the sheet's corners `u = 0` sits at
-`z = +2.02`, and the room is viewed from `+X`, which makes `+Z` the viewer's right. Left
-uncorrected the picture hangs back to front. The whiteboard's own remap is the control that says
-`+Z` is right — its print came out the correct way round on the author's screen.
+`mirrorU` is set: on the sheet's corners `u = 0` sits at `z = +2.02`, and the claim at the time
+was that `+Z` is the viewer's right, so the print needed flipping.
+
+*Flagged 2026-09-01, not yet changed.* That claim is the same one the whiteboard's remap rested
+on, and it is wrong — `+Z` is the viewer's **left**. `u = 0` at `z = +2.02` therefore already
+puts the image's left edge on the viewer's left, so `mirrorU` is hanging the print back to
+front. The whiteboard was never a control for it: the whiteboard was mirrored too.
 
 The fit needs no letterboxing: the sheet is 5.22 x 4.04, an aspect of 0.774 against the image's
 0.75, so it maps corner to corner with about 3% of horizontal stretch.

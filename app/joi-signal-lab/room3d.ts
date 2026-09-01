@@ -15,6 +15,17 @@ import {
   type DeckRig,
 } from "./roomTurntable";
 import {
+  ballRadiusFromRecord,
+  createRoomBasketball,
+  retireCapturedGuitar,
+  type BallRig,
+} from "./roomBasketball";
+import {
+  createRoomBookshelf,
+  retireCapturedBooks,
+  type ShelfRig,
+} from "./roomBookshelf";
+import {
   BASE_ATLAS_EXPOSURE,
   BASE_ATLAS_IDS,
   BASE_HOTSPOT_NODES,
@@ -67,6 +78,15 @@ export type RoomScene = {
   raycastAt: (ndc: { x: number; y: number }) => RoomObjectId | null;
   /** Pick one of the four physical deck controls while its close-up camera owns the room. */
   raycastDeckControl: (ndc: { x: number; y: number }) => DeckControlId | null;
+  /**
+   * Which book on the shelf is under the pointer, by its `roomLibrary.ts` id.
+   *
+   * The shelf is one hotspot — the whole row lifts together on hover, the way the
+   * reference's does — so the individual book cannot come back through `raycastAt`, which
+   * answers in hotspot ids. This is the second question: *which* book, so a click on a
+   * spine can open the shelf already showing that book.
+   */
+  raycastBook: (ndc: { x: number; y: number }) => string | null;
   setHover: (id: RoomObjectId | null) => void;
   focus: (id: RoomObjectId | null) => void;
   /**
@@ -174,8 +194,11 @@ const BOARD_FACE_NODE = sanitizeNodeName("whiteboard face");
  * bake comes through untouched.
  *
  * The remap exists because the face's atlas island is turned a quarter: its `u` runs up
- * the wall and its `v` runs along it, and `v` grows in the direction the viewer reads as
- * left. Read off the quad's four corners rather than guessed — see the audit note.
+ * the wall and its `v` runs along it toward −Z. The room is viewed from +X and +Z, so the
+ * camera's right vector points down −Z — `v` grows in the direction the viewer reads as
+ * *right*, and the drawing's own `x` follows it rather than opposing it. Read off the
+ * quad's four corners: `u` is 0.447 at y 9.43 and 0.027 at y 5.23, `v` is 0.001 at
+ * z 4.35 and 0.342 at z 0.94.
  */
 const BOARD_FRAGMENT_SHADER = /* glsl */ `
   precision highp float;
@@ -189,7 +212,7 @@ const BOARD_FRAGMENT_SHADER = /* glsl */ `
   void main() {
     vec3 surface = max(texture2D(uBake, vBakeUv).rgb, vec3(0.0)) * uExposure + uLift;
     vec2 board = (vBakeUv - uBoardMin) / uBoardSize;
-    vec2 drawUv = vec2(1.0 - board.y, 1.0 - board.x);
+    vec2 drawUv = vec2(board.y, 1.0 - board.x);
     if (drawUv.x >= 0.0 && drawUv.x <= 1.0 && drawUv.y >= 0.0 && drawUv.y <= 1.0) {
       vec4 ink = texture2D(uDraw, drawUv);
       surface = mix(surface, surface * ink.rgb, ink.a);
@@ -476,6 +499,8 @@ export function createRoomScene(filmSources?: RoomFilmSources): RoomScene {
   const ownedTextures: any[] = [];
   let model: any = null;
   let deck: DeckRig | null = null;
+  let ball: BallRig | null = null;
+  let shelf: ShelfRig | null = null;
   let boardTexture: any = null;
   let boardMaterial: any = null;
   let unbindBoard: (() => void) | null = null;
@@ -865,6 +890,52 @@ export function createRoomScene(filmSources?: RoomFilmSources): RoomScene {
         playerBoundsRadius = playerSphere.radius * 0.84;
         if (pendingLabel) deck.setLabel(pendingLabel);
 
+        /*
+         * The guitar corner, swapped for the ball that belongs to whoever this room is.
+         *
+         * It rides inside the deck's block because the record is what sizes it, the same
+         * pressing the deck is scaled from — the capture is not to scale with itself, so
+         * the one object in the shot with an exact real dimension sets both. The group
+         * goes under `model` for the same three reasons the deck does: it inherits
+         * `BASE_TRANSFORM`, it is found by name like any captured node, and it is
+         * disposed with the room.
+         */
+        const guitarSlot = retireCapturedGuitar(model);
+        if (guitarSlot) {
+          ball = createRoomBasketball(ballRadiusFromRecord(slot.recordRadius));
+          const floor = model.worldToLocal(
+            new THREE.Vector3(guitarSlot.centre.x, guitarSlot.floorY, guitarSlot.centre.z),
+          );
+          ball.group.position.copy(floor);
+          model.add(ball.group);
+          ball.group.updateMatrixWorld(true);
+        } else if (process.env.NODE_ENV !== "production") {
+          console.warn("[about-room] no captured guitar to replace; the basketball is not built");
+        }
+      }
+
+      /*
+       * The reader's own books, in the run the capture's ten leave behind.
+       *
+       * Outside the deck's block because nothing here is scaled off the record: the shelf
+       * is measured off the books it replaces. Before the hotspot loop because the loop
+       * resolves `BASE_HOTSPOT_NODES` by name, and `about-room-bookshelf` has to exist
+       * under `model` by then to be found.
+       */
+      const shelfSlot = retireCapturedBooks(model);
+      if (shelfSlot) {
+        shelf = createRoomBookshelf(shelfSlot);
+        // The slot is measured in world space and the rig is authored at its own corner,
+        // so one conversion places the whole row. Same shape as the deck's placement.
+        shelf.group.position.copy(
+          model.worldToLocal(
+            new THREE.Vector3(shelfSlot.centreX, shelfSlot.baseY, shelfSlot.minZ),
+          ),
+        );
+        model.add(shelf.group);
+        shelf.group.updateMatrixWorld(true);
+      } else if (process.env.NODE_ENV !== "production") {
+        console.warn("[about-room] no captured books to replace; the shelf is not rebuilt");
       }
 
       Object.entries(BASE_HOTSPOT_NODES).forEach(([id, names]) => {
@@ -1154,6 +1225,15 @@ export function createRoomScene(filmSources?: RoomFilmSources): RoomScene {
       const hit = raycaster.intersectObjects(deck.controlNodes, false)[0]?.object;
       return (hit?.userData.deckControl as DeckControlId | undefined) ?? null;
     },
+    raycastBook: (ndc) => {
+      if (!loaded || !shelf || shelf.bookNodes.length === 0) return null;
+      fullCamera.updateMatrixWorld();
+      shelf.group.updateWorldMatrix(true, true);
+      pointerNdc.set(ndc.x, ndc.y);
+      raycaster.setFromCamera(pointerNdc, fullCamera);
+      const hit = raycaster.intersectObjects(shelf.bookNodes, false)[0]?.object;
+      return (hit?.userData.libraryBook as string | undefined) ?? null;
+    },
     setHover: (id) => { hovered = id; },
     focus: (id) => { focused = id; },
     setPlayerMode: (on) => { playerMode = on; },
@@ -1186,6 +1266,10 @@ export function createRoomScene(filmSources?: RoomFilmSources): RoomScene {
     dispose: () => {
       disposed = true;
       deck?.dispose();
+      ball?.dispose();
+      ball = null;
+      shelf?.dispose();
+      shelf = null;
       if (model) disposeObject(model);
       handoffGeometry?.dispose();
       handoffMaterial?.dispose();

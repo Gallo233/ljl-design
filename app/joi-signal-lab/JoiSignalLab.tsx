@@ -11,6 +11,8 @@ import { createPostChain } from "./postfx";
 import { detectQuality } from "./quality";
 import { LanyardBadge } from "./badge/LanyardBadge";
 import { JoiMusicPlayer } from "./JoiMusicPlayer";
+import { BookshelfSheet } from "./BookshelfSheet";
+import { TerminalSheet } from "./TerminalSheet";
 import { WhiteboardSheet } from "./WhiteboardSheet";
 import { PageTurnCorner } from "./PageTurnCorner";
 import { createScrollSignal } from "./scrollSignal";
@@ -286,7 +288,8 @@ function FilmCanvas({
   /** Fired when the sea moves to a new state, for the HUD readout. */
   onSeaStateChange: (index: number) => void;
   onRoomHover: (id: RoomObjectId | null) => void;
-  onRoomPick: (id: RoomObjectId | null) => void;
+  /** The hotspot, and — for the shelf — which book of it. */
+  onRoomPick: (id: RoomObjectId | null, bookId?: string | null) => void;
   /** True while a mix is playing, so the platter turns. */
   recordPlaying: boolean;
   onDeckVolumeChange: (value: number) => void;
@@ -1068,9 +1071,13 @@ function FilmCanvas({
         return;
       }
       if (!roomOwnsPointer() || deckOpenRef.current) return;
-      const hit = roomScene.raycastAt(normalisedPointer(event));
+      const pointer = normalisedPointer(event);
+      const hit = roomScene.raycastAt(pointer);
       roomScene.focus(hit);
-      onRoomPickRef.current(hit);
+      // The shelf is one hotspot but eight objects. A click on a spine should open the
+      // panel already showing that book, so the second question is asked here rather
+      // than the panel guessing from the hotspot alone.
+      onRoomPickRef.current(hit, hit === "bookshelf" ? roomScene.raycastBook(pointer) : null);
     };
     const handleWheel = (event: WheelEvent) => {
       if (Math.abs(event.deltaX) <= Math.abs(event.deltaY)) return;
@@ -1107,16 +1114,40 @@ function FilmCanvas({
     resize();
 
     let elapsed = 0;
+    let stageDormant = false;
     const render = () => {
       const delta = Math.min(clock.getDelta(), 0.05);
-
-      roomScene.setPlatterSpinning(recordPlayingRef.current);
 
       const reveal = revealRef.current;
       const entry = entryRef.current;
       const exit = exitRef.current;
-      const reelVisible = reveal > 0.001;
+      const contactTurn = contactTurnRef.current;
+      // The ribbon has already released its selected frame by exit .34. Keeping the
+      // whole six-frame scene alive through About and Contact was an invisible full-
+      // screen draw on every frame, plus whichever live reel targets happened to sit
+      // near the playhead.
+      const reelVisible = reveal > 0.001 && exit < 0.7;
       const heroVisible = entry < HERO_OWNS_POINTER_UNTIL;
+
+      // At the end of the paper turn the blue Contact page is fully opaque and owns
+      // every pixel. Let its lightweight DOM/SVG interaction run by itself instead of
+      // spending a nine-pass CRT chain on a canvas that cannot be seen. Scrolling back
+      // lowers the ref and resumes this same loop immediately.
+      // A deep link can begin with the hero completely off-screen. Its GLB loader still
+      // reports readiness through `hero.update`, so do not put the stage to sleep until
+      // that handshake has completed (the loader's error path settles it too).
+      const heroNeedsWarmup = !hero.isReady();
+      const shouldSleepStage = readySent && !heroNeedsWarmup &&
+        (document.hidden || contactTurn > 0.998);
+      if (shouldSleepStage) {
+        if (!stageDormant) reelMotions.forEach((motion) => motion.pause());
+        stageDormant = true;
+        signalRef.current = 0;
+        frame = window.requestAnimationFrame(render);
+        return;
+      }
+      stageDormant = false;
+      roomScene.setPlatterSpinning(recordPlayingRef.current);
 
       // Establish the source lens before any scene asks where the selected frame is.
       camera.position.copy(reelCameraHome);
@@ -1127,14 +1158,8 @@ function FilmCanvas({
       }
       camera.updateMatrixWorld(true);
 
-      // A hidden tab suspends nothing by itself, and the reel sits at reveal 0 for the
-      // whole hero section. The first pass always runs: `onReady` fires from inside it
-      // and the boot loader waits on that.
-      if (readySent && document.hidden) {
-        reelMotions.forEach((motion) => motion.pause());
-        frame = window.requestAnimationFrame(render);
-        return;
-      }
+      // The first pass always runs: `onReady` fires from inside it and the boot loader
+      // waits on that. Later hidden-tab sleeps are handled together with Contact above.
       if (!reelVisible) reelMotions.forEach((motion) => motion.pause());
 
       if (!drag.active && observedStep !== stepRef.current) {
@@ -1156,7 +1181,7 @@ function FilmCanvas({
       }
 
       const activeProject = modulo(stepRef.current, projects.length);
-      const wantsMotion = revealRef.current > 0.4 && !reducedMotion;
+      const wantsMotion = reelVisible && revealRef.current > 0.4 && !reducedMotion;
       if (activeProject !== activeMotionProject) {
         motionByProject.get(activeMotionProject)?.pause();
         const next = motionByProject.get(activeProject);
@@ -1281,7 +1306,7 @@ function FilmCanvas({
         modulo(activeProject - 2, projects.length),
         modulo(2 - activeProject, projects.length),
       );
-      if (nightTideDistance <= 1) {
+      if (reelVisible && nightTideDistance <= 1) {
         nightTideModel.group.rotation.y = 0.22 + Math.sin(uniforms.uTime.value * 0.005) * 0.28;
         nightTideModel.group.rotation.z = -0.06 + Math.sin(uniforms.uTime.value * 0.003) * 0.045;
         nightTideModel.group.position.y = Math.sin(uniforms.uTime.value * 0.006) * 0.16;
@@ -1317,8 +1342,10 @@ function FilmCanvas({
         appliedSideRef.current = deckSideRef.current;
         roomScene.setRecordLabel(deckSideRef.current);
       }
-      if (roomDistance <= 1 || roomIsStage) roomScene.update(performance.now(), roomPointer);
-      if (roomDistance <= 1) {
+      if ((reelVisible && roomDistance <= 1) || roomIsStage) {
+        roomScene.update(performance.now(), roomPointer);
+      }
+      if (reelVisible && roomDistance <= 1) {
         renderer.setRenderTarget(roomTarget);
         renderer.clear();
         renderer.render(roomScene.scene, roomScene.frameCamera);
@@ -1343,7 +1370,7 @@ function FilmCanvas({
         renderer.setRenderTarget(null);
       }
 
-      hero.update(delta, entry);
+      if (heroVisible || heroNeedsWarmup) hero.update(delta, entry);
       // The orb's scattering buffer is a target of its own, so it has to be drawn before
       // the stage target is bound — and only when the hero is what is being drawn.
       if (!roomIsStage && (heroVisible || !readySent)) hero.prepare(renderer);
@@ -1617,6 +1644,9 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
   const [hoveredInterest, setHoveredInterest] = useState<RoomObjectId | null>(null);
   const [musicPlayerOpen, setMusicPlayerOpen] = useState(false);
   const [whiteboardOpen, setWhiteboardOpen] = useState(false);
+  const [terminalOpen, setTerminalOpen] = useState(false);
+  const [shelfOpen, setShelfOpen] = useState(false);
+  const [shelfBookId, setShelfBookId] = useState<string | null>(null);
   const [computerReady, setComputerReady] = useState(false);
   const [fontsReady, setFontsReady] = useState(false);
   /** True when this mount is the way back from a detail page rather than an arrival. */
@@ -2042,9 +2072,14 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
             onHeroReady={() => setComputerReady(true)}
             onSeaStateChange={setSeaState}
             onRoomHover={setHoveredInterest}
-            onRoomPick={(id) => {
+            onRoomPick={(id, bookId) => {
               if (id === "joi-music-box") setMusicPlayerOpen(true);
               if (id === "whiteboard") setWhiteboardOpen(true);
+              if (id === "crt-monitor") setTerminalOpen(true);
+              if (id === "bookshelf") {
+                setShelfBookId(bookId ?? null);
+                setShelfOpen(true);
+              }
             }}
             recordPlaying={recordPlaying}
             onDeckVolumeChange={setDeckVolume}
@@ -2065,6 +2100,33 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
         />
 
         <WhiteboardSheet open={whiteboardOpen} onClose={() => setWhiteboardOpen(false)} />
+
+        {/*
+          The terminal opens over the laptop, not onto it. The negative the reel docks
+          into that screen stays exactly where it is behind this panel — see the header
+          of `terminalProgram.ts` for why the machine is DOM rather than a texture.
+        */}
+        <BookshelfSheet
+          open={shelfOpen}
+          onClose={() => setShelfOpen(false)}
+          initialBookId={shelfBookId}
+        />
+
+        <TerminalSheet
+          open={terminalOpen}
+          onClose={() => setTerminalOpen(false)}
+          onOpenHref={(href) => {
+            // Anything that is not a route of this site — an address, a mail link, the
+            // resume PDF — leaves in its own tab rather than through the reel's transport,
+            // which arms `reel:return` and expects to land on a page that reads it.
+            if (/^(https?:|mailto:)/.test(href) || href.endsWith(".pdf")) {
+              window.open(href, "_blank", "noopener,noreferrer");
+              return;
+            }
+            setTerminalOpen(false);
+            openProject(href);
+          }}
+        />
 
         <section
           className={`${styles.filmUi} ${activeSection === "selected-work" ? styles.filmLayerActive : ""}`}

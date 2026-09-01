@@ -20,3 +20,4 @@ joi-doorway-video/dist/
 # Tool scratch directories — skill working files and session plans, not project source.
 .img2threejs/
 .zcode/
+.impeccable/

@@ -4,6 +4,9 @@ import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { createRoomScene } from "../../joi-signal-lab/room3d";
 import { JoiMusicPlayer } from "../../joi-signal-lab/JoiMusicPlayer";
+import { fontVariables } from "../../fonts";
+import { BookshelfSheet } from "../../joi-signal-lab/BookshelfSheet";
+import { TerminalSheet } from "../../joi-signal-lab/TerminalSheet";
 
 /**
  * A bench for the About room, driven from the console rather than from a scroll.
@@ -17,14 +20,20 @@ import { JoiMusicPlayer } from "../../joi-signal-lab/JoiMusicPlayer";
  *   __room.nodes("book")                              // find geometry by name
  *   await __room.shot("wide", { pos: [11, 6, 16], look: [0, 2.3, -1.7] })
  *   await __room.shot("atlas-check", { only: "screen" })   // isolate one node
+ *   __deck(true) / __terminal(true) / __shelf(true)    // the DOM apps, over the room
  *
  * Frames land in `.next/cache/room-preview/<name>.png`.
  */
 export function RoomPreview() {
   const hostRef = useRef<HTMLDivElement>(null);
   // The deck console is DOM and the room is WebGL, so the only way to see whether the
-  // console reads against the room is to put the real one over the real other one.
+  // console reads against the room is to put the real one over the real other one. The
+  // terminal is here for the same reason, and for a second one: the About page's apps
+  // open from a 3D click, and an agent pane suspends the rAF that drives the scroll to
+  // get there at all — so this is where they can be opened and read.
   const [deck, setDeck] = useState(false);
+  const [terminal, setTerminal] = useState(false);
+  const [shelf, setShelf] = useState(false);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -284,11 +293,21 @@ export function RoomPreview() {
 
     (window as any).__room = api;
     (window as any).__deck = (on = true) => { setDeck(on); return on ? "deck shown" : "deck hidden"; };
+    (window as any).__terminal = (on = true) => {
+      setTerminal(on);
+      return on ? "terminal shown" : "terminal hidden";
+    };
+    (window as any).__shelf = (on = true) => {
+      setShelf(on);
+      return on ? "shelf shown" : "shelf hidden";
+    };
     ready.then(() => console.info("[room-preview] ready — window.__room"));
 
     return () => {
       delete (window as any).__room;
       delete (window as any).__deck;
+      delete (window as any).__terminal;
+      delete (window as any).__shelf;
       room.dispose();
       target.dispose();
       grade.dispose();
@@ -298,7 +317,16 @@ export function RoomPreview() {
   }, []);
 
   return (
-    <div style={{ position: "fixed", inset: 0, display: "grid", placeItems: "center", overflow: "hidden", background: "#020810" }}>
+    /*
+     * The font variables come from `ExperienceShell`, not the root layout — deliberately,
+     * so loading them does not make `body` a scroll container. The bench is not under that
+     * shell, so without this the DOM apps checked here render in fallback faces and the
+     * bench quietly lies about the one thing it is for.
+     */
+    <div
+      className={fontVariables}
+      style={{ position: "fixed", inset: 0, display: "grid", placeItems: "center", overflow: "hidden", background: "#020810" }}
+    >
       <div ref={hostRef} style={{ maxWidth: "100%", maxHeight: "100%", overflow: "hidden", display: "grid" }} />
       {deck ? (
         <JoiMusicPlayer
@@ -307,6 +335,14 @@ export function RoomPreview() {
           onResetView={() => {}}
         />
       ) : null}
+      {terminal ? (
+        <TerminalSheet
+          open
+          onClose={() => setTerminal(false)}
+          onOpenHref={(href) => console.info("[room-preview] terminal would open", href)}
+        />
+      ) : null}
+      {shelf ? <BookshelfSheet open onClose={() => setShelf(false)} /> : null}
     </div>
   );
 }

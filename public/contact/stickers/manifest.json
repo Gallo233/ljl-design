@@ -1,0 +1,116 @@
+{
+  "source": "ChatGPT Image 2026年8月27日 17_35_13.png",
+  "sourceWidth": 1254,
+  "sourceHeight": 1254,
+  "padding": 10,
+  "stickers": [
+    {
+      "id": "crying",
+      "file": "01-crying.png",
+      "width": 420,
+      "height": 408,
+      "sourceBounds": {
+        "minX": 25,
+        "minY": 7,
+        "maxX": 424,
+        "maxY": 394
+      }
+    },
+    {
+      "id": "confused",
+      "file": "02-confused.png",
+      "width": 355,
+      "height": 393,
+      "sourceBounds": {
+        "minX": 454,
+        "minY": 15,
+        "maxX": 788,
+        "maxY": 387
+      }
+    },
+    {
+      "id": "shocked",
+      "file": "03-shocked.png",
+      "width": 408,
+      "height": 388,
+      "sourceBounds": {
+        "minX": 841,
+        "minY": 20,
+        "maxX": 1228,
+        "maxY": 387
+      }
+    },
+    {
+      "id": "money",
+      "file": "04-money.png",
+      "width": 419,
+      "height": 401,
+      "sourceBounds": {
+        "minX": 13,
+        "minY": 399,
+        "maxX": 411,
+        "maxY": 779
+      }
+    },
+    {
+      "id": "suspicious",
+      "file": "05-suspicious.png",
+      "width": 349,
+      "height": 398,
+      "sourceBounds": {
+        "minX": 464,
+        "minY": 409,
+        "maxX": 792,
+        "maxY": 786
+      }
+    },
+    {
+      "id": "unimpressed",
+      "file": "06-unimpressed.png",
+      "width": 391,
+      "height": 368,
+      "sourceBounds": {
+        "minX": 861,
+        "minY": 425,
+        "maxX": 1231,
+        "maxY": 772
+      }
+    },
+    {
+      "id": "blep",
+      "file": "07-blep.png",
+      "width": 394,
+      "height": 444,
+      "sourceBounds": {
+        "minX": 28,
+        "minY": 792,
+        "maxX": 401,
+        "maxY": 1215
+      }
+    },
+    {
+      "id": "love",
+      "file": "08-love.png",
+      "width": 395,
+      "height": 428,
+      "sourceBounds": {
+        "minX": 451,
+        "minY": 808,
+        "maxX": 825,
+        "maxY": 1215
+      }
+    },
+    {
+      "id": "rocket",
+      "file": "09-rocket.png",
+      "width": 389,
+      "height": 477,
+      "sourceBounds": {
+        "minX": 857,
+        "minY": 775,
+        "maxX": 1225,
+        "maxY": 1231
+      }
+    }
+  ]
+}
