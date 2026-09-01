@@ -10,6 +10,7 @@ import {
   decayFrame,
   type LiquidStage,
 } from "../../components/work-experience/liquidStage";
+import { previousProject } from "../joi-signal-lab/reelProjects";
 import styles from "./lab.module.css";
 import { labItems, type LabItem } from "./labData";
 
@@ -28,6 +29,9 @@ const sitePath = (path: string) => `${basePath}${path}`;
  * including honourably killed ones. (Awaiting the author's reference image — layout
  * lives entirely in lab.module.css so restyling does not touch the data.)
  */
+/** Frame 04, so the step back is always frame 03. Resolved from the reel's own table. */
+const previous = previousProject("/lab")!;
+
 export function LabFolder() {
   const rootRef = useRef<HTMLElement>(null);
   const heroRef = useRef<HTMLElement>(null);
@@ -324,10 +328,22 @@ export function LabFolder() {
         })}
       </section>
 
-      <footer className={styles.footer} ref={footerRef}>
-        <span>FILED UNDER: HONEST WORK</span>
-        <Link href="/selected-work">← BACK TO REEL</Link>
-      </footer>
+      {/*
+        * The step back and the sign-off, as one row. The footer keeps its `margin-left:auto`
+        * so it stays exactly where it was; the previous-frame card fills the space that was
+        * always empty beside it, and joins the liquid stage so the field flows through both.
+        */}
+      <div className={styles.closing}>
+        <Link className={styles.prevSignal} href={previous.href}>
+          <span>PREV / {previous.index}</span>
+          <strong>{previous.title}</strong>
+          <b aria-hidden="true">←</b>
+        </Link>
+        <footer className={styles.footer} ref={footerRef}>
+          <span>FILED UNDER: HONEST WORK</span>
+          <Link href="/selected-work">← BACK TO REEL</Link>
+        </footer>
+      </div>
 
       {/* The floating preview card that trails the cursor over the drawer. */}
       <div ref={previewRef} className={styles.preview} aria-hidden="true">

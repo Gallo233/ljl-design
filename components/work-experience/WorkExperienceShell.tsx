@@ -38,6 +38,12 @@ export type WorkExperienceProject = {
     index: string;
     title: string;
   };
+  /** The frame before this one. Absent on 01, which has nothing behind it. */
+  previous?: {
+    href: string;
+    index: string;
+    title: string;
+  };
 };
 
 type ExperienceMode =
@@ -67,6 +73,12 @@ export function WorkExperienceShell({ project }: { project: WorkExperienceProjec
   const apertureRef = useRef<HTMLDivElement>(null);
   const actionsRef = useRef<HTMLDivElement>(null);
   const nextRef = useRef<HTMLAnchorElement>(null);
+  /**
+   * Kept for availability only, not for the liquid stage: this card rides to `opacity: 0`
+   * off the left edge, and a link that is invisible but still focusable is a trap.
+   * Null on frame 01, which has no previous card — `setAvailable` tolerates that.
+   */
+  const prevRef = useRef<HTMLAnchorElement>(null);
   const exitRef = useRef<HTMLButtonElement>(null);
   const gateRef = useRef<HTMLButtonElement>(null);
   const apertureBeforeInteractRef = useRef<{ rect: DOMRect; borderRadius: string } | null>(null);
@@ -205,6 +217,7 @@ export function WorkExperienceShell({ project }: { project: WorkExperienceProjec
         setAvailable(identityRef.current, identityAvailable);
         setAvailable(actionsRef.current, actionsAvailable);
         setAvailable(nextRef.current, nextAvailable);
+        setAvailable(prevRef.current, nextAvailable);
         setAvailable(gateRef.current, gateAvailable);
         availabilityRef.current = availability;
       }
@@ -368,6 +381,12 @@ export function WorkExperienceShell({ project }: { project: WorkExperienceProjec
   useEffect(() => {
     const host = liquidHostRef.current;
     const root = rootRef.current;
+    /*
+     * Four, and only four: `liquidStage.ts` compiles its field for `MAX_SHAPES = 4`, so a
+     * fifth is dropped by the shader rather than drawn. `.prev` therefore keeps its own
+     * painted surface — see the `:not(.prev)` exemption in the stylesheet — instead of
+     * being handed to a field that would never reach it.
+     */
     const shapes = [identityRef.current, apertureRef.current, actionsRef.current, nextRef.current];
     if (!host || !root || shapes.some((shape) => !shape) || modeRef.current === "reduced") return;
     const memory = (navigator as Navigator & { deviceMemory?: number }).deviceMemory ?? 8;
@@ -917,6 +936,27 @@ export function WorkExperienceShell({ project }: { project: WorkExperienceProjec
             {project.repo && <a href={project.repo} target="_blank" rel="noreferrer">SOURCE ↗</a>}
           </div>
         </div>
+
+        {/*
+          * The step back, arriving with the next card and leaving the same way.
+          *
+          * Bottom-left rather than a mirror of `.next`: at full release the aperture has
+          * slid left and still covers the middle of the screen at 62% scale, so the left
+          * flank is not free. This corner is — it is where `.actions` sat before it faded
+          * out — which makes the pair read as one row across the foot of the last anchor.
+          */}
+        {project.previous && (
+          <Link
+            className={`${styles.shape} ${styles.prev}`}
+            href={project.previous.href}
+
+            data-liquid-card
+          >
+            <span>PREV / {project.previous.index}</span>
+            <strong>{project.previous.title}</strong>
+            <b aria-hidden="true">←</b>
+          </Link>
+        )}
 
         <Link
           className={`${styles.shape} ${styles.next}`}

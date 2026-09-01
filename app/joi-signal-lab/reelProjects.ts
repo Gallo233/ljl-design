@@ -53,3 +53,17 @@ export const reelMotionSources = [
   },
 ] as const;
 export const reelPosterSources = reelMotionSources.map(({ projectIndex, poster }) => ({ projectIndex, poster }));
+
+/**
+ * The frame before this one, for the "previous project" card the destinations carry.
+ *
+ * Derived from the same table the reel is built from, so a re-ordered reel re-orders
+ * these too rather than leaving three pages pointing at where a frame used to be.
+ * Frame 01 has no previous and returns `null`; the card is simply not rendered.
+ */
+export function previousProject(href: string) {
+  const index = projects.findIndex((project) => project.href === href);
+  if (index <= 0) return null;
+  const previous = projects[index - 1];
+  return { href: previous.href, index: previous.index, title: previous.title };
+}

@@ -9,6 +9,7 @@ import {
   decayFrame,
   type LiquidStage,
 } from "../../../components/work-experience/liquidStage";
+import { previousProject } from "../../joi-signal-lab/reelProjects";
 import { arcadeGames, godotGames } from "./games";
 import { GameHandheld, type GameVisualState } from "./GameHandheld";
 import styles from "./page.module.css";
@@ -27,6 +28,9 @@ const DEFAULT_STATE: GameVisualState = {
   carrying: false,
   activeId: null,
 };
+
+/** Frame 03, so the step back is always frame 02. Resolved from the reel's own table. */
+const previous = previousProject("/play/night-tide")!;
 
 export function GameCenterExperience() {
   const rootRef = useRef<HTMLElement>(null);
@@ -233,11 +237,23 @@ export function GameCenterExperience() {
         <GameHandheld onVisualStateChange={setVisualState} />
       </section>
 
-      <Link className={styles.nextSignal} href="/lab" ref={nextRef}>
-        <span>NEXT / 04</span>
-        <strong>THE LAB</strong>
-        <b aria-hidden="true">→</b>
-      </Link>
+      {/*
+        * The two ends of the frame, as one row. Both are Living Aperture surfaces and both
+        * go into the liquid stage above, so the field flows between them the way it already
+        * flowed between the identity card and the rack.
+        */}
+      <nav className={styles.frameSteps} aria-label="Reel frames">
+        <Link className={`${styles.frameSignal} ${styles.prevSignal}`} href={previous.href}>
+          <span>PREV / {previous.index}</span>
+          <strong>{previous.title}</strong>
+          <b aria-hidden="true">←</b>
+        </Link>
+        <Link className={`${styles.frameSignal} ${styles.nextSignal}`} href="/lab" ref={nextRef}>
+          <span>NEXT / 04</span>
+          <strong>THE LAB</strong>
+          <b aria-hidden="true">→</b>
+        </Link>
+      </nav>
     </main>
   );
 }

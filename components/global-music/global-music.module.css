@@ -11,10 +11,10 @@
   min-width: 176px;
   height: 48px;
   margin: 0;
-  padding: 6px 27px 6px 58px;
+  /* Right padding widened from 27px to hold the skip control beside the spark. */
+  padding: 6px 44px 6px 58px;
   border: 1px solid rgba(25, 23, 20, .18);
   border-radius: 17px 20px 16px 21px;
-  appearance: none;
   color: var(--sticker-ink);
   background: var(--sticker-paper);
   box-shadow:
@@ -22,7 +22,6 @@
     0 8px 24px rgba(5, 7, 11, .18);
   transform: translateX(-50%) rotate(-2deg);
   transform-origin: center;
-  cursor: pointer;
   isolation: isolate;
   transition: transform .2s ease, box-shadow .2s ease, opacity .18s ease, visibility 0s linear;
   -webkit-tap-highlight-color: transparent;
@@ -45,10 +44,61 @@
 
 .sticker:active { transform: translateX(-50%) rotate(.5deg) translateY(2px); }
 
-.sticker:focus-visible {
+/* The ring belongs to the card even though the focus lands on a control inside it. */
+.sticker:focus-within {
   outline: 2px solid var(--sticker-ink);
   outline-offset: 5px;
 }
+
+/*
+ * The play/pause target: the disc, the title, and all the empty card between them, so the
+ * sticker still reads as one thing to press. It carries no styling of its own — the card
+ * is the styling — which is why it is transparent and unpadded.
+ */
+.main {
+  position: absolute;
+  inset: -1px;
+  padding: 6px 44px 6px 58px;
+  border: 0;
+  border-radius: inherit;
+  appearance: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  text-align: left;
+}
+
+.main:focus-visible { outline: none; }
+
+/* Sits in the right gutter, under the spark. Coral on paper, like the spark. */
+.skip {
+  position: absolute;
+  right: 6px;
+  bottom: 5px;
+  width: 26px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  appearance: none;
+  background: transparent;
+  color: var(--sticker-ink);
+  cursor: pointer;
+  font: 700 11px/1 Georgia, serif;
+  opacity: .58;
+  transition: opacity .18s ease, background-color .18s ease;
+}
+
+.skip:hover,
+.skip:focus-visible { opacity: 1; background: rgba(25, 23, 20, .08); }
+
+.skip:focus-visible { outline: none; }
+
+.skip:disabled { opacity: .22; cursor: default; }
 
 .disc {
   position: absolute;
@@ -124,6 +174,8 @@
   position: absolute;
   top: 5px;
   right: 7px;
+  /* Decoration only, and it sits in the same gutter as the skip control. */
+  pointer-events: none;
   color: var(--sticker-coral);
   font: 700 13px/1 Georgia, serif;
   transform: rotate(12deg);
@@ -144,7 +196,10 @@
   }
 
   .disc { left: 3px; top: 2px; }
-  .copy, .spark { display: none; }
+  /* At 46px the card is just the disc; a second target would be a mis-tap waiting to
+     happen, so skip goes with the copy it sat beside. */
+  .copy, .spark, .skip { display: none; }
+  .main { padding: 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {

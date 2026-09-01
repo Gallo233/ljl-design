@@ -177,7 +177,14 @@
   will-change: transform, opacity;
 }
 
-.root[data-liquid-ready="true"] .shape {
+/*
+ * `.prev` is exempt: `liquidStage.ts` compiles its field for `MAX_SHAPES = 4`, a
+ * documented composition constant, so a fifth card is silently dropped by the shader.
+ * Going transparent for a field that never paints it left pale glass text on a pale
+ * page — legible only if you knew it was there. It keeps the surface every card wears
+ * before the GPU draws instead, which costs the field nothing.
+ */
+.root[data-liquid-ready="true"] .shape:not(.prev) {
   background: transparent;
   box-shadow: none;
 }
@@ -202,6 +209,7 @@
 .panelLabel,
 .apertureChrome,
 .next > span,
+.prev > span,
 .inputHint {
   font: 500 clamp(9px, .72vw, 11px)/1.35 var(--font-signal-mono), ui-monospace, monospace;
   letter-spacing: .15em;
@@ -502,10 +510,54 @@
 .actions button:focus-visible,
 .actions a:focus-visible,
 .next:focus-visible,
+.prev:focus-visible,
 .rail button:focus-visible {
   outline: 2px solid var(--signal);
   outline-offset: 4px;
 }
+
+/*
+ * The step back. Bottom-left, in the corner `.actions` vacates as it fades out, arriving
+ * on the same `--work-release` the next card rides in on. Deliberately the smaller of the
+ * two: going on is the invitation, going back is the courtesy.
+ */
+.prev {
+  left: clamp(18px, 5vw, 76px);
+  /*
+   * Low and short, on purpose. `.actions` sat at 11svh with a 152px body; from there this
+   * card's top edge lands inside the aperture, which at full release still spans the middle
+   * of the screen at 62% scale. Measured at 600/700/800/900px tall, these numbers keep it
+   * clear at every one.
+   */
+  bottom: clamp(16px, 2.4svh, 30px);
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-content: center;
+  width: min(34vw, 470px);
+  min-height: 132px;
+  padding: 20px clamp(20px, 2.2vw, 30px);
+  color: var(--glass-text);
+  text-align: right;
+  text-decoration: none;
+  transform: translate3d(calc((1 - var(--work-release)) * -34vw), 0, 0);
+  opacity: var(--work-release);
+}
+.prev > span { grid-column: 1 / -1; align-self: start; color: var(--signal); }
+.prev strong {
+  grid-column: 2;
+  align-self: end;
+  font: 400 clamp(26px, 2.8vw, 40px)/.94 var(--font-signal-display), serif;
+  letter-spacing: -.035em;
+  text-transform: uppercase;
+}
+.prev b {
+  grid-column: 1;
+  align-self: end;
+  color: var(--signal);
+  font: 300 clamp(26px, 2.8vw, 40px)/1 system-ui, sans-serif;
+  transition: transform 240ms ease;
+}
+.prev:hover b { transform: translateX(-10px); }
 
 .next {
   top: 50%;

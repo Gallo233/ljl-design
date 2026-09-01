@@ -379,6 +379,26 @@ export function GlobalMusicProvider({ children }: { children: ReactNode }) {
     if (active) applyTone(active.lowShelf, active.highShelf, tone);
   }, [tone]);
 
+  /*
+   * The side runs out and the next one starts.
+   *
+   * Two different endings to catch. A preview is a real media element and fires `ended`;
+   * an offline side is synthesised and never ends on its own, so it is the clock that
+   * says when its `SIDE_SECONDS` are up. `advancing` guards both against firing twice
+   * while the next track is still being fetched — `play` is async, and a 250 ms tick
+   * would otherwise call it three or four times over.
+   */
+  const advancing = useRef(false);
+  const advance = useCallback(async () => {
+    if (advancing.current) return;
+    advancing.current = true;
+    try {
+      await step(1);
+    } finally {
+      advancing.current = false;
+    }
+  }, [step]);
+
   useEffect(() => {
     if (!playback) return;
     const tick = () => {
@@ -386,19 +406,22 @@ export function GlobalMusicProvider({ children }: { children: ReactNode }) {
         ? elementRef.current.currentTime
         : (performance.now() - startedAtRef.current) / 1000;
       setElapsed(next);
+      if (playback.kind === "synth" && playback.duration > 0 && next >= playback.duration) {
+        void advance();
+      }
     };
     tick();
     const timer = window.setInterval(tick, 250);
     return () => window.clearInterval(timer);
-  }, [playback]);
+  }, [advance, playback]);
 
   useEffect(() => {
     const element = elementRef.current;
     if (!element) return;
-    const onEnded = () => stop();
+    const onEnded = () => { void advance(); };
     element.addEventListener("ended", onEnded);
     return () => element.removeEventListener("ended", onEnded);
-  }, [stop]);
+  }, [advance]);
 
   useEffect(() => () => {
     requestRef.current += 1;
@@ -460,8 +483,16 @@ export function GlobalMusicProvider({ children }: { children: ReactNode }) {
   );
 }
 
+/**
+ * The sticker.
+ *
+ * A group rather than one button, because it carries two actions now. The card keeps its
+ * own hover and press states — `:active` matches ancestors, so the whole sticker still
+ * presses when either control inside it does — and `:focus-within` draws the ring the
+ * single button used to draw for itself.
+ */
 function GlobalMusicSticker() {
-  const { loaded, isPlaying, isSwitching, source, toggle } = useGlobalMusic();
+  const { loaded, isPlaying, isSwitching, source, toggle, step } = useGlobalMusic();
   const sourceLabel = isSwitching
     ? "CHANGING SIDE"
     : source === "loading"
@@ -471,25 +502,40 @@ function GlobalMusicSticker() {
         : "OFFLINE SIDE";
 
   return (
-    <button
-      type="button"
+    <div
       className={styles.sticker}
       data-global-music-sticker
       data-playing={isPlaying ? "true" : "false"}
       data-switching={isSwitching ? "true" : "false"}
-      onClick={() => { void toggle(); }}
-      aria-label={isPlaying ? `暂停 ${slotTitle(loaded)}` : `播放 ${slotTitle(loaded)}`}
-      aria-pressed={isPlaying}
+      role="group"
+      aria-label="全站音乐"
     >
-      <span className={styles.disc} aria-hidden="true">
-        <i />
-        <b>{isSwitching ? "↻" : isPlaying ? "Ⅱ" : "▶"}</b>
-      </span>
-      <span className={styles.copy}>
-        <strong>{slotTitle(loaded)}</strong>
-        <small>{slotArtist(loaded)} · {sourceLabel}</small>
-      </span>
+      <button
+        type="button"
+        className={styles.main}
+        onClick={() => { void toggle(); }}
+        aria-label={isPlaying ? `暂停 ${slotTitle(loaded)}` : `播放 ${slotTitle(loaded)}`}
+        aria-pressed={isPlaying}
+      >
+        <span className={styles.disc} aria-hidden="true">
+          <i />
+          <b>{isSwitching ? "↻" : isPlaying ? "Ⅱ" : "▶"}</b>
+        </span>
+        <span className={styles.copy}>
+          <strong>{slotTitle(loaded)}</strong>
+          <small>{slotArtist(loaded)} · {sourceLabel}</small>
+        </span>
+      </button>
+      <button
+        type="button"
+        className={styles.skip}
+        onClick={() => { void step(1); }}
+        disabled={isSwitching}
+        aria-label="下一首"
+      >
+        <span aria-hidden="true">⏭</span>
+      </button>
       <span className={styles.spark} aria-hidden="true">✦</span>
-    </button>
+    </div>
   );
 }
