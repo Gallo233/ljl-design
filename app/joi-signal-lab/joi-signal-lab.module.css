@@ -200,6 +200,7 @@
   background:
     linear-gradient(180deg, rgba(5, 7, 12, .35), transparent 18%, transparent 76%, rgba(8, 15, 27, .14)),
     radial-gradient(ellipse at center, transparent 43%, rgba(0, 0, 0, .31) 100%);
+  transition: box-shadow .35s ease, background .35s ease;
 }
 
 .heroCopy {
@@ -442,33 +443,115 @@
 
 .contactPanel {
   --closing-presence: var(--contact-presence, 0);
-  --closing-shift: var(--contact-shift, 34px);
+  --closing-shift: var(--contact-shift, 28px);
+  right: auto;
+  /* Text on a spiral pad starts after the binding, not on top of it. */
+  left: var(--contact-margin);
+  bottom: clamp(68px, 10svh, 112px);
+  gap: clamp(13px, 1.8svh, 20px);
+  width: min(58vw, 760px);
+  max-width: none;
 }
 
-.contactPanel h2 { max-width: 20ch; }
+.contactPanel h2 {
+  max-width: 12ch;
+  font-family: var(--font-signal-body), ui-rounded, "Arial Rounded MT Bold", sans-serif;
+  font-size: clamp(52px, 6.5vw, 104px);
+  font-weight: 600;
+  line-height: .86;
+  letter-spacing: -.065em;
+  text-wrap: balance;
+  text-shadow:
+    -1px 0 rgba(224, 101, 70, .28),
+    1px 0 rgba(75, 109, 139, .24);
+}
 
 /*
- * `--contact-progress` is written every frame by the scroll driver and, until now, read
- * by nothing at all. It fills the call sheet's rule as the reader comes down the last
- * screen.
+ * Landing straight on /contact.
  *
- * Deliberately a decoration and not a reveal. Deep-linking to /contact lands at
- * progress 0 with a whole screen still below it, so anything *gated* on this variable
- * would hide the email address behind a scroll the reader has no reason to make — which
- * is the failure this file is supposed to be watching for. The panel's own entrance
- * still owns whether the rows are visible.
+ * Defaults only: the quiet field and invitation are already settled, so the address is
+ * on screen in the first frame from the stylesheet alone — before React
+ * hydrates, before the scroll driver's first tick, and whether or not WebGL ever comes
+ * up. The driver writes the same properties inline, and inline beats a class, so the
+ * moment it runs it owns them again with no jump.
  */
-.contactPanel .closingKicker { position: relative; }
-.contactPanel .closingKicker::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  bottom: -7px;
-  height: 1px;
-  width: calc(var(--contact-progress, 0) * 100%);
-  background: var(--coral);
-  opacity: .5;
+.experience[data-landing="contact"] {
+  --contact-field-presence: 1;
+  --contact-presence: 1;
+  --contact-shift: 0px;
 }
+
+.contactStatement {
+  margin: 0;
+  max-width: min(100%, 46rem);
+  font-size: clamp(14px, 1.12vw, 17px);
+  line-height: 1.55;
+  color: rgba(28, 36, 45, .68);
+}
+
+/*
+ * The address is the page's one conversion action. Mail follows the conventional click;
+ * copying is adjacent and explicit, so neither behaviour has to be guessed.
+ */
+.contactAddress {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 20px;
+  margin-top: clamp(2px, .8svh, 8px);
+}
+
+.contactEmail {
+  display: inline-block;
+  padding: 0 0 7px;
+  border-bottom: 1px solid rgba(28, 36, 45, .32);
+  color: inherit;
+  font-family: var(--font-signal-mono), monospace;
+  font-size: clamp(19px, 2.1vw, 32px);
+  font-weight: 500;
+  line-height: 1.08;
+  letter-spacing: .045em;
+  overflow-wrap: anywhere;
+  transition: border-color .2s ease, color .2s ease;
+}
+
+.contactEmail:hover,
+.contactEmail:focus-visible {
+  color: var(--coral);
+  border-color: var(--coral);
+}
+
+.contactEmail:focus-visible,
+.contactAddress button:focus-visible {
+  outline: 1px solid rgba(28, 36, 45, .78);
+  outline-offset: 6px;
+}
+
+.contactAddress button {
+  min-height: 34px;
+  padding: 7px 10px 6px;
+  border: 1px solid rgba(28, 36, 45, .3);
+  border-radius: 999px;
+  background: rgba(240, 246, 253, .36);
+  color: rgba(28, 36, 45, .72);
+  font-family: var(--font-signal-mono), monospace;
+  font-size: 9px;
+  letter-spacing: .12em;
+  cursor: pointer;
+  transition: border-color .2s ease, color .2s ease, background-color .2s ease;
+}
+
+.contactAddress button:hover,
+.contactAddress button:focus-visible {
+  color: var(--coral);
+  border-color: var(--coral);
+  background: rgba(240, 246, 253, .72);
+}
+
+.contactPanel .closingActions { margin-top: 2px; }
+.contactPanel .closingActions a { border-bottom-color: rgba(28, 36, 45, .3); }
+.contactPanel .closingMeta { margin-top: 1px; color: rgba(28, 36, 45, .72); }
+.contactPanel .closingActions a:focus-visible { outline-color: rgba(28, 36, 45, .78); }
 
 /*
  * Scroll owns the entrance in both directions. A second time-based stagger here would
@@ -514,6 +597,60 @@
     left: clamp(22px, 5vw, 48px);
     bottom: clamp(70px, 10svh, 100px);
     max-width: min(68vw, 520px);
+  }
+}
+
+@media (max-width: 900px) {
+  .contactPanel {
+    width: min(66vw, 560px);
+  }
+
+  .contactPanel h2 {
+    max-width: 10.5ch;
+    font-size: clamp(46px, 7vw, 68px);
+  }
+}
+
+@media (max-width: 600px) {
+  .contactPanel {
+    top: clamp(250px, 34svh, 292px);
+    right: 20px;
+    /* Still clears the coil — the margin just costs more of a narrow column. */
+    left: var(--contact-margin);
+    bottom: auto;
+    width: auto;
+    max-width: none;
+    gap: clamp(10px, 1.7svh, 14px);
+  }
+
+  .contactPanel h2 {
+    max-width: none;
+    font-size: clamp(39px, 11.8vw, 54px);
+    line-height: .88;
+  }
+
+  .contactStatement {
+    max-width: 32ch;
+    font-size: 13px;
+    line-height: 1.48;
+  }
+
+  .contactAddress { gap: 9px 12px; margin-top: 0; }
+  .contactEmail { font-size: clamp(16px, 4.6vw, 20px); }
+
+  .contactAddress button {
+    min-height: 38px;
+    padding-inline: 9px;
+  }
+
+  .closingActions {
+    gap: 8px 18px;
+  }
+
+  .closingActions a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 32px;
   }
 }
 
@@ -622,157 +759,86 @@
 .aboutSceneActive { visibility: visible; }
 
 /*
- * Contact is a physical black call sheet under About, exposed from the top-right.
- * `--contact-turn-size` is written by both scroll and the draggable corner, so neither
- * route gets a second, canned transition. At 220% the diagonal has travelled beyond
- * both opposite edges and the sheet owns the full viewport.
+ * Contact's no-WebGL state. It shares the shader's 72px terminal lattice and near-black
+ * signal falloff, but it never moves and never contains content. The canvas sits above
+ * it when available; a lost context therefore removes only the pointer wake.
  */
+/*
+ * One place the notebook's geometry is written down.
+ *
+ * The coil, the ruling and the margin the copy starts at all read these, so the page
+ * cannot end up with text sitting on the binding or holes drifting across the lines.
+ */
+.experience {
+  --contact-rule-pitch: 44px;
+  --contact-binding-left: clamp(8px, 1.6vw, 26px);
+  /* A coil is a physical object; it does not scale with the viewport. */
+  --contact-binding-width: 44px;
+  --contact-margin: calc(
+    var(--contact-binding-left) + var(--contact-binding-width) + clamp(16px, 2.2vw, 40px)
+  );
+}
+
+.contactBackdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  /*
+   * Ruled stock. Every number here is the CSS half of a pair — the field shader draws
+   * the same paper and the same ruling at the same 44px pitch, because this is the whole
+   * of Contact whenever WebGL does not paint and the two must not disagree.
+   *
+   * The stock is neutral: no wash of colour over it in either direction. The only colour
+   * on the page is in the ruling, which is the blue-grey of an exercise book.
+   */
+  background:
+    repeating-linear-gradient(
+      0deg,
+      rgba(150, 166, 201, .22) 0 1.4px,
+      transparent 1.4px var(--contact-rule-pitch, 44px)
+    ),
+    radial-gradient(ellipse at 50% 46%, #fafaf9 0%, #f7f7f6 66%, #f1f1f0 100%);
+  opacity: var(--contact-field-presence, 0);
+  pointer-events: none;
+  will-change: opacity;
+}
+
+/*
+ * The binding, above the field and below the copy.
+ *
+ * It is DOM rather than another thing for the shader to draw: the coil is hardware, not
+ * paper, so the pointer wake has no business bending it — and putting it here means it
+ * survives on the reader who never gets a WebGL context, along with the rest of the page.
+ */
+.contactBinding {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--contact-binding-left);
+  width: var(--contact-binding-width);
+  z-index: 5;
+  opacity: var(--contact-field-presence, 0);
+  pointer-events: none;
+  will-change: opacity;
+}
+
+.contactBinding svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+/* Semantic foreground above the optional field. It owns no opaque surface. */
 .contactPage {
   position: absolute;
   inset: 0;
   z-index: 13;
-  overflow: hidden;
-  color: #f2eee8;
-  background:
-    radial-gradient(circle at 78% 12%, rgba(255, 255, 255, .035), transparent 30%),
-    repeating-linear-gradient(96deg, rgba(255, 255, 255, .012) 0 1px, transparent 1px 7px),
-    #090a0c;
-  clip-path: polygon(
-    calc(100% - var(--contact-turn-size, 0%)) 0,
-    100% 0,
-    100% var(--contact-turn-size, 0%)
-  );
-  opacity: var(--contact-page-opacity, 0);
-  pointer-events: none;
-  will-change: clip-path, opacity;
-  filter: drop-shadow(-12px 16px 22px rgba(0, 0, 0, .28));
-}
-
-.contactPage::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  opacity: .22;
-  pointer-events: none;
-  background: radial-gradient(circle at 30% 70%, rgba(224, 115, 63, .035), transparent 36%);
-}
-
-/*
- * The corner is small enough to coexist with the header links, but it is a real 52px+
- * pointer target. It follows the hand down-left; click and keyboard activation only
- * lift it as a hint. The header remains one layer above it, so CONTACT in the nav is never
- * sacrificed for the decorative route.
- */
-.pageTurnCorner {
-  position: absolute;
-  /* Below the persistent navigation strip: visually upper-right, without stealing its
-     CONTACT link as a pointer target. */
-  top: clamp(88px, 15.2svh, 122px);
-  right: 0;
-  z-index: 13;
-  width: clamp(88px, 8vw, 116px);
-  height: clamp(88px, 8vw, 116px);
-  margin: 0;
-  padding: 0;
-  border: 0;
-  appearance: none;
-  color: #f2eee8;
-  background: transparent;
-  opacity: 0;
-  overflow: visible;
-  touch-action: none;
-  user-select: none;
-  -webkit-user-select: none;
-  cursor: grab;
-  will-change: opacity;
-}
-
-.pageTurnCorner[data-active="true"] {
-  opacity: var(--page-corner-opacity, 1);
-}
-
-.pageTurnCorner:disabled { pointer-events: none; }
-.pageTurnCorner:active { cursor: grabbing; }
-
-.pageCurlFold {
-  position: absolute;
-  top: 0;
-  right: 0;
-  display: block;
-  width: var(--page-curl-width, clamp(88px, 8vw, 116px));
-  height: var(--page-curl-height, clamp(88px, 8vw, 116px));
-  transform-origin: 100% 0;
-  will-change: width, height, transform, opacity;
-}
-
-/* The upper-right triangle is the lifted page face, with light catching the crease. */
-.pageCurlFold {
-  clip-path: polygon(0 0, 100% 0, 100% 100%);
-  opacity: var(--page-fold-opacity, 1);
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, .13), transparent 42%),
-    linear-gradient(140deg, #474541, #242426 72%);
-  filter: drop-shadow(-8px 9px 12px rgba(0, 0, 0, .3));
-}
-
-.pageCurlHint {
-  position: absolute;
-  top: 18px;
-  right: 8px;
-  width: 58px;
-  opacity: 0;
-  color: rgba(242, 238, 232, .74);
-  font-family: var(--font-signal-mono), monospace;
-  font-size: 7px;
-  line-height: 1.35;
-  letter-spacing: .13em;
-  text-align: center;
-  rotate: 42deg;
+  color: #1c242d;
   pointer-events: none;
 }
 
-.pageTurnCorner[data-hinting="true"] .pageCurlFold {
-  animation: pageCurlLift 880ms cubic-bezier(.2, .75, .2, 1) both;
-}
-
-.pageTurnCorner[data-hinting="true"] .pageCurlHint {
-  animation: pageCurlHint 880ms ease both;
-}
-
-.pageTurnCorner:focus-visible {
-  outline: 1px solid rgba(242, 238, 232, .9);
-  outline-offset: -18px;
-}
-
-.experience[data-page-turn="settling"] .contactPage {
-  transition:
-    clip-path 540ms cubic-bezier(.2, .8, .2, 1),
-    opacity 180ms ease;
-}
-
-.experience[data-page-turn="settling"] .pageTurnCorner {
-  transition: opacity 360ms ease;
-}
-
-.experience[data-page-turn="settling"] .pageCurlFold {
-  transition:
-    width 540ms cubic-bezier(.2, .8, .2, 1),
-    height 540ms cubic-bezier(.2, .8, .2, 1),
-    opacity 420ms ease;
-}
-
-@keyframes pageCurlLift {
-  0%, 100% { transform: translate3d(0, 0, 0); }
-  38% { transform: translate3d(-11px, 11px, 0) rotate(-1.5deg); }
-  62% { transform: translate3d(-7px, 7px, 0) rotate(-.7deg); }
-}
-
-@keyframes pageCurlHint {
-  0%, 18%, 100% { opacity: 0; transform: translate(0, 0); }
-  38%, 68% { opacity: .82; transform: translate(-6px, 6px); }
-}
-
-/* The Contact scene layer carries one thing: the badge, now inside the black sheet. */
+/* The existing badge is Contact's only physical object; its implementation is untouched. */
 .contactScene {
   position: absolute;
   inset: 0;
@@ -784,6 +850,13 @@
 }
 
 .contactSceneActive { visibility: visible; }
+
+/* Static-contact modes reveal the CSS field instead of spending work on a hidden wake. */
+@media (prefers-reduced-motion: reduce) {
+  .stageLayer {
+    opacity: calc(1 - var(--contact-field-presence, 0));
+  }
+}
 
 /*
  * The room is the stage now, not a box on the panel, so what lives on this layer is
@@ -1417,21 +1490,29 @@
 .badgeBox {
   position: absolute;
   top: 0;
-  right: clamp(24px, 12vw, 260px);
-  width: 320px;
+  right: clamp(28px, 5vw, 86px);
+  width: 340px;
   height: 100%;
   pointer-events: none;
 }
 
 @media (max-width: 900px) {
-  .badgeBox { right: clamp(10px, 5vw, 90px); width: 240px; }
+  .badgeBox { right: clamp(12px, 3vw, 34px); width: 250px; }
   .roomLabel { top: 12svh; font-size: clamp(18px, 5vw, 26px); }
 }
 
 @media (max-width: 600px) {
-  /* On a phone the copy owns the viewport and a drag toy under a scrolling thumb is
-     a fight, not a feature. */
-  .badgeBox { display: none; }
+  /* The card stays as a cropped signature, while the parent passes `active=false` on a
+     coarse pointer so neither its drag surface nor the sticker portal fights scrolling. */
+  .badgeBox {
+    top: -190px;
+    right: -44px;
+    display: block;
+    width: 184px;
+    height: 440px;
+    overflow: hidden;
+    opacity: .74;
+  }
   .roomLabel { display: none; }
 }
 
@@ -1597,6 +1678,45 @@
   border-bottom: 1px solid rgba(238, 244, 250, .16);
   background: linear-gradient(180deg, rgba(6, 9, 15, .25), transparent);
   pointer-events: none;
+  transition: color .35s ease, border-color .35s ease, background .35s ease;
+}
+
+/* Contact is the light release at the end of the machine. Once the aperture owns the
+   frame, the fixed chrome changes ink instead of relying on pale type over pale paper. */
+.experience[data-active-section="contact"] .header {
+  color: #30261d;
+  border-bottom-color: rgba(62, 47, 34, .17);
+  background: linear-gradient(180deg, rgba(250, 241, 225, .68), rgba(250, 241, 225, 0));
+}
+
+.experience[data-active-section="contact"] .brand {
+  text-shadow: -1px 0 rgba(224, 101, 70, .58), 1px 0 rgba(75, 109, 139, .46);
+}
+
+.experience[data-active-section="contact"] .brand > i {
+  filter: drop-shadow(0 0 8px rgba(75, 56, 38, .2));
+}
+
+.experience[data-active-section="contact"] .headerProgress i {
+  background: linear-gradient(90deg, #5e7e96, #47392d 50%, var(--coral));
+  box-shadow: 0 0 7px rgba(224, 101, 70, .24);
+}
+
+.experience[data-active-section="contact"] .menu i { background: #30261d; }
+
+.experience[data-active-section="contact"] .sectionNav a:focus-visible,
+.experience[data-active-section="contact"] .brand:focus-visible {
+  outline-color: rgba(48, 38, 29, .78);
+}
+
+.experience[data-active-section="contact"] .vignette {
+  box-shadow:
+    inset 0 0 0 1px rgba(70, 52, 34, .12),
+    inset 0 0 90px rgba(92, 66, 39, .16),
+    inset 0 -80px 110px rgba(112, 76, 45, .1);
+  background:
+    linear-gradient(180deg, rgba(82, 58, 36, .08), transparent 18%, transparent 78%, rgba(82, 58, 36, .05)),
+    radial-gradient(ellipse at center, transparent 56%, rgba(76, 52, 31, .12) 100%);
 }
 
 .headerProgress {
@@ -2001,10 +2121,12 @@
   .dots button { transition: none; }
   .deckShelf i { transition: none; }
   .leaveVeil span { transition: none; }
-  .contactPage,
-  .pageTurnCorner { transition: none !important; }
-  .pageCurlFold,
-  .pageCurlHint { animation: none !important; transition: none !important; }
+  .contactBackdrop,
+  .contactPanel,
+  .contactScene { will-change: auto; }
+  /* The optional WebGL surface gives way to Contact's complete static CSS field.
+     This also makes a deep-linked /contact final on the first painted frame. */
+  .stageLayer { opacity: calc(1 - var(--contact-field-presence, 0)); }
   /*
    * The canvas already pins `--velocity` to 0 for a reader who asked for less motion,
    * so this is belt and braces — and it is also what keeps the skew off if the stage

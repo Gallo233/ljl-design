@@ -85,7 +85,7 @@ Living Aperture is the reusable signature outside the CRT. It is a real interfac
 - Editorial display type paired with restrained body copy and operational mono labels.
 - One real product or research object leads each destination.
 - Motion communicates ownership, connection, release and state rather than decorating every element.
-- CRT closing panels retain their own denser, darker world.
+- CRT closing panels retain their own denser world; Contact releases it onto plain ruled paper rather than another dark screen.
 
 ## Colors
 
@@ -117,6 +117,8 @@ The neutral field is cool paper. Each destination owns a distinct glass body and
 **The One Signal Rule.** A destination uses one glass family at a time; its body, edge, focus and selection tones are derived from that family.
 
 **The Truthful State Rule.** Offline, retired, killed and loading states name themselves directly; color never pretends a product is available.
+
+**The Quiet Ending Rule.** Contact is the release after the reel and the room, not another index. One invitation, one direct address and the existing lanyard badge own the frame. About is burned through by a scroll-driven noisy aperture: the old room remains outside, an overexposed Contact field appears inside, and its white-hot edge recovers before the semantic invitation enters. The stock underneath is neutral — no wash of colour over it in either direction, warm or cool — so the only colour on the page is the blue-grey of the ruling and the ink. The sheet is ruled, not gridded, and a spiral binding runs down the left margin the copy starts after; the ruling, the coil pitch and that margin all read one set of variables so holes never drift across lines. The transition follows shader.se's recovered threshold graph and timing while keeping every heading, address, link and focus surface out of WebGL. Once settled, only a moving fine pointer may refract the ruling; at rest it is flat. Contact's invitation uses the rounder body face while machine labels retain mono. Reduced motion, rendering failure and context loss expose the complete semantic page over its static CSS field.
 
 ## Typography
 

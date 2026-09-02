@@ -8,13 +8,14 @@ import type { DeckControlId } from "./roomTurntable";
 import { createHeroScene } from "./heroScene";
 import { createOceanScene, SEA_STATES } from "./oceanScene";
 import { createPostChain } from "./postfx";
+import { createContactField } from "./contactField";
+import { CONTACT_CONTENT, CONTACT_EMAIL } from "./contactContent";
 import { detectQuality } from "./quality";
 import { LanyardBadge } from "./badge/LanyardBadge";
 import { JoiMusicPlayer } from "./JoiMusicPlayer";
 import { BookshelfSheet } from "./BookshelfSheet";
 import { TerminalSheet } from "./TerminalSheet";
 import { WhiteboardSheet } from "./WhiteboardSheet";
-import { PageTurnCorner } from "./PageTurnCorner";
 import { createScrollSignal } from "./scrollSignal";
 import { ROOM_OBJECTS, type RoomObjectId } from "./roomObjects";
 import { projects, reelMotionSources, reelPosterSources, type ProjectSignal } from "./reelProjects";
@@ -25,48 +26,16 @@ import { useGlobalMusic } from "../../components/global-music/GlobalMusic";
 
 const seaStateLabels = SEA_STATES.map((state) => state.label);
 
-/** Contact copy becomes legible shortly after the paper starts exposing it. */
-const contactPresenceFor = (turn: number) => smoothStep((turn - 0.18) / 0.62);
-
-/**
- * One writer for both scroll and pointer-driven paper motion.
- *
- * The contact sheet grows as a diagonal polygon from the top-right corner. The separate
- * curl follows the hand during a drag and follows a restrained diagonal during scroll,
- * so the two inputs never produce two visibly different transitions.
- */
-const applyPageTurnStyle = (
-  root: HTMLElement,
-  turn: number,
-  presence: number,
-  dragX = 0,
-  dragY = 0,
-  dragging = false,
-) => {
-  const amount = clamp01(turn);
-  const restingCorner = Math.min(116, Math.max(82, window.innerWidth * 0.075));
-  const defaultX = amount * Math.min(window.innerWidth * 0.82, 1180);
-  const defaultY = amount * Math.min(window.innerHeight * 0.82, 760);
-  const curlX = dragging ? Math.max(defaultX, dragX) : defaultX;
-  const curlY = dragging ? Math.max(defaultY, dragY) : defaultY;
-  // Reveal gently for the first four-fifths, then clear the last opposite corner.
-  const revealSize = amount < 0.8
-    ? amount * 140
-    : 112 + ((amount - 0.8) / 0.2) * 108;
-  // The draggable affordance starts the turn, then yields almost immediately to the
-  // upper Contact reveal. Keeping it through the hand-off draws a second, lower curl.
-  const cornerOpacity = 1 - smoothStep(amount / 0.1);
-  const style = root.style;
-  style.setProperty("--contact-turn", amount.toFixed(4));
-  style.setProperty("--contact-turn-size", `${revealSize.toFixed(2)}%`);
-  // A zero-area polygon can still leave a one-pixel filtered seam in some browsers.
-  style.setProperty("--contact-page-opacity", smoothStep(amount / 0.035).toFixed(4));
-  style.setProperty("--contact-presence", clamp01(presence).toFixed(4));
-  style.setProperty("--page-curl-width", `${(restingCorner + curlX).toFixed(1)}px`);
-  style.setProperty("--page-curl-height", `${(restingCorner + curlY).toFixed(1)}px`);
-  style.setProperty("--page-fold-opacity", (1 - smoothStep((amount - 0.82) / 0.15)).toFixed(4));
-  style.setProperty("--page-corner-opacity", cornerOpacity.toFixed(4));
+/** SOURCE: shader.se shapes its burn threshold with quintic smootherstep. */
+const smootherStep = (value: number) => {
+  const amount = clamp01(value);
+  return amount * amount * amount * (amount * (amount * 6 - 15) + 10);
 };
+
+/** The burn owns the background first; semantic Contact content waits out the flash. */
+const contactFieldPresenceFor = (turn: number) => turn;
+const contactPresenceFor = (turn: number) => smoothStep((turn - 0.62) / 0.28);
+const contactFlashFadeFor = (linearTurn: number) => smoothStep((linearTurn - 0.02) / 0.46);
 import { SiteHUD } from "../../components/SiteHUD";
 import {
   FOCAL_HANDOFFS,
@@ -75,7 +44,6 @@ import {
   TOTAL_SCREENS,
   clamp01,
   focalHandoffLinearProgress,
-  focalHandoffProgress,
   getSection,
   progressWithin,
   smoothStep,
@@ -225,6 +193,7 @@ function FilmCanvas({
   exitRef,
   roomPresenceRef,
   contactTurnRef,
+  contactFlashRef,
   scrollVelocityRef,
   signalRef,
   onStepChange,
@@ -257,8 +226,10 @@ function FilmCanvas({
   exitRef: { current: number };
   /** The room belongs to About only and fades before Contact takes ownership. */
   roomPresenceRef: { current: number };
-  /** About → Contact paper turn, shared by scroll and the draggable corner. */
+  /** About → Contact signal hand-off, 0 while the room owns the stage and 1 at rest. */
   contactTurnRef: { current: number };
+  /** Separate SOURCE flash recovery: white first, then the real Contact field colour. */
+  contactFlashRef: { current: number };
   /** Scroll speed in screens per second, signed. Drives the tube's grip on the signal. */
   scrollVelocityRef: { current: number };
   /**
@@ -349,21 +320,38 @@ function FilmCanvas({
     const tier = detectQuality();
     const reducedMotion = tier.reducedMotion;
     const isMobile = tier.isMobile;
+    const pointerFieldEnabled = !reducedMotion &&
+      window.matchMedia("(hover: hover) and (pointer: fine)").matches;
+    // Coarse pointers still receive the scroll-driven burn. They only lose the later
+    // pointer wake; reduced-motion is the one mode that replaces the transition itself.
+    const staticContactField = reducedMotion;
     // One context for the whole stage. MSAA over a full-screen canvas costs more on a
     // phone than the softer edges are worth — and the post chain resolves most edges
     // anyway, because everything it touches has been through a bloom pyramid.
-    const renderer = new THREE.WebGLRenderer({
-      canvas,
-      alpha: true,
-      antialias: tier.antialias,
-      powerPreference: "high-performance",
-    });
+    let renderer: any;
+    try {
+      renderer = new THREE.WebGLRenderer({
+        canvas,
+        alpha: true,
+        antialias: tier.antialias,
+        powerPreference: "high-performance",
+      });
+    } catch {
+      // The quiet Contact remains complete without a context. Hiding the unpainted
+      // surface exposes the CSS field; settling readiness avoids stranding a deep link
+      // behind the boot lock when WebGL is unavailable.
+      canvas.style.display = "none";
+      onReadyRef.current();
+      onHeroReadyRef.current();
+      return;
+    }
     renderer.setClearColor(0x000000, 0);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.shadowMap.enabled = tier.shadows;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
     const post = createPostChain(renderer, tier);
+    const contactField = createContactField(renderer);
 
     /*
      * The sea, drawn into its own target and handed to the terminal's glass as a
@@ -786,6 +774,7 @@ function FilmCanvas({
       camera.updateProjectionMatrix();
       hero.setSize(width, height);
       post.setSize(width, height, pixelRatio);
+      contactField.setSize(width, height, pixelRatio);
       roomScene.setFullAspect(aspect);
       const reelY = aspect <= 1 ? -1.6 : -1.6 - 0.3 * aspect + 0.2;
       const widthScale = THREE.MathUtils.clamp((width - 500) / (2560 - 500), 0, 1);
@@ -840,6 +829,17 @@ function FilmCanvas({
       hero.setPointer(x, y);
       ocean.setPointer(x, y);
     };
+
+    // Contact's semantic DOM sits above the canvas. A window listener keeps the quiet
+    // background wake continuous while the pointer crosses the address and links.
+    const handleContactPointerMove = (event: PointerEvent) => {
+      if (!pointerFieldEnabled || staticContactField || contactTurnRef.current < 0.94) return;
+      contactField.setPointer(event.clientX, event.clientY, boundsLeft, boundsTop);
+    };
+    const handleContactPointerOut = (event: PointerEvent) => {
+      if (event.relatedTarget === null) contactField.leavePointer();
+    };
+    const handleContactPointerLeave = () => contactField.leavePointer();
 
     /**
      * The reel owns the pointer only in the stretch between the other two.
@@ -1109,10 +1109,24 @@ function FilmCanvas({
     canvas.addEventListener("pointerleave", handleLeave);
     canvas.addEventListener("click", handleClick);
     canvas.addEventListener("wheel", handleWheel, { passive: false });
+    window.addEventListener("pointermove", handleContactPointerMove, { passive: true });
+    window.addEventListener("pointerout", handleContactPointerOut);
+    window.addEventListener("blur", handleContactPointerLeave);
+    // A lost context only costs the optional field; Contact's copy and static fallback
+    // are ordinary DOM beneath and above this canvas.
+    const handleContextLost = (event: Event) => {
+      event.preventDefault();
+      canvas.style.opacity = "0";
+      contactField.leavePointer();
+    };
+    const handleContextRestored = () => {
+      canvas.style.opacity = "";
+    };
+    canvas.addEventListener("webglcontextlost", handleContextLost);
+    canvas.addEventListener("webglcontextrestored", handleContextRestored);
     const resizeObserver = new ResizeObserver(resize);
     resizeObserver.observe(canvas);
     resize();
-
     let elapsed = 0;
     let stageDormant = false;
     const render = () => {
@@ -1122,6 +1136,7 @@ function FilmCanvas({
       const entry = entryRef.current;
       const exit = exitRef.current;
       const contactTurn = contactTurnRef.current;
+      const contactFlash = contactFlashRef.current;
       // The ribbon has already released its selected frame by exit .34. Keeping the
       // whole six-frame scene alive through About and Contact was an invisible full-
       // screen draw on every frame, plus whichever live reel targets happened to sit
@@ -1129,16 +1144,14 @@ function FilmCanvas({
       const reelVisible = reveal > 0.001 && exit < 0.7;
       const heroVisible = entry < HERO_OWNS_POINTER_UNTIL;
 
-      // At the end of the paper turn the blue Contact page is fully opaque and owns
-      // every pixel. Let its lightweight DOM/SVG interaction run by itself instead of
-      // spending a nine-pass CRT chain on a canvas that cannot be seen. Scrolling back
-      // lowers the ref and resumes this same loop immediately.
+      // At the end of the hand-off Contact owns every pixel. Its field is one lightweight
+      // fullscreen pass, so the nine-pass CRT chain and room can remain dormant.
       // A deep link can begin with the hero completely off-screen. Its GLB loader still
       // reports readiness through `hero.update`, so do not put the stage to sleep until
       // that handshake has completed (the loader's error path settles it too).
       const heroNeedsWarmup = !hero.isReady();
       const shouldSleepStage = readySent && !heroNeedsWarmup &&
-        (document.hidden || contactTurn > 0.998);
+        document.hidden;
       if (shouldSleepStage) {
         if (!stageDormant) reelMotions.forEach((motion) => motion.pause());
         stageDormant = true;
@@ -1147,6 +1160,31 @@ function FilmCanvas({
         return;
       }
       stageDormant = false;
+
+      const contactFieldPresence = contactFieldPresenceFor(contactTurn);
+      const drawContact = (clearScreen: boolean) => {
+        if (staticContactField) return false;
+        contactField.render({
+          presence: contactFieldPresence,
+          flashFade: contactFlash,
+          delta,
+          reducedMotion: false,
+          clearScreen,
+        });
+        return true;
+      };
+
+      // Contact retains the shared context but drops the hero, reel, room and CRT chain.
+      if (readySent && !heroNeedsWarmup && contactTurn > 0.998) {
+        if (!stageDormant) reelMotions.forEach((motion) => motion.pause());
+        stageDormant = true;
+        signalRef.current = 0;
+        canvas.style.cursor = "default";
+        drawContact(true);
+        frame = window.requestAnimationFrame(render);
+        return;
+      }
+      if (contactTurn < 0.82 && canvas.style.cursor === "default") canvas.style.cursor = "";
       roomScene.setPlatterSpinning(recordPlayingRef.current);
 
       // Establish the source lens before any scene asks where the selected frame is.
@@ -1508,9 +1546,8 @@ function FilmCanvas({
       elapsed += delta;
       post.render({
         blend: reelOwnsFrame,
-        // Slot A is the hero before the reel and the room after it. The room fades
-        // away before Contact becomes active, revealing the stage's dark call-sheet
-        // field instead of leaking About's desk into the next section.
+        // Slot A is the hero before the reel and the room after it. The room loses its
+        // signal before Contact takes focus, leaving the quiet field to finish the move.
         slotAOpacity: exit > 0.001
           ? smoothStep((exit - 0.12) / 0.1) * THREE.MathUtils.clamp(roomPresence / exit, 0, 1)
           : 1,
@@ -1522,6 +1559,10 @@ function FilmCanvas({
         dim: 0,
         elapsed,
       });
+
+      // During the hand-off the field gently covers the departing room. It has no edge
+      // or paper geometry: scrolling backwards runs the same signal fade in reverse.
+      if (contactTurn > 0.001) drawContact(false);
 
       if (!readySent) { readySent = true; onReadyRef.current(); }
       frame = window.requestAnimationFrame(render);
@@ -1538,6 +1579,11 @@ function FilmCanvas({
       canvas.removeEventListener("pointerleave", handleLeave);
       canvas.removeEventListener("click", handleClick);
       canvas.removeEventListener("wheel", handleWheel);
+      canvas.removeEventListener("webglcontextlost", handleContextLost);
+      canvas.removeEventListener("webglcontextrestored", handleContextRestored);
+      window.removeEventListener("pointermove", handleContactPointerMove);
+      window.removeEventListener("pointerout", handleContactPointerOut);
+      window.removeEventListener("blur", handleContactPointerLeave);
       window.clearTimeout(wheel.resetTimer);
       geometry.dispose();
       material.dispose();
@@ -1553,6 +1599,7 @@ function FilmCanvas({
       roomTarget.dispose();
       hero.dispose();
       post.dispose();
+      contactField.dispose();
       const surface = renderer.domElement;
       renderer.dispose();
       /*
@@ -1643,6 +1690,40 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
   /** Which room object the reader picked — lights the matching interest chip. */
   const [hoveredInterest, setHoveredInterest] = useState<RoomObjectId | null>(null);
   const [musicPlayerOpen, setMusicPlayerOpen] = useState(false);
+  /**
+   * Mail remains the conventional primary link; copying is the explicit escape hatch
+   * for a machine with no registered mail client.
+   */
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
+  const copyResetRef = useRef<number | null>(null);
+  const [badgeInteractive, setBadgeInteractive] = useState(false);
+
+  const copyEmail = async () => {
+    if (copyResetRef.current !== null) window.clearTimeout(copyResetRef.current);
+    let ok = false;
+    try {
+      await navigator.clipboard.writeText(CONTACT_EMAIL);
+      ok = true;
+    } catch {
+      // An insecure origin or a refused permission lands here. Say so — the address is
+      // on screen to be read either way, and the mail link beside it still works.
+      ok = false;
+    }
+    setCopyState(ok ? "copied" : "failed");
+    copyResetRef.current = window.setTimeout(() => setCopyState("idle"), 2600);
+  };
+
+  useEffect(() => () => {
+    if (copyResetRef.current !== null) window.clearTimeout(copyResetRef.current);
+  }, []);
+
+  useEffect(() => {
+    const query = window.matchMedia("(hover: hover) and (pointer: fine)");
+    const sync = () => setBadgeInteractive(query.matches);
+    sync();
+    query.addEventListener("change", sync);
+    return () => query.removeEventListener("change", sync);
+  }, []);
   const [whiteboardOpen, setWhiteboardOpen] = useState(false);
   const [terminalOpen, setTerminalOpen] = useState(false);
   const [shelfOpen, setShelfOpen] = useState(false);
@@ -1677,9 +1758,26 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
   closeDeckRef.current = () => { if (musicPlayerOpen) setMusicPlayerOpen(false); };
   const [activeSection, setActiveSection] = useState<SectionId>(initialSection);
   const activeIndex = modulo(step, projects.length);
+  /*
+   * Contact does not wait for the machine.
+   *
+   * The boot screen holds the page still until the film transport, the hero's GLB and
+   * the fonts are all warm. That is the right trade for the homepage — the CRT booting
+   * *is* the arrival. It is the wrong one for someone who typed /contact to find an
+   * email address, because it puts a WebGL context and a model parse in front of a line
+   * of text that needs neither.
+   *
+   * So the deep link skips the lock, and `data-landing` lets the stylesheet paint the
+   * settled invitation on the very first frame — no JS, no rAF, no GL. The scroll driver's
+   * inline variables take over the moment it runs, because inline wins over a class.
+   *
+   * Deliberately not extended to the hero, or to the other two sections that have a
+   * scene to arrive into.
+   */
+  const contactFastPath = initialSection === "contact";
   // The loader doubles as the reference's boot screen: it holds the page (scroll lock in
   // the driver) until every system it fronts for is actually warm.
-  const ready = filmReady && computerReady && fontsReady;
+  const ready = contactFastPath || (filmReady && computerReady && fontsReady);
   const readyRef = useRef(ready);
   readyRef.current = ready;
   const loadedSystems = (filmReady ? 1 : 0) + (computerReady ? 1 : 0) + (fontsReady ? 1 : 0);
@@ -1809,11 +1907,9 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
   const reelExitRef = useRef(0);
   /** About's full-stage room fades out before Contact owns the address and copy. */
   const roomPresenceRef = useRef(0);
-  /** Scroll-driven paper turn from the room into Contact's black call sheet. */
+  /** Scroll-driven signal hand-off from the room into Contact's quiet field. */
   const contactTurnRef = useRef(0);
-  /** Pointer drag temporarily owns the same variables the scroll callback normally writes. */
-  const pageTurnGestureRef = useRef(false);
-  const pageTurnSettleTimerRef = useRef<number | null>(null);
+  const contactFlashRef = useRef(0);
   const dragActiveRef = useRef(false);
 
   /*
@@ -1841,16 +1937,76 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
     return () => window.removeEventListener("keydown", handleKey);
   }, [menuOpen, musicPlayerOpen]);
 
-  // Land on the section this route names, before the first paint. One scroll, four addresses.
+  /*
+   * Land on the section this route names, before the first paint. One scroll, four
+   * addresses.
+   *
+   * `scrollRestoration` has to be taken off automatic first. The browser restores a
+   * fresh load to zero *after* this effect, which quietly undid every deep link but the
+   * homepage — /contact, /about-me and /selected-work all opened at the top of the hero
+   * and left the reader to find the section themselves. This page's position is derived
+   * from the route, not from history, so history does not get a vote.
+   *
+   * The second pass on the next frame is for the router: it settles the document after
+   * hydration, and that lands after this effect too.
+   */
   useLayoutEffect(() => {
     if (initialSection === "hero") return;
-    window.scrollTo({
-      top: getSection(initialSection).position * window.innerHeight,
-      behavior: "instant" as ScrollBehavior,
-    });
+    const previous = history.scrollRestoration;
+    try { history.scrollRestoration = "manual"; } catch {}
+    const land = () => {
+      const top = getSection(initialSection).position * window.innerHeight;
+      const reachable = document.documentElement.scrollHeight - window.innerHeight;
+      if (top <= 0 || reachable < top - 1) return 0;
+      window.scrollTo({ top, behavior: "instant" as ScrollBehavior });
+      return top;
+    };
+    /*
+     * Keep asking until the viewport can answer.
+     *
+     * `position * innerHeight` is zero when `innerHeight` is zero, and `scrollTo` clamps
+     * to whatever the document can currently reach — so a layout that is not settled yet
+     * does not fail loudly, it silently lands the reader at the top of the hero with no
+     * sign anything went wrong. Retry until the page is actually tall enough to hold the
+     * target, give up after a second, and get out of the way the moment the reader
+     * touches the page themselves.
+     */
+    let frame = 0;
+    let attempts = 0;
+    let finished = false;
+    const stop = () => {
+      finished = true;
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener("wheel", stop);
+      window.removeEventListener("touchstart", stop);
+      window.removeEventListener("keydown", stop);
+    };
+    const attempt = () => {
+      if (finished) return;
+      const top = land();
+      if (top > 0 && Math.abs(window.scrollY - top) <= 2) { stop(); return; }
+      if (++attempts > 60) { stop(); return; }
+      frame = window.requestAnimationFrame(attempt);
+    };
+    attempt();
+    window.addEventListener("wheel", stop, { passive: true });
+    window.addEventListener("touchstart", stop, { passive: true });
+    window.addEventListener("keydown", stop);
+    return () => {
+      stop();
+      try { history.scrollRestoration = previous; } catch {}
+    };
   }, [initialSection]);
 
   const { scrollToSection } = useScrollDriver({
+    /*
+     * Where this route starts, in screens.
+     *
+     * Seeded from the section table rather than from `window.scrollY`, which is only
+     * correct once the landing above has actually taken. Reading a not-yet-landed zero
+     * here used to make the smoothed position glide up through every section on arrival.
+     */
+    initialScreens: getSection(initialSection).position,
     // Runs every frame. Writes CSS variables and refs directly — no React state, no re-render.
     onFrame: ({ screens, velocity }) => {
       const experience = experienceRef.current;
@@ -1871,22 +2027,29 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
         FOCAL_HANDOFFS.selectedToAbout,
         screens,
       );
-      const contactTurn = focalHandoffProgress(FOCAL_HANDOFFS.aboutToContact, screens);
+      const contactLinear = focalHandoffLinearProgress(
+        FOCAL_HANDOFFS.aboutToContact,
+        screens,
+      );
+      const contactTurn = smootherStep(contactLinear);
+      const contactFlash = contactFlashFadeFor(contactLinear);
 
-      // The picture stays with its focal object for most of each move. Copy leaves
-      // early enough not to cross the paper edge, while the room releases only once
-      // Contact's black sheet covers most of it.
+      // The old room remains outside the expanding burn, matching the source transition.
+      // Only its DOM furniture clears early; the Contact invitation waits until the
+      // white flash has recovered and the hole covers most of the focal plane.
       const aboutArrival = smoothStep((reelExit - 0.5) / 0.46);
-      const aboutDeparture = smoothStep((contactTurn - 0.18) / 0.46);
+      const aboutDeparture = smoothStep((contactTurn - 0.04) / 0.24);
       const aboutPresence = aboutArrival * (1 - aboutDeparture);
+      const contactFieldPresence = contactFieldPresenceFor(contactTurn);
       const contactPresence = contactPresenceFor(contactTurn);
-      const roomPresence = reelExit * (1 - contactPresence);
+      const roomPresence = reelExit * (1 - smoothStep((contactTurn - 0.88) / 0.12));
 
       entryRef.current = entry;
       filmRevealRef.current = filmReveal;
       reelExitRef.current = reelExit;
       roomPresenceRef.current = roomPresence;
       contactTurnRef.current = contactTurn;
+      contactFlashRef.current = contactFlash;
       if (roomPresence < 0.35) closeDeckRef.current();
       filmActiveRef.current = filmReveal > 0.55 && reelExit < 0.08;
 
@@ -1911,10 +2074,9 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
       write("--reel-furniture-presence", (1 - smoothStep(reelExit / 0.2)).toFixed(4));
       write("--about-presence", aboutPresence.toFixed(4));
       write("--about-shift", `${((1 - aboutPresence) * 34).toFixed(2)}px`);
-      if (!pageTurnGestureRef.current) {
-        applyPageTurnStyle(experience, contactTurn, contactPresence);
-      }
-      write("--contact-shift", `${((1 - contactPresence) * 34).toFixed(2)}px`);
+      write("--contact-field-presence", contactFieldPresence.toFixed(4));
+      write("--contact-presence", contactPresence.toFixed(4));
+      write("--contact-shift", `${((1 - contactPresence) * 28).toFixed(2)}px`);
       write("--about-progress", progressWithin("about-me", screens).toFixed(4));
       write("--contact-progress", progressWithin("contact", screens).toFixed(4));
       // The same instability the post chain is using, for the type sitting over it.
@@ -1922,49 +2084,11 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
     },
     onSectionChange: setActiveSection,
     // Don't snap out from under someone who is dragging the reel.
-    isLocked: () => pageTurnGestureRef.current || (filmActiveRef.current && dragActiveRef.current),
+    isLocked: () => filmActiveRef.current && dragActiveRef.current,
     // The boot screen holds the page still until every system is warm.
     // The menu is modal, so the page behind it holds still — same pin the boot uses.
     bootLocked: () => !readyRef.current || menuOpen,
   });
-
-  const handlePageTurnProgress = (
-    progress: number,
-    dragX: number,
-    dragY: number,
-    dragging: boolean,
-  ) => {
-    const experience = experienceRef.current;
-    if (!experience) return;
-    if (pageTurnSettleTimerRef.current !== null) {
-      window.clearTimeout(pageTurnSettleTimerRef.current);
-      pageTurnSettleTimerRef.current = null;
-    }
-    pageTurnGestureRef.current = dragging;
-    if (dragging) {
-      experience.dataset.pageTurn = "dragging";
-    } else {
-      experience.dataset.pageTurn = "settling";
-      pageTurnSettleTimerRef.current = window.setTimeout(() => {
-        delete experience.dataset.pageTurn;
-        pageTurnSettleTimerRef.current = null;
-      }, 560);
-    }
-    applyPageTurnStyle(
-      experience,
-      progress,
-      contactPresenceFor(progress),
-      dragX,
-      dragY,
-      dragging,
-    );
-  };
-
-  useEffect(() => () => {
-    if (pageTurnSettleTimerRef.current !== null) {
-      window.clearTimeout(pageTurnSettleTimerRef.current);
-    }
-  }, []);
 
   // Keep the address bar in step with where the reader actually is, without adding history
   // entries — scrolling is not navigation.
@@ -2000,6 +2124,8 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
     <main
       ref={experienceRef}
       tabIndex={-1}
+      data-landing={contactFastPath ? "contact" : undefined}
+      data-active-section={activeSection}
       className={`${styles.experience} ${musicPlayerOpen ? styles.experienceDeckOpen : ""} ${className}`}
       style={{
         // Scroll length comes from the section table, so adding a section extends the page.
@@ -2046,13 +2172,20 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
           <div className={styles.blueField} aria-hidden="true" />
         </section>
 
+        {/* Static, content-free fallback for reduced motion and lost/absent WebGL. */}
+        <div className={styles.contactBackdrop} aria-hidden="true" />
+
         {/*
           The stage canvas sits above both CSS backdrops and carries every fullscreen
           scene. It is deliberately outside `.filmLayer`: that layer's opacity and
           clip-path are the reel's arrival, and applying them to the canvas would fade
           the hero out along with the reel it is handing over to.
         */}
-        <div className={styles.stageLayer}>
+        <div
+          className={styles.stageLayer}
+          aria-hidden={activeSection === "contact" ? true : undefined}
+          inert={activeSection === "contact" ? true : undefined}
+        >
           <FilmCanvas
             step={step}
             revealRef={filmRevealRef}
@@ -2060,6 +2193,7 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
             exitRef={reelExitRef}
             roomPresenceRef={roomPresenceRef}
             contactTurnRef={contactTurnRef}
+            contactFlashRef={contactFlashRef}
             scrollVelocityRef={scrollVelocityRef}
             signalRef={signalRef}
             deckOpen={musicPlayerOpen}
@@ -2091,6 +2225,59 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
             onReady={() => setFilmReady(true)}
             onDragStateChange={(active: boolean) => { dragActiveRef.current = active; }}
           />
+        </div>
+
+        {/*
+          The spiral binding, down the left margin.
+          One coil per ruled line: the pattern tile is the same 44px the ruling repeats
+          at, so the holes sit between lines instead of wandering across them. Drawn as
+          DOM because the coil is hardware — the pointer wake bends paper, not wire — and
+          because this way it still exists for a reader whose WebGL never arrives.
+        */}
+        <div className={styles.contactBinding} aria-hidden="true">
+          <svg focusable="false">
+            <defs>
+              <pattern
+                id="contact-coil"
+                width="44"
+                height="44"
+                patternUnits="userSpaceOnUse"
+              >
+                {/* The punched hole, read as a shadow through the sheet. */}
+                <ellipse cx="31" cy="22" rx="5" ry="3.8" fill="rgba(70, 78, 90, .15)" />
+                <g transform="rotate(-14 21 22)">
+                  <ellipse
+                    cx="21"
+                    cy="23.3"
+                    rx="13"
+                    ry="8.4"
+                    fill="none"
+                    stroke="rgba(90, 98, 110, .26)"
+                    strokeWidth="3.6"
+                  />
+                  <ellipse
+                    cx="21"
+                    cy="22"
+                    rx="13"
+                    ry="8.4"
+                    fill="none"
+                    stroke="#b6bdc7"
+                    strokeWidth="3"
+                  />
+                  <ellipse
+                    cx="21"
+                    cy="21.2"
+                    rx="13"
+                    ry="8.4"
+                    fill="none"
+                    stroke="rgba(255, 255, 255, .66)"
+                    strokeWidth="1"
+                  />
+                </g>
+              </pattern>
+            </defs>
+            <rect width="100%" height="100%" fill="url(#contact-coil)" />
+          </svg>
         </div>
 
         <JoiMusicPlayer
@@ -2131,6 +2318,8 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
         <section
           className={`${styles.filmUi} ${activeSection === "selected-work" ? styles.filmLayerActive : ""}`}
           aria-label="Selected Joi work"
+          aria-hidden={activeSection === "selected-work" ? undefined : true}
+          inert={activeSection === "selected-work" ? undefined : true}
         >
           <RollingProjectTitle step={step} onProjectOpen={openProject} />
 
@@ -2202,44 +2391,65 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
           </div>
         </section>
 
-        {/* Contact is a black call sheet underneath the room's draggable paper corner. */}
+        {/* Contact's words remain semantic DOM. The shared canvas only bends the field. */}
         <div
           className={styles.contactPage}
           aria-hidden={activeSection === "contact" ? undefined : true}
         >
-          <div
-            className={`${styles.contactScene} ${activeSection === "contact" ? styles.contactSceneActive : ""}`}
-          >
-            <div className={styles.badgeBox}>
-              <LanyardBadge active={activeSection === "contact"} />
-            </div>
-          </div>
-
           <section
             className={`${styles.closingPanel} ${styles.contactPanel} ${activeSection === "contact" ? styles.closingPanelActive : ""}`}
             aria-label="Contact"
             inert={activeSection === "contact" ? undefined : true}
           >
-            <p className={styles.closingKicker}>04 / CONTACT — CALL SHEET</p>
-            <h2>Let&rsquo;s make technology people can live with.</h2>
-            <div className={styles.closingBody}>
-              <p lang="zh-CN">在找 AI 产品 / 产品设计的机会，也接有意思的项目。来聊。</p>
-            </div>
-            <div className={styles.closingActions}>
-              <a href="mailto:18520455682@163.com">18520455682@163.COM</a>
-              <a href="https://github.com/Gallo233" target="_blank" rel="noreferrer">GITHUB / GALLO233</a>
-              <a href="/resume/gallo-liu-resume-cn.pdf" download>RESUME / PDF</a>
-            </div>
-            <p className={styles.closingMeta}>GUANGZHOU · GMT+8 · 2026</p>
-          </section>
-        </div>
+            <p className={styles.closingKicker}>{CONTACT_CONTENT.kicker}</p>
+            <h2>{CONTACT_CONTENT.title}</h2>
+            <p className={styles.contactStatement} lang="zh-CN">
+              {CONTACT_CONTENT.statement}
+            </p>
 
-        <PageTurnCorner
-          active={activeSection === "about-me"}
-          progressRef={contactTurnRef}
-          onProgress={handlePageTurnProgress}
-          onCommit={() => scrollToSection.current("contact")}
-        />
+            <div className={styles.contactAddress}>
+              <a
+                className={styles.contactEmail}
+                href={`mailto:${CONTACT_EMAIL}`}
+              >
+                {CONTACT_EMAIL}
+              </a>
+              <button type="button" onClick={copyEmail}>
+                {copyState === "copied" ? "已复制" : copyState === "failed" ? "复制失败" : "复制邮箱"}
+              </button>
+            </div>
+            {/* Announced, not drawn: the button's own label already carries the state. */}
+            <p className={styles.srOnly} role="status" aria-live="polite">
+              {copyState === "copied" ? "邮箱已复制到剪贴板" : ""}
+              {copyState === "failed" ? `复制失败，邮箱是 ${CONTACT_EMAIL}` : ""}
+            </p>
+
+            <div className={styles.closingActions}>
+              {CONTACT_CONTENT.actions.map((action) => (
+                <a
+                  key={action.href}
+                  href={action.href}
+                  {...("external" in action && action.external
+                    ? { target: "_blank", rel: "noreferrer" }
+                    : {})}
+                  {...("download" in action && action.download ? { download: true } : {})}
+                >
+                  {action.value}
+                </a>
+              ))}
+            </div>
+            <p className={styles.closingMeta}>{CONTACT_CONTENT.meta}</p>
+          </section>
+
+          {/* Visually independent; placed after the content for a useful reading order. */}
+          <div
+            className={`${styles.contactScene} ${activeSection === "contact" ? styles.contactSceneActive : ""}`}
+          >
+            <div className={styles.badgeBox}>
+              <LanyardBadge active={activeSection === "contact" && badgeInteractive} />
+            </div>
+          </div>
+        </div>
 
         <header className={styles.header}>
           <a className={styles.brand} href="/" aria-label="Back to Gallo home">

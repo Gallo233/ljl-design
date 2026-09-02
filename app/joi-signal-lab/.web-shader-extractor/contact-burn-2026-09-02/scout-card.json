@@ -1,0 +1,85 @@
+{
+  "schemaVersion": 3,
+  "source": {
+    "url": "https://www.shader.se/#/contact",
+    "canonicalUrl": "https://www.shader.se/",
+    "route": "#/contact",
+    "viewport": { "width": 720, "height": 1280, "dpr": 1 },
+    "browser": "User-supplied Chrome screen recording plus current public bundle",
+    "backend": "Three.js r183 WebGPURenderer / TSL",
+    "capturedAt": "2026-09-02"
+  },
+  "candidates": [
+    {
+      "id": "surface-main",
+      "selector": "#scroll-container canvas",
+      "context": "webgpu",
+      "owner": "React Three Fiber root; OU HandShake transition component",
+      "visualCoverage": "whole visible route transition",
+      "temporalActivity": "scroll and time driven",
+      "ablationImpact": "prior locked scout proves the page has one paint canvas",
+      "evidence": ["evidence/video/burn-sequence.png", "evidence/source/contact-burn.md"]
+    }
+  ],
+  "lockStatus": "locked",
+  "allowedLockStatus": ["unlocked", "provisional", "attributed", "locked"],
+  "allowedTruth": ["SOURCE", "PARTIAL", "GUESS"],
+  "targetSet": ["surface-main"],
+  "alternatives": [
+    { "id": "cross-fade", "excludedBecause": "source uses a signed radial/noise threshold and premultiplied overlay" },
+    { "id": "css-mask", "excludedBecause": "target text and scenes are rendered inside the single WebGPU surface" },
+    { "id": "pointer-reveal", "excludedBecause": "sparklePosition is read from frame-indexed handshake tracking data" }
+  ],
+  "effectBoundary": "The HandShake overlay between the About handshake frames and the Contact render texture, including hot edge and white flash recovery.",
+  "hypotheses": [
+    {
+      "id": "hyp-1",
+      "statement": "A scroll-driven noisy radial threshold reveals Contact inside the hole while the old scene remains outside.",
+      "status": "supported",
+      "evidenceFor": ["ev-video", "ev-source"],
+      "evidenceAgainst": [],
+      "truth": "SOURCE"
+    },
+    {
+      "id": "hyp-2",
+      "statement": "The bright boundary is only a CSS glow around a circular clip path.",
+      "status": "contradicted",
+      "evidenceFor": [],
+      "evidenceAgainst": ["ev-source"],
+      "truth": "SOURCE"
+    }
+  ],
+  "allowedHypothesisStatus": ["untested", "supported", "contradicted"],
+  "interactions": [
+    { "input": "scroll", "response": "quintic smootherstep drives the burn threshold; cubic smoothstep drives flash recovery" },
+    { "input": "time", "response": "five angular sine terms and FBM coordinates animate continuously during the partial burn" }
+  ],
+  "scopeRisk": "low",
+  "blockingUnknowns": [],
+  "nextProbe": { "type": "none-replay-ready", "target": "surface-main", "resolves": [], "distinguishes": [], "expectedOutcomes": [] },
+  "evidence": [
+    { "id": "ev-video", "fact": "18 frames at 10 fps show the old scene persisting outside an irregular expanding hot boundary and the new scene appearing inside.", "truth": "SOURCE", "path": "evidence/video/burn-sequence.png" },
+    { "id": "ev-source", "fact": "Current target-bound bundle exposes OU with handshake sheet, sparklePosition, transitionProgress, flashFadeProgress, rgba_noise and the complete TSL threshold graph.", "truth": "SOURCE", "path": "evidence/source/contact-burn.md" },
+    { "id": "ev-prior-lock", "fact": "The existing July scout attributes the entire visible site to one WebGPU canvas.", "truth": "SOURCE", "path": "../../../../docs/shader-research/shader-se-2026-07/.web-shader-extractor/scout-card.json" }
+  ],
+  "gateDecision": {
+    "targetAttributed": true,
+    "targetLocked": true,
+    "requiredEvidence": {
+      "visualAttribution": [{ "status": "passed", "evidenceId": "ev-video", "path": "evidence/video/burn-sequence.png", "truth": "SOURCE", "notes": "effect covers the target page surface" }],
+      "targetSet": [{ "status": "passed", "evidenceId": "ev-prior-lock", "path": "../../../../docs/shader-research/shader-se-2026-07/.web-shader-extractor/scout-card.json", "truth": "SOURCE", "notes": "one target canvas" }],
+      "contextAndOwner": [{ "status": "passed", "evidenceId": "ev-source", "path": "evidence/source/contact-burn.md", "truth": "SOURCE", "notes": "OU HandShake TSL component" }],
+      "targetBoundSourceOrFramework": [{ "status": "passed", "evidenceId": "ev-source", "path": "evidence/source/contact-burn.md", "truth": "SOURCE", "notes": "current public chunk" }],
+      "effectBoundary": [{ "status": "passed", "evidenceId": "ev-source", "path": "evidence/source/contact-burn.md", "truth": "SOURCE", "notes": "old scene plus burn overlay plus contact texture" }],
+      "primaryTraceRoute": [{ "status": "passed", "evidenceId": "ev-source", "path": "evidence/source/contact-burn.md", "truth": "SOURCE", "notes": "narrow target-bound bundle slice" }],
+      "alternativesExcluded": [{ "status": "passed", "evidenceId": "ev-source", "path": "evidence/source/contact-burn.md", "truth": "SOURCE", "notes": "fade, CSS mask and pointer origin excluded" }]
+    },
+    "blockers": [],
+    "decidedAt": "2026-09-02"
+  },
+  "truthNotes": {
+    "source": ["progress easing", "threshold graph", "noise scales", "angular wobble", "edge color", "flash recovery", "premultiplied overlay wiring"],
+    "partial": ["post-bloom contribution inferred from the shared post graph"],
+    "guess": ["replacement noise pixels", "local glow used because the local overlay runs after the shared post chain"]
+  }
+}

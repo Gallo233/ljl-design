@@ -48,6 +48,13 @@ export type ScrollSample = {
 type Options = {
   /** Called every frame with the smoothed sample. Do imperative work here, not React state. */
   onFrame: (sample: ScrollSample) => void;
+  /**
+   * Where this mount starts, in screens. Deep links scroll the page to their section
+   * before this hook runs, but that scroll can be clamped away by a layout that is not
+   * settled yet — and seeding from a scroll position that has not landed makes the first
+   * second of the page a glide up through every section it passes.
+   */
+  initialScreens?: number;
   /** Called when the reader crosses into a different section. Safe for React state. */
   onSectionChange?: (id: SectionId) => void;
   /** Snap is suppressed while this returns true — e.g. while dragging the reel. */
@@ -61,7 +68,13 @@ type Options = {
   bootLocked?: () => boolean;
 };
 
-export function useScrollDriver({ onFrame, onSectionChange, isLocked, bootLocked }: Options) {
+export function useScrollDriver({
+  onFrame,
+  onSectionChange,
+  isLocked,
+  bootLocked,
+  initialScreens,
+}: Options) {
   const sampleRef = useRef<ScrollSample>({ screens: 0, velocity: 0, direction: 0 });
   const optionsRef = useRef({ onFrame, onSectionChange, isLocked, bootLocked });
   optionsRef.current = { onFrame, onSectionChange, isLocked, bootLocked };
@@ -71,7 +84,7 @@ export function useScrollDriver({ onFrame, onSectionChange, isLocked, bootLocked
 
   useEffect(() => {
     let frame = 0;
-    let smoothed = window.scrollY / Math.max(1, window.innerHeight);
+    let smoothed = initialScreens ?? window.scrollY / Math.max(1, window.innerHeight);
     let previousSmoothed = smoothed;
     let lastFrameAt = performance.now();
     let lastScrollAt = 0;

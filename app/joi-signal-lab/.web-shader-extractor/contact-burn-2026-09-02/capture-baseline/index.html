@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Shader.se Contact burn pipeline replay</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: #080b10; }
+    body::before {
+      content: "ABOUT / ROOM";
+      position: fixed;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      color: rgba(239, 232, 220, .72);
+      font: 400 clamp(44px, 9vw, 140px)/.9 Georgia, serif;
+      letter-spacing: -.05em;
+      background:
+        radial-gradient(circle at 53% 58%, rgba(102, 86, 70, .45), transparent 19%),
+        linear-gradient(165deg, #353a3e, #171b20 48%, #07090d);
+    }
+    canvas { position: fixed; inset: 0; width: 100%; height: 100%; }
+    output {
+      position: fixed;
+      left: 18px;
+      bottom: 16px;
+      z-index: 2;
+      color: rgba(255,255,255,.68);
+      font: 11px/1.2 monospace;
+      letter-spacing: .08em;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <canvas></canvas>
+  <output></output>
+  <script>
+    const canvas = document.querySelector("canvas");
+    const output = document.querySelector("output");
+    const gl = canvas.getContext("webgl2", {alpha: true, antialias: false, premultipliedAlpha: true});
+    if (!gl) throw new Error("WebGL is required for this replay");
+
+    const vertex = `#version 300 es
+      in vec2 position;
+      void main() { gl_Position = vec4(position, 0.0, 1.0); }
+    `;
+    const fragment = `#version 300 es
+      precision highp float;
+      uniform vec2 uResolution;
+      uniform sampler2D uNoise;
+      uniform float uProgress;
+      uniform float uFlash;
+      uniform float uTime;
+      out vec4 outColour;
+
+      float sampleBurnNoise(vec2 p) {
+        return texture(uNoise, p * 0.005).r;
+      }
+
+      float burnFbm(vec2 p) {
+        float total = 0.0;
+        float amplitude = 0.4;
+        vec2 position = p;
+        for (int i = 0; i < 4; i++) {
+          total += amplitude * sampleBurnNoise(position * 1.4);
+          position *= 2.0;
+          amplitude *= 0.5;
+        }
+        return total;
+      }
+
+      float signalGrid(vec2 uv) {
+        vec2 cell = fract((uv * uResolution) / 72.0);
+        vec2 edge = min(cell, 1.0 - cell);
+        return max(1.0 - smoothstep(0.0, 0.018, edge.x), 1.0 - smoothstep(0.0, 0.018, edge.y));
+      }
+
+      vec3 contactColour(vec2 uv) {
+        vec2 centred = uv - 0.5;
+        float shade = smoothstep(0.78, 0.16, length(centred * vec2(0.9, 1.15)));
+        vec3 colour = mix(vec3(0.004, 0.006, 0.009), vec3(0.012, 0.019, 0.029), shade);
+        colour += signalGrid(uv) * 0.019;
+        return colour;
+      }
+
+      void main() {
+        vec2 uv = gl_FragCoord.xy / uResolution;
+        if (uProgress < 0.0001) {
+          outColour = vec4(0.0);
+          return;
+        }
+
+        vec2 relative = (uv - vec2(0.53, 0.43)) * vec2(1.0, 0.5625);
+        float angle = atan(relative.y, relative.x);
+        float wobble = (
+          sin(angle * 3.0 + uTime * 1.5) * 1.5 +
+          sin(angle * 7.0 + uTime * 2.5) +
+          sin(angle * 13.0 + uTime * 0.8) * 0.5
+        ) * 0.08 * uProgress;
+        float radialDistance = (length(relative) + wobble) * 1.3;
+
+        vec2 noiseUv = uv;
+        noiseUv.x *= uResolution.x / uResolution.y;
+        float detail =
+          burnFbm(noiseUv * 12.0 + vec2(uTime * 0.4)) * 0.5 +
+          burnFbm(noiseUv * 32.0 + vec2(uTime * 0.4)) +
+          burnFbm(noiseUv * 160.0 + vec2(uTime * 0.2)) * 0.5 +
+          burnFbm(noiseUv * 240.0 + vec2(uTime * 0.1)) * 0.2 +
+          burnFbm(noiseUv * 320.0 + vec2(uTime * 0.1)) * 0.5;
+        float field = uProgress * 1.3 - radialDistance + detail * 0.7 * uProgress;
+        float inside = step(0.0, field);
+        float edge = smoothstep(-max(uProgress * 0.15, 0.002), 0.0, field) * (1.0 - inside);
+
+        if (inside > 0.5) {
+          vec3 revealed = mix(vec3(2.0), contactColour(uv), uFlash);
+          outColour = vec4(revealed, 1.0);
+          return;
+        }
+
+        float glow = smoothstep(-max(uProgress * 0.30, 0.004), 0.0, field) * (1.0 - inside);
+        float alpha = max(edge, glow * 0.24);
+        vec3 premultiplied = vec3(1.0, 0.95, 0.9) * (edge * 1.5 + glow * 0.12);
+        outColour = vec4(premultiplied, alpha);
+      }
+    `;
+
+    const compile = (type, source) => {
+      const shader = gl.createShader(type);
+      gl.shaderSource(shader, source);
+      gl.compileShader(shader);
+      if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(shader));
+      return shader;
+    };
+    const program = gl.createProgram();
+    gl.attachShader(program, compile(gl.VERTEX_SHADER, vertex));
+    gl.attachShader(program, compile(gl.FRAGMENT_SHADER, fragment));
+    gl.linkProgram(program);
+    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(program));
+    gl.useProgram(program);
+
+    const buffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 3,-1, -1,3]), gl.STATIC_DRAW);
+    const position = gl.getAttribLocation(program, "position");
+    gl.enableVertexAttribArray(position);
+    gl.vertexAttribPointer(position, 2, gl.FLOAT, false, 0, 0);
+
+    const texture = gl.createTexture();
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([64, 64, 64, 255]));
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
+    const noiseImage = new Image();
+    noiseImage.onload = () => {
+      gl.bindTexture(gl.TEXTURE_2D, texture);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, noiseImage);
+    };
+    noiseImage.src = "./rgba_noise.png";
+    gl.uniform1i(gl.getUniformLocation(program, "uNoise"), 0);
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+
+    const fixed = new URLSearchParams(location.search).get("p");
+    const started = performance.now();
+    const smoother = x => x*x*x*(x*(x*6-15)+10);
+    const smooth = x => x*x*(3-2*x);
+    const clamp = x => Math.max(0, Math.min(1, x));
+    const resize = () => {
+      canvas.width = Math.round(innerWidth * Math.min(devicePixelRatio, 1.5));
+      canvas.height = Math.round(innerHeight * Math.min(devicePixelRatio, 1.5));
+      gl.viewport(0, 0, canvas.width, canvas.height);
+      gl.uniform2f(gl.getUniformLocation(program, "uResolution"), canvas.width, canvas.height);
+    };
+    addEventListener("resize", resize);
+    resize();
+
+    const render = now => {
+      const seconds = (now - started) / 1000;
+      const linear = fixed === null ? clamp((seconds - 0.35) / 2.1) : clamp(Number(fixed));
+      const progress = smoother(linear);
+      const flash = smooth(clamp((linear - 0.02) / 0.46));
+      gl.clearColor(0, 0, 0, 0);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      gl.uniform1f(gl.getUniformLocation(program, "uProgress"), progress);
+      gl.uniform1f(gl.getUniformLocation(program, "uFlash"), flash);
+      gl.uniform1f(gl.getUniformLocation(program, "uTime"), seconds);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+      output.value = `LINEAR ${linear.toFixed(3)} / BURN ${progress.toFixed(3)} / FLASH ${flash.toFixed(3)}`;
+      requestAnimationFrame(render);
+    };
+    requestAnimationFrame(render);
+  </script>
+</body>
+</html>

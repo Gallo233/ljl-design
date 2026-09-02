@@ -155,7 +155,10 @@ export const FOCAL_HANDOFFS = {
   // Hero → Selected Work owns two viewport heights. Matching that distance is part
   // of copying its motion speed, not just its easing equation.
   selectedToAbout: { target: "about-me", lead: REEL_ANCHOR },
-  aboutToContact: { target: "contact", lead: 1.05 },
+  // SOURCE: shader.se begins the Contact burn 1.6 viewport heights before the
+  // destination. Ours still completes at the Contact anchor so a direct /contact
+  // landing remains in its final state without moving the section table.
+  aboutToContact: { target: "contact", lead: 1.6 },
 } as const satisfies Record<string, { target: SectionId; lead: number }>;
 
 /**

@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 3,
+  "state": "PROJECT_VERIFIED",
+  "gateStatus": { "targetAttributed": true, "targetLocked": true, "replayReady": true, "baselineVerified": true, "projectVerified": true },
+  "strategy": {
+    "primaryTraceRoute": "current target-bound bundle slice plus user video frames",
+    "replayRoute": "PIPELINE_REPLAY",
+    "toolProfile": "network-source, ffmpeg multi-frame capture, local-run, browser QA"
+  },
+  "attempts": [{ "state": "SOURCE_TRACE", "strategy": "narrow bundle asset binding", "result": "OU HandShake TSL graph recovered" }],
+  "targetSet": ["surface-main"],
+  "unknowns": { "blocking": [], "important": ["source noise pixels", "shared bloom substitution"], "deferred": ["tracked room origin"], "external": [] },
+  "evidenceIndex": ["evidence/video/burn-sequence.png", "evidence/source/contact-burn.md", "evidence/project/desktop-continuity-start.png", "evidence/project/desktop-continuity-middle.png", "evidence/project/desktop-continuity-late.png", "evidence/project/desktop-continuity-reverse.png", "evidence/project/desktop-cream-transition.png", "evidence/project/desktop-cream-final.png", "evidence/project/desktop-cream-wake.png", "evidence/project/mobile-continuity-middle.png", "evidence/project/mobile-cream-final.png", "evidence/project/mobile-deeplink.png"],
+  "allowedGateArtifactStatuses": ["missing", "incomplete", "passed", "blocked"],
+  "artifacts": { "scoutCard": "scout-card.json", "manifest": "replay-manifest.json", "qaReport": "qa-report.md", "knownGaps": "known-gaps.md" },
+  "gateArtifacts": {
+    "targetAttribution": { "artifact": "scout-card.json", "status": "passed" },
+    "targetLock": { "artifact": "scout-card.json", "status": "passed" },
+    "replayReady": { "artifact": "replay-manifest.json", "status": "passed" },
+    "baselineVerify": { "artifact": "qa-report.md", "status": "passed" },
+    "projectVerify": { "artifact": "qa-report.md", "status": "passed" }
+  },
+  "budgets": { "sameStrategyMax": 2, "captureStrategyCategoriesMax": 3, "repairRoundsMax": 6, "plateauRoundsMax": 2 },
+  "plateau": { "roundsWithoutProgress": 0, "lastProgress": "Verified the warm-cream destination, dark refractive lattice, rounded Contact invitation and responsive layout on desktop and 390x844." },
+  "nextAction": { "state": "DONE_PROJECTIZED", "unknown": null, "action": "None; preserve documented P3 substitutions unless exact source asset/bloom identity becomes a requirement.", "expectedEvidence": "Existing project verification frames remain the acceptance baseline." },
+  "replayTier": "PIPELINE_REPLAY",
+  "qa": { "sourceToBaseline": ["passed-with-documented-gaps"], "baselineToEditable": ["passed-with-documented-gaps"] }
+}

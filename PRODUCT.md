@@ -10,7 +10,7 @@ The site serves recruiters, potential collaborators, product designers and peopl
 
 ## Current route worlds
 
-- `/`, `/selected-work`, `/about-me`, `/contact`: one continuous CRT experience with shared scroll state.
+- `/`, `/selected-work`, `/about-me`, `/contact`: one continuous CRT experience with shared scroll state. `/contact` is the one deep link that skips the boot lock — an address should not wait on a WebGL context and a model parse.
 - `/work/joi`, `/work/joi-mobile`: short Living Aperture experiences built around the real Joi Web session and the real 3D iPhone presentation.
 - `/play/night-tide`: Game Center with a playable 3D handheld and five cartridges.
 - `/lab`: research, experiments and retired prototypes.
@@ -24,7 +24,8 @@ The site serves recruiters, potential collaborators, product designers and peopl
 - Motion is causal. Scroll, drag, pointer proximity and product state should explain every major transition.
 - The Work-page Living Aperture keeps its key states, topology and interaction meaning. Its material baseline uses distinct route colors—Joi ice white, Joi Mobile taro violet, Game Center sky blue and Lab Nordic smoke—while retaining restrained transmission and directional edge light.
 - Game Center and Lab may adopt the Living Aperture language, but must retain their actual content and route-specific interaction model.
-- About Me and Contact retain their current feeling and layout. They are explicit no-redesign boundaries for this phase.
+- About Me retains its current feeling and layout. It is an explicit no-redesign boundary for this phase.
+- Contact is the quiet endpoint: one invitation, the direct email route, GitHub, the resume and the existing lanyard badge. A scroll-driven white-hot noise aperture burns from the About room onto ruled paper — neutral stock, blue-grey ruling, a spiral binding down the left margin — and the room remains outside the mask while essential DOM waits for the flash to recover. The ruling is what makes the fine-pointer refraction legible after settlement, without bending the DOM. The binding is DOM rather than shader: a coil is hardware, and it has to survive a reader whose WebGL never arrives. Coarse pointers retain the scroll transition but not the pointer wake or badge physics; reduced motion and rendering failures receive the same semantic page over its static field.
 - Never hide essential content behind rendering or animation machinery that can fail.
 - Keep route handoffs, deep links, browser history, reduced motion, keyboard access and WebGL fallbacks functional.
 

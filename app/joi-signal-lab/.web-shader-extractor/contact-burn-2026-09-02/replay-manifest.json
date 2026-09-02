@@ -1,0 +1,89 @@
+{
+  "schemaVersion": 3,
+  "source": {
+    "url": "https://www.shader.se/#/contact",
+    "canonicalUrl": "https://www.shader.se/",
+    "route": "#/contact",
+    "permissionBoundary": "public",
+    "allowedPermissionBoundaries": ["public", "user-authorized", "external-blocked"],
+    "viewport": { "width": 720, "height": 1280, "dpr": 1 }
+  },
+  "targetSurfaces": ["surface-main"],
+  "runtime": {
+    "backend": "source WebGPU; replay WebGL2",
+    "framework": "source Three.js r183 TSL; replay Three.js r178 ShaderMaterial",
+    "platform": "browser",
+    "owner": "source OU HandShake overlay; replay createContactField"
+  },
+  "renderGraph": {
+    "passes": ["old scene and CRT post chain", "premultiplied burn/contact overlay", "semantic DOM foreground"],
+    "framebuffers": ["existing stage targets", "existing pointer trail ping-pong"],
+    "dependencies": ["burn overlay must draw after old scene", "DOM must remain outside the burn shader"]
+  },
+  "resources": [
+    { "id": "source-noise", "source": "/textures/rgba_noise.png", "replay": "deterministic 256x256 repeat DataTexture", "truth": "GUESS" },
+    { "id": "contact-texture", "source": "contactSceneTexture", "replay": "procedural Contact grid field", "truth": "PARTIAL" }
+  ],
+  "state": {
+    "gl": { "blend": "ONE, ONE_MINUS_SRC_ALPHA", "depthTest": false, "depthWrite": false },
+    "webgpu": {},
+    "canvas2d": {}
+  },
+  "timeline": {
+    "timeOrigin": "shared renderer elapsed seconds",
+    "unit": "seconds plus viewport-height scroll progress",
+    "deltaRule": "delta capped at 0.05 seconds",
+    "random": "deterministic seeded noise texture in replay"
+  },
+  "inputs": {
+    "pointer": "disabled until burn nearly completes; then existing background wake resumes",
+    "scroll": "linear handoff from contact anchor minus 1.6 screens to anchor; quintic smootherstep burn and early cubic flash recovery",
+    "resize": "resolution uniform and aspect-aware noise coordinates",
+    "route": "direct /contact forces the completed state on the first frame"
+  },
+  "output": {
+    "colorSpace": "existing renderer sRGB output; source converts the old handshake texture to linear",
+    "toneMapping": "burn overlay is untonemapped; local soft glow approximates source shared bloom",
+    "premultipliedAlpha": true,
+    "domComposite": "Contact heading, email, actions and badge remain semantic DOM above the canvas"
+  },
+  "pageBindings": ["About room stays live behind the expanding mask", "Contact DOM enters after flash recovery"],
+  "routes": ["/about-me", "/contact"],
+  "evidence": [
+    { "id": "ev-video", "path": "evidence/video/burn-sequence.png", "truth": "SOURCE" },
+    { "id": "ev-source", "path": "evidence/source/contact-burn.md", "truth": "SOURCE" }
+  ],
+  "truth": {
+    "leafFacts": ["SOURCE: threshold constants, FBM scales, edge color, angular sine terms", "GUESS: deterministic replacement noise pixels"],
+    "wiringFacts": ["SOURCE: overlay alpha mixes old and new scenes", "PARTIAL: local glow substitutes for the source post-bloom pass"],
+    "defaultLabel": "GUESS",
+    "allowedTruth": ["SOURCE", "PARTIAL", "GUESS"]
+  },
+  "unknowns": {
+    "blocking": [],
+    "important": ["The source rgba_noise pixel values are not copied into the project.", "The source edge is bloomed by the shared post graph; replay uses an in-shader outer band."],
+    "deferred": ["The source's frame-by-frame tracked handshake sparkle position has no semantic equivalent in the local room."],
+    "external": []
+  },
+  "replay": {
+    "route": "PIPELINE_REPLAY",
+    "allowedRoutes": ["SOURCE_REPLAY", "PIPELINE_REPLAY", "BEHAVIOR_REBUILD"],
+    "fidelityTier": "Source graph and constants translated TSL-to-GLSL, with documented noise and bloom substitutions.",
+    "fallbacks": ["Static CSS field for reduced motion, coarse pointers and WebGL failure."]
+  },
+  "gateDecision": {
+    "replayReady": true,
+    "requiredEvidence": {
+      "targetSurfaces": [{ "status": "passed", "evidenceId": "ev-video", "path": "evidence/video/burn-sequence.png", "truth": "SOURCE", "notes": "one full-surface transition" }],
+      "runtimeOwnerBackend": [{ "status": "passed", "evidenceId": "ev-source", "path": "evidence/source/contact-burn.md", "truth": "SOURCE", "notes": "TSL owner and WebGPU backend bound" }],
+      "renderGraphOrFallback": [{ "status": "passed", "evidenceId": "ev-source", "path": "evidence/source/contact-burn.md", "truth": "PARTIAL", "notes": "overlay graph exact; bloom replaced locally" }],
+      "criticalResources": [{ "status": "passed", "evidenceId": "ev-source", "path": "evidence/source/contact-burn.md", "truth": "GUESS", "notes": "deterministic noise fallback recorded" }],
+      "timelineAndInputs": [{ "status": "passed", "evidenceId": "ev-source", "path": "evidence/source/contact-burn.md", "truth": "SOURCE", "notes": "scroll and time functions recovered" }],
+      "outputComposite": [{ "status": "passed", "evidenceId": "ev-source", "path": "evidence/source/contact-burn.md", "truth": "PARTIAL", "notes": "premultiplied overlay exact; bloom substitute recorded" }],
+      "truthLabels": [{ "status": "passed", "evidenceId": "ev-source", "path": "evidence/source/contact-burn.md", "truth": "SOURCE", "notes": "leaf and wiring labels separated" }],
+      "blockingUnknownsResolvedOrDowngraded": [{ "status": "passed", "evidenceId": "ev-source", "path": "known-gaps.md", "truth": "PARTIAL", "notes": "no blocking unknown; substitutions documented" }]
+    },
+    "blockers": [],
+    "decidedAt": "2026-09-02"
+  }
+}

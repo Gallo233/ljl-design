@@ -128,7 +128,7 @@ export default function Page() {
             <div className="about-links">
               <a className="magnetic" href="/resume/gallo-liu-resume-cn.pdf" target="_blank">RESUME ↗</a>
               <a className="magnetic" href="https://github.com/Gallo233" target="_blank" rel="noreferrer">GITHUB ↗</a>
-              <a className="magnetic" href="mailto:liujialuo233@gmail.com">EMAIL ↗</a>
+              <a className="magnetic" href="mailto:18520455682@163.com">EMAIL ↗</a>
             </div>
           </div>
         </section>
