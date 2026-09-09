@@ -241,8 +241,8 @@ export const BASE_ATLAS_EXPOSURE: Record<BaseAtlasId, number> = {
  * is the desk study alone, so an interest with no object in it has no chip.
  */
 const AUTHORED_HOTSPOT_NODES: Partial<Record<RoomObjectId, string[]>> = {
-  "crt-monitor": ["screen", "screen.001", "macbook", "Cube.008", "Cylinder", "Curve"],
-  camera: ["camera", "film", "film.001"],
+  "crt-monitor": ["screen.001", "about-room-macbook"],
+  baseball: ["about-room-baseball"],
   /*
    * The board, its bracket, and the row `roomBookshelf.ts` stands on it. The capture's
    * twenty book meshes are deliberately absent: they are hidden now, and hidden geometry

@@ -1,0 +1,54 @@
+/*
+ * The language switch. One control in three different headers — the CRT experience,
+ * the lab and the game centre — so it carries no colour of its own and inherits the
+ * type and ink of whichever header it lands in.
+ */
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin: 0;
+  padding: 4px 8px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 9px;
+  letter-spacing: .12em;
+  line-height: 1;
+  opacity: .55;
+  cursor: pointer;
+  transition: opacity .2s ease, border-color .2s ease;
+}
+
+.toggle:hover,
+.toggle:focus-visible {
+  opacity: 1;
+}
+
+.toggle:focus-visible {
+  outline: 1px solid currentColor;
+  outline-offset: 3px;
+}
+
+/* The inactive half stays legible rather than disappearing: the control has to read
+   as a choice between two languages, not as a label with a decoration next to it. */
+.side {
+  opacity: .42;
+  transition: opacity .2s ease;
+}
+
+.side[data-active="true"] {
+  opacity: 1;
+}
+
+.slash {
+  font-style: normal;
+  opacity: .3;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toggle,
+  .side { transition: none; }
+}

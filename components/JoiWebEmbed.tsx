@@ -13,6 +13,7 @@
  */
 
 import { useEffect, useRef, useState } from "react";
+import { useLocale } from "../app/i18n";
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 const shellBase = `${basePath}/joi-shell`;
@@ -45,6 +46,7 @@ export function JoiWebEmbed({
   onExitRequested,
   onPresentationChange,
 }: Props = {}) {
+  const { t } = useLocale();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const startedRef = useRef(false);
   const instanceRef = useRef<MountResult | null>(null);
@@ -55,7 +57,18 @@ export function JoiWebEmbed({
   const [phase, setPhaseState] = useState<Phase>(
     !start ? "idle" : brokerBase ? "connecting" : "unavailable",
   );
-  const [reason, setReason] = useState("");
+  /*
+   * Why the embed is unavailable, stored as a key rather than as a sentence.
+   *
+   * The reasons that belong to this component are resolved at render time, so switching
+   * language rewrites a message that is already on screen. A message resolved when the
+   * effect ran would sit there in the old language until the visitor reloaded — which is
+   * exactly the mixture the switch exists to remove. An error thrown by the broker is
+   * not ours to translate and is carried through verbatim.
+   */
+  const [reasonKey, setReasonKey] = useState<"joiNotConnected" | "joiTemporarilyDown" | null>(null);
+  const [reasonText, setReasonText] = useState("");
+  const reason = reasonKey ? t[reasonKey] : reasonText;
 
   const setPhase = (next: Phase) => {
     setPhaseState(next);
@@ -91,7 +104,7 @@ export function JoiWebEmbed({
 
     if (!brokerBase) {
       setPhase("unavailable");
-      setReason("这台站点还没有连上 Joi 体验服。");
+      setReasonKey("joiNotConnected");
       return;
     }
 
@@ -145,7 +158,12 @@ export function JoiWebEmbed({
       } catch (error) {
         if (!startedRef.current) return;
         setPhase("unavailable");
-        setReason(error instanceof Error ? error.message : "Joi 体验暂时不可用。");
+        if (error instanceof Error) {
+        setReasonKey(null);
+        setReasonText(error.message);
+      } else {
+        setReasonKey("joiTemporarilyDown");
+      }
       }
     })();
 
@@ -161,9 +179,9 @@ export function JoiWebEmbed({
         {phase !== "live" && (
           <div className="joi-experience-fallback joi-experience-fallback--stage">
             <strong>
-              {phase === "idle" && "进入后启动 Joi"}
-              {phase === "connecting" && "正在为你启动一份 Joi…"}
-              {phase === "unavailable" && "Joi 现在不在线"}
+              {phase === "idle" && t.joiEnter}
+              {phase === "connecting" && t.joiConnecting}
+              {phase === "unavailable" && t.joiUnavailable}
             </strong>
             {phase === "unavailable" && <p>{reason}</p>}
           </div>
@@ -179,13 +197,13 @@ export function JoiWebEmbed({
         <p className="project-detail-kicker">LIVE / WEB SESSION</p>
         <div>
           <h2 id="joi-live-session-title">Talk to her right here.</h2>
-          <p lang="zh-CN">这是真正的 Joi，跑在为你单独启动的一份运行时里。</p>
+          <p>{t.joiReal}</p>
         </div>
       </header>
       <div className="joi-experience" aria-live="polite">
         {phase !== "live" && (
           <div className="joi-experience-fallback">
-            <strong>{phase === "connecting" ? "正在为你启动一份 Joi…" : "Joi 现在不在线"}</strong>
+            <strong>{phase === "connecting" ? t.joiConnecting : t.joiUnavailable}</strong>
             {phase === "unavailable" && <p>{reason}</p>}
           </div>
         )}

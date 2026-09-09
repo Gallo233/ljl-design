@@ -15,6 +15,7 @@ import {
 import { CONSOLE_ACCENTS, createConsoleScene, type CartridgeSpec, type ConsoleScene } from "./console3d";
 import { createGameAudio, type GameAudio } from "./games/gameAudio";
 import { useGlobalMusic } from "../../../components/global-music/GlobalMusic";
+import { pick, useLocale } from "../../i18n";
 
 type Phase = "boot" | "idle" | "play";
 
@@ -97,11 +98,22 @@ export function GameHandheld({
 }: {
   onVisualStateChange?: (state: GameVisualState) => void;
 }) {
+  const { locale, t } = useLocale();
+  /*
+   * The mounted game reads the language through this rather than closing over it.
+   *
+   * Putting `locale` in the mount effect's dependencies would restart the cartridge
+   * every time someone used the switch, which is a worse bug than the one being fixed.
+   * A ref plus the getter below means the next status line the game writes is in the new
+   * language while the run itself continues untouched.
+   */
+  const localeRef = useRef(locale);
+  localeRef.current = locale;
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  /** Where the three.js canvas and the CSS3D layer are mounted. */
+  /** Where the three.js canvas and the projected DOM layer are mounted. */
   const sceneHostRef = useRef<HTMLDivElement>(null);
-  /** The live screen. CSS3DObject reparents this into the 3D layer; see the scene effect. */
+  /** The live screen. The scene reparents this into its display layer; see the scene effect. */
   const screenRef = useRef<HTMLDivElement>(null);
   /** Its React-owned home, so the element can be handed back before React unmounts it. */
   const screenParkRef = useRef<HTMLDivElement>(null);
@@ -265,7 +277,7 @@ export function GameHandheld({
     }
 
     const handBack = () => {
-      // CSS3DRenderer moved the screen into its own layer, which has just been torn down.
+      // The scene moved the screen into its own layer, which has just been torn down.
       // Hand the element back to the node React thinks it lives in, or React's unmount
       // will look for it under a parent that no longer exists.
       if (screen.parentElement !== park) park.appendChild(screen);
@@ -438,6 +450,7 @@ export function GameHandheld({
       },
       setStatus,
       audio,
+      get locale() { return localeRef.current; },
     });
     return () => {
       handle.destroy();
@@ -455,10 +468,22 @@ export function GameHandheld({
 
   const hoveredEntry = shelf.find((entry) => entry.id === hoveredId) ?? null;
   const pendingEntry = shelf.find((entry) => entry.id === pendingId) ?? null;
-  const controls = activeEntry?.controls ?? [
-    { keys: "拖动卡带", action: "放到机器顶部插槽" },
-    { keys: "BACKSPACE / SELECT", action: "退出卡带" },
-  ];
+  /*
+   * The mapping table, already in the reader's language.
+   *
+   * The cartridges carry both columns; the placeholder shown before one is seated has
+   * no table to draw from, so it resolves through the dictionary instead. Either way the
+   * list that reaches the render is single-language.
+   */
+  const controls = activeEntry
+    ? activeEntry.controls.map((control) => ({
+        keys: pick(locale, control.keys, control.keysZh ?? control.keys),
+        action: pick(locale, control.action, control.actionZh),
+      }))
+    : [
+        { keys: t.cartridgeDragKeys, action: t.cartridgeDragAction },
+        { keys: "BACKSPACE / SELECT", action: t.cartridgeEject },
+      ];
 
   useEffect(() => {
     onVisualStateChange?.({ phase, carrying, activeId });
@@ -466,8 +491,8 @@ export function GameHandheld({
 
   return (
     <div className={styles.stage}>
-      {/* The three.js canvas and the CSS3D layer are appended here by the scene. The live
-          screen lives inside the CSS3D layer, so this subtree must stay AT-visible; only
+      {/* The three.js canvas and the projected DOM layer are appended here by the scene. The live
+          screen lives inside the projected DOM layer, so this subtree must stay AT-visible; only
           the WebGL canvas marks itself decorative. */}
       <div className={styles.sceneWell} data-game-liquid-shape="scene">
         {!sceneFailed && (
@@ -479,12 +504,12 @@ export function GameHandheld({
 
       {phase === "play" && (
         <button type="button" className={styles.ejectChip} onClick={eject}>
-          ⏏ 退出卡带
+          ⏏ {t.cartridgeEject}
         </button>
       )}
 
       {/*
-        The screen's React home. `createConsoleScene` lifts the inner element into the CSS3D
+        The screen's React home. `createConsoleScene` lifts the inner element into the projected DOM
         layer on mount and the cleanup puts it back, so React only ever sees it here. When
         WebGL is unavailable the park stops hiding and becomes the screen's flat frame.
       */}
@@ -517,14 +542,15 @@ export function GameHandheld({
                 <i /><i /><i />
               </p>
               <strong>
-                {pendingEntry ? `读取 ${pendingEntry.titleZh}…`
-                  : hoveredEntry ? hoveredEntry.titleZh
-                  : "把卡带拖进插槽"}
+                {pendingEntry
+                  ? `${t.cartridgeLoading} ${pick(locale, pendingEntry.title, pendingEntry.titleZh)}…`
+                  : hoveredEntry ? pick(locale, hoveredEntry.title, hoveredEntry.titleZh)
+                  : t.cartridgeDropHere}
               </strong>
               <small>
-                {pendingEntry ? "CARTRIDGE SEATING"
-                  : hoveredEntry ? hoveredEntry.blurbZh
-                  : `右边有 ${shelf.length} 张卡带 · 拖到机器顶部即可开始`}
+                {pendingEntry ? t.cartridgeSeating
+                  : hoveredEntry ? pick(locale, hoveredEntry.blurb, hoveredEntry.blurbZh)
+                  : `${t.cartridgeShelfPrefix} ${shelf.length} ${t.cartridgeShelfSuffix}`}
               </small>
             </div>
           )}
@@ -536,7 +562,7 @@ export function GameHandheld({
                 // of pointing one long-lived iframe at a different wasm module.
                 key={activeGodot.id}
                 ref={iframeRef}
-                title={`${activeGodot.titleZh} 试玩版`}
+                title={`${pick(locale, activeGodot.title, activeGodot.titleZh)} ${t.cartridgeDemoSuffix}`}
                 src={buildUrl(activeGodot)}
                 allow="autoplay; fullscreen; gamepad"
                 allowFullScreen
@@ -553,7 +579,7 @@ export function GameHandheld({
                 width={SCREEN_WIDTH}
                 height={SCREEN_HEIGHT}
                 className={styles.gameCanvas}
-                aria-label={`${activeEntry?.titleZh ?? ""} 游戏画面`}
+                aria-label={`${activeEntry ? pick(locale, activeEntry.title, activeEntry.titleZh) : ""} ${t.cartridgeScreenSuffix}`}
               />
             )
           )}
@@ -581,7 +607,7 @@ export function GameHandheld({
           keyboard, a screen reader, or a browser where WebGL failed.
         */}
         <div className={styles.fallbackShelf}>
-          <span>卡带</span>
+          <span>{t.cartridges}</span>
           {shelf.map((entry) => (
             <button
               key={entry.id}

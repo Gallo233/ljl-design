@@ -13,6 +13,7 @@ import {
 import { previousProject } from "../joi-signal-lab/reelProjects";
 import styles from "./lab.module.css";
 import { labItems, type LabItem } from "./labData";
+import { LocaleToggle, pick, useLocale } from "../i18n";
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 const sitePath = (path: string) => `${basePath}${path}`;
@@ -33,6 +34,17 @@ const sitePath = (path: string) => `${basePath}${path}`;
 const previous = previousProject("/lab")!;
 
 export function LabFolder() {
+  const { locale, t } = useLocale();
+  /*
+   * The tab, in the reader's language.
+   *
+   * Served metadata cannot follow a client switch, so without this the browser tab keeps
+   * saying 实验室 while the page itself reads in English — the same split the switch is
+   * meant to close. The suffix matches the root layout's title template.
+   */
+  useEffect(() => {
+    document.title = `${t.labRouteTitle} — Gallo`;
+  }, [t.labRouteTitle]);
   const rootRef = useRef<HTMLElement>(null);
   const heroRef = useRef<HTMLElement>(null);
   const signalRef = useRef<HTMLElement>(null);
@@ -245,31 +257,28 @@ export function LabFolder() {
       <div className={styles.liquidHost} ref={liquidHostRef} aria-hidden="true" />
       <header className={styles.nav}>
         <Link className={styles.wordmark} href="/">GALLO</Link>
-        <nav aria-label="Lab navigation">
-          <Link href="/selected-work" aria-label="Back to reel">
-            <span className={styles.navWide}>BACK TO </span>REEL
+        <nav aria-label={t.labNavLabel}>
+          <Link href="/selected-work" aria-label={t.labBackToReel}>
+            <span className={styles.navWide}>{t.labBackToReelPrefix}</span>{t.labBackToReelShort}
           </Link>
-          <Link href="/about-me">ABOUT</Link>
+          <Link href="/about-me">{t.labAbout}</Link>
         </nav>
+        <LocaleToggle className={styles.navLocale} />
       </header>
 
       <section className={styles.hero} data-arrival-target ref={heroRef}>
-        <p className={styles.kicker}>04 / RESEARCH &amp; EXPERIMENTS</p>
-        <h1>
-          实验室 <span>THE LAB</span>
-        </h1>
-        <p className={styles.intro}>
-          Things tried, bound, retired, or deliberately killed. The drawer files them all —
-          including the ones whose value is knowing why they stopped.
-        </p>
+        <p className={styles.kicker}>{t.labKicker}</p>
+        {/* One name, not the Chinese one with the English one set beside it. */}
+        <h1>{t.labTitle}</h1>
+        <p className={styles.intro}>{t.labIntro}</p>
       </section>
 
       <aside className={styles.archiveSignal} ref={signalRef}>
-        <span>OPEN A FILE</span>
-        <strong>Hover to inspect.<br />Click to unfold.</strong>
+        <span>{t.labOpenFile}</span>
+        <strong>{t.labHoverLine1}<br />{t.labHoverLine2}</strong>
       </aside>
 
-      <section className={styles.drawer} aria-label="Lab files" ref={drawerRef}>
+      <section className={styles.drawer} aria-label={t.labFilesLabel} ref={drawerRef}>
         {labItems.map((item) => {
           const open = openId === item.id;
           return (
@@ -294,8 +303,7 @@ export function LabFolder() {
               >
                 <span className={styles.folderIndex}>{item.index}</span>
                 <span className={styles.folderTitle}>
-                  <strong>{item.titleZh}</strong>
-                  <em>{item.title}</em>
+                  <strong>{pick(locale, item.title, item.titleZh)}</strong>
                 </span>
                 <span className={styles.folderYear}>{item.year}</span>
                 <span className={styles.folderTag}>{item.tag}</span>
@@ -304,10 +312,9 @@ export function LabFolder() {
 
               <div className={styles.dossier} hidden={!open}>
                 <div className={styles.dossierCopy}>
-                  <p>{item.summary}</p>
-                  <p lang="zh-CN">{item.summaryZh}</p>
-                  <ul className={styles.learned} aria-label="What it taught">
-                    {item.learned.map((line) => (
+                  <p>{pick(locale, item.summary, item.summaryZh)}</p>
+                  <ul className={styles.learned} aria-label={t.labLearnedLabel}>
+                    {(locale === "zh" ? item.learnedZh ?? item.learned : item.learned).map((line) => (
                       <li key={line}>{line}</li>
                     ))}
                   </ul>
@@ -319,7 +326,7 @@ export function LabFolder() {
                 </div>
                 {item.thumb && (
                   <figure className={styles.dossierFigure}>
-                    <img src={sitePath(item.thumb)} alt={`${item.title} working material`} loading="lazy" />
+                    <img src={sitePath(item.thumb)} alt={`${pick(locale, item.title, item.titleZh)} ${t.labWorkingMaterialSuffix}`} loading="lazy" />
                   </figure>
                 )}
               </div>
@@ -336,7 +343,7 @@ export function LabFolder() {
       <div className={styles.closing}>
         <Link className={styles.prevSignal} href={previous.href}>
           <span>PREV / {previous.index}</span>
-          <strong>{previous.title}</strong>
+          <strong>{pick(locale, previous.title, previous.titleZh)}</strong>
           <b aria-hidden="true">←</b>
         </Link>
         <footer className={styles.footer} ref={footerRef}>
@@ -356,7 +363,7 @@ export function LabFolder() {
                 {hoverItem.index}
               </span>
             )}
-            <b>{hoverItem.titleZh}</b>
+            <b>{pick(locale, hoverItem.title, hoverItem.titleZh)}</b>
           </>
         )}
       </div>

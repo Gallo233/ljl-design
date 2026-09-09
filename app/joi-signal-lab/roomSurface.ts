@@ -41,6 +41,10 @@ export const screenColor = (hex: string) => new THREE.Color().setStyle(hex, THRE
 
 export type SurfaceOptions = {
   color?: string;
+  /** Blender-baked contact occlusion. Other room props retain their current shading. */
+  vertexColors?: boolean;
+  grainScale?: number;
+  grainStrength?: number;
   /** Already a texture, so ownership stays with whoever made the canvas. */
   map?: any;
   /** Tiles the map. Handy on the plinth, whose faces are metres of one canvas. */
@@ -67,6 +71,8 @@ export type SurfaceOptions = {
 
 export const SURFACE_VERTEX = /* glsl */ `
   varying vec3 vNormalW;
+  varying vec3 vPositionW;
+  varying float vOcclusion;
   varying vec3 vViewW;
   varying vec2 vSurfaceUv;
   uniform vec2 uRepeat;
@@ -74,6 +80,12 @@ export const SURFACE_VERTEX = /* glsl */ `
     vSurfaceUv = uv * uRepeat;
     vec4 world = modelMatrix * vec4(position, 1.0);
     vNormalW = normalize(mat3(modelMatrix) * normal);
+    vPositionW = world.xyz;
+    #ifdef USE_COLOR
+      vOcclusion = color.r;
+    #else
+      vOcclusion = 1.0;
+    #endif
     vViewW = normalize(cameraPosition - world.xyz);
     gl_Position = projectionMatrix * viewMatrix * world;
   }
@@ -100,6 +112,8 @@ export const SURFACE_FRAGMENT = /* glsl */ `
   uniform float uRim;
   uniform float uOpacity;
   uniform float uUnlit;
+  uniform float uGrainScale;
+  uniform float uGrainStrength;
   uniform vec3 uKeyDir;
   uniform vec3 uKeyColor;
   uniform vec3 uFillDir;
@@ -108,15 +122,36 @@ export const SURFACE_FRAGMENT = /* glsl */ `
   uniform vec3 uGroundColor;
 
   varying vec3 vNormalW;
+  varying vec3 vPositionW;
+  varying float vOcclusion;
   varying vec3 vViewW;
   varying vec2 vSurfaceUv;
 
+  float leatherHash(vec3 p) {
+    p = fract(p * .1031); p += dot(p,p.yzx + 33.33);
+    return fract((p.x + p.y) * p.z);
+  }
+  float leatherGrain(vec3 p) {
+    vec3 i=floor(p), f=fract(p); f=f*f*(3.-2.*f);
+    return mix(mix(mix(leatherHash(i),leatherHash(i+vec3(1,0,0)),f.x),
+      mix(leatherHash(i+vec3(0,1,0)),leatherHash(i+vec3(1,1,0)),f.x),f.y),
+      mix(mix(leatherHash(i+vec3(0,0,1)),leatherHash(i+vec3(1,0,1)),f.x),
+      mix(leatherHash(i+vec3(0,1,1)),leatherHash(i+vec3(1,1,1)),f.x),f.y),f.z);
+  }
   void main() {
     vec3 n = normalize(vNormalW);
     vec3 v = normalize(vViewW);
     // Backfaces (the underside of the lid, the inside of the plinth cutouts) would
     // otherwise shade as if lit from below and glow.
     if (!gl_FrontFacing) n = -n;
+    if (uGrainStrength > 0.) {
+      vec3 p=vPositionW*uGrainScale;
+      float footprint=max(length(dFdx(p)),length(dFdy(p)));
+      float h=leatherGrain(p)*uGrainStrength*(1.-smoothstep(.6,2.6,footprint));
+      vec3 dx=dFdx(vPositionW),dy=dFdy(vPositionW);
+      vec3 r1=cross(dy,n),r2=cross(n,dx);float det=dot(dx,r1);
+      n=normalize(abs(det)*n-sign(det)*(dFdx(h)*r1+dFdy(h)*r2));
+    }
 
     vec4 sampled = texture2D(uMap, vSurfaceUv);
     vec3 albedo = uColor * mix(vec3(1.0), sampled.rgb, uHasMap);
@@ -126,7 +161,7 @@ export const SURFACE_FRAGMENT = /* glsl */ `
     vec3 ambient = mix(uGroundColor, uSkyColor, hemi);
     float key = max(dot(n, uKeyDir), 0.0);
     float fill = max(dot(n, uFillDir), 0.0);
-    vec3 diffuse = ambient + uKeyColor * key + uFillColor * fill;
+    vec3 diffuse = (ambient + uKeyColor * key + uFillColor * fill) * vOcclusion;
 
     vec3 halfVec = normalize(uKeyDir + v);
     float spec = pow(max(dot(n, halfVec), 0.0), uGloss) * uSpecular;
@@ -168,6 +203,7 @@ export function blankSurfaceTexture() {
  */
 export function createSurfaceMaterial(options: SurfaceOptions = {}) {
   const material = new THREE.ShaderMaterial({
+    vertexColors: options.vertexColors ?? false,
     vertexShader: SURFACE_VERTEX,
     fragmentShader: SURFACE_FRAGMENT,
     transparent: options.transparent ?? false,
@@ -185,6 +221,8 @@ export function createSurfaceMaterial(options: SurfaceOptions = {}) {
       uRim: { value: options.rim ?? 0.06 },
       uOpacity: { value: options.opacity ?? 1 },
       uUnlit: { value: options.unlit ? 1 : 0 },
+      uGrainScale: { value: options.grainScale ?? 120 },
+      uGrainStrength: { value: options.grainStrength ?? 0 },
       uKeyDir: { value: ROOM_KEY_DIR },
       uKeyColor: { value: screenColor("#5c4e3c") },
       uFillDir: { value: ROOM_FILL_DIR },

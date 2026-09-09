@@ -47,6 +47,15 @@ export type GameContext = {
    * never builds an AudioContext of its own — see `gameAudio.ts` for why that matters.
    */
   audio: GameAudio;
+  /**
+   * The language the shell is showing.
+   *
+   * These games draw straight to a canvas and never mount a React tree, so they cannot
+   * read the locale context themselves. It arrives here instead, and each game picks its
+   * own few words with it — the alternative was a status line that said "GAME OVER" and
+   * "A 重开" in the same breath, which is what this pass exists to remove.
+   */
+  locale: "zh" | "en";
 };
 
 export type ArcadeGame = {
@@ -59,7 +68,7 @@ export type ArcadeGame = {
   /** Drawn on the select card, and used as the game's own highlight colour. */
   accent: string;
   /** Buttons worth telling the player about, in the order they should read. */
-  controls: Array<{ keys: string; action: string }>;
+  controls: Array<{ keys: string; keysZh?: string; action: string; actionZh: string }>;
   mount: (canvas: HTMLCanvasElement, context: GameContext) => GameHandle;
 };
 

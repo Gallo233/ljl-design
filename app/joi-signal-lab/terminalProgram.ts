@@ -36,6 +36,12 @@ export type TerminalContext = {
   close: () => void;
   clear: () => void;
   history: readonly string[];
+  /**
+   * The language the shell is showing. `whoami` used to print each line in English and
+   * then repeat it dimmed in Chinese; with a switch in the header that is two answers to
+   * one question, so the commands pick a side now.
+   */
+  locale: "zh" | "en";
 };
 
 export type TerminalCommand = {
@@ -43,6 +49,7 @@ export type TerminalCommand = {
   /** Shown after the name in `help`. */
   usage?: string;
   blurb: string;
+  blurbZh: string;
   run: (argv: string[], context: TerminalContext) => TerminalLine[];
 };
 
@@ -84,18 +91,19 @@ const LISTS = {
   socials: () => [
     { label: "GitHub — github.com/Gallo233", href: "https://github.com/Gallo233" },
     { label: "Email — 18520455682@163.com", href: "mailto:18520455682@163.com" },
-    { label: "Resume — 简历 PDF (CN)", href: "/resume/gallo-liu-resume-cn.pdf" },
+    { label: "Resume — PDF (CN)", href: "/resume/gallo-liu-resume-cn.pdf" },
   ],
 } as const;
 
 type ListId = keyof typeof LISTS;
 
 /** `projects` / `lab` / `socials` all print and open the same way. */
-function listCommand(id: ListId, blurb: string): TerminalCommand {
+function listCommand(id: ListId, blurb: string, blurbZh: string): TerminalCommand {
   return {
     name: id,
     usage: "[go <n>]",
     blurb,
+    blurbZh,
     run: (argv, context) => {
       const entries = LISTS[id]();
       if (argv[0] === "go") {
@@ -130,11 +138,14 @@ function listCommand(id: ListId, blurb: string): TerminalCommand {
 export const TERMINAL_COMMANDS: TerminalCommand[] = [
   {
     name: "help",
-    blurb: "this list",
-    run: () => [
+    blurb: "this list", blurbZh: "就是这张表",
+    run: (_argv, context) => [
       blank(),
       ...TERMINAL_COMMANDS.map((command) =>
-        line(`  ${`${command.name} ${command.usage ?? ""}`.trim().padEnd(18)}${command.blurb}`),
+        line(
+          `  ${`${command.name} ${command.usage ?? ""}`.trim().padEnd(18)}` +
+            (context.locale === "zh" ? command.blurbZh : command.blurb),
+        ),
       ),
       blank(),
       dim("  tab completes · ↑ ↓ recalls · ctrl+l clears · esc closes"),
@@ -143,8 +154,8 @@ export const TERMINAL_COMMANDS: TerminalCommand[] = [
   },
   {
     name: "about",
-    blurb: "who is at this desk",
-    run: () => [
+    blurb: "who is at this desk", blurbZh: "这张桌子后面是谁",
+    run: (_argv, context) => [
       blank(),
       // The name the site uses on the badge, the call sheet and the reel's slate.
       // Nothing here is written for the terminal — a Chinese name is not in this repo,
@@ -153,22 +164,29 @@ export const TERMINAL_COMMANDS: TerminalCommand[] = [
       line("  AI PRODUCT · PRODUCT DESIGN"),
       line("  GUANGZHOU · 23.13°N 113.26°E · GMT+8"),
       blank(),
-      line("  I design how AI enters human life."),
-      dim("  我做的是 AI 怎么进入人的生活这件事。"),
-      blank(),
-      line("  Looking for AI product / product design work,"),
-      line("  and open to projects worth making."),
-      dim("  在找 AI 产品 / 产品设计的机会，也接有意思的项目。"),
+      ...(context.locale === "zh"
+        ? [
+            line("  我做的是 AI 怎么进入人的生活这件事。"),
+            blank(),
+            line("  在找 AI 产品 / 产品设计的机会，"),
+            line("  也接有意思的项目。"),
+          ]
+        : [
+            line("  I design how AI enters human life."),
+            blank(),
+            line("  Looking for AI product / product design work,"),
+            line("  and open to projects worth making."),
+          ]),
       blank(),
       dim("  projects · lab · socials · room"),
       blank(),
     ],
   },
-  listCommand("projects", "the six frames of the reel"),
-  listCommand("lab", "research and retired prototypes"),
+  listCommand("projects", "the six frames of the reel", "胶片上的六格"),
+  listCommand("lab", "research and retired prototypes", "研究与退役的原型"),
   {
     name: "code",
-    blurb: "the repositories behind the work",
+    blurb: "the repositories behind the work", blurbZh: "作品背后的代码仓库",
     run: () => [
       blank(),
       ...workCases.flatMap((project) => [
@@ -180,10 +198,10 @@ export const TERMINAL_COMMANDS: TerminalCommand[] = [
       blank(),
     ],
   },
-  listCommand("socials", "where else to find him"),
+  listCommand("socials", "where else to find him", "还能在哪找到他"),
   {
     name: "room",
-    blurb: "what is in this room",
+    blurb: "what is in this room", blurbZh: "这个房间里有什么",
     run: () => [
       blank(),
       // The English label leads because it is the half that pads exactly. `padEnd` counts
@@ -198,12 +216,12 @@ export const TERMINAL_COMMANDS: TerminalCommand[] = [
   {
     name: "echo",
     usage: "<text>",
-    blurb: "say it back",
+    blurb: "say it back", blurbZh: "原样说回来",
     run: (argv) => [line(`  ${argv.join(" ")}`)],
   },
   {
     name: "history",
-    blurb: "what has been typed",
+    blurb: "what has been typed", blurbZh: "刚才输入过什么",
     run: (_argv, context) =>
       context.history.length === 0
         ? [dim("  nothing yet")]
@@ -211,12 +229,12 @@ export const TERMINAL_COMMANDS: TerminalCommand[] = [
   },
   {
     name: "welcome",
-    blurb: "print the banner again",
-    run: () => welcomeLines(),
+    blurb: "print the banner again", blurbZh: "再打印一次开场",
+    run: (_argv, context) => welcomeLines(context.locale),
   },
   {
     name: "clear",
-    blurb: "empty the screen",
+    blurb: "empty the screen", blurbZh: "清空屏幕",
     run: (_argv, context) => {
       context.clear();
       return [];
@@ -224,7 +242,7 @@ export const TERMINAL_COMMANDS: TerminalCommand[] = [
   },
   {
     name: "exit",
-    blurb: "back to the room",
+    blurb: "back to the room", blurbZh: "回到房间",
     run: (_argv, context) => {
       context.close();
       return [];
@@ -234,14 +252,18 @@ export const TERMINAL_COMMANDS: TerminalCommand[] = [
 
 export const COMMAND_NAMES = TERMINAL_COMMANDS.map((command) => command.name);
 
-export function welcomeLines(): TerminalLine[] {
+export function welcomeLines(locale: "zh" | "en"): TerminalLine[] {
   return [
     blank(),
     accent(BANNER_NAME),
     dim(BANNER_RULE),
-    line("  JOI9000 / R2 · desk terminal"),
+    line(locale === "zh" ? "  JOI9000 / R2 · 桌面终端" : "  JOI9000 / R2 · desk terminal"),
     blank(),
-    dim("  type `help` — or `about` if you are in a hurry"),
+    dim(
+      locale === "zh"
+        ? "  输入 `help` —— 赶时间就直接 `about`"
+        : "  type `help` — or `about` if you are in a hurry",
+    ),
     blank(),
   ];
 }

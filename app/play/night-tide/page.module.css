@@ -5,8 +5,8 @@
  * left here is the page around it, and the *contents of the screen*, which stay real DOM
  * because a Godot build in an iframe cannot be a WebGL texture.
  *
- * The screen element is sized in pixels (640×480) and never in viewport units: it is
- * scaled by the 3D camera, not by CSS, so a responsive value here would fight the
+ * The screen element is sized in pixels (800×450) and never in viewport units: it is
+ * projected with the WebGL camera matrix, so a responsive value here would fight the
  * projection and make text swim as the window resizes.
  */
 
@@ -75,6 +75,11 @@
 }
 
 /* ── persistent navigation ───────────────────────────────────────────────── */
+
+/* The switch sits in the game centre's own nav group and inherits its ink. */
+.navLocale {
+  font-family: inherit;
+}
 
 .nav {
   position: fixed;
@@ -245,7 +250,7 @@
 
 .scene canvas { display: block; }
 
-/* While a cartridge is in hand the screen steps back: CSS3D cannot be occluded by WebGL,
+/* While a cartridge is in hand the screen steps back: DOM cannot be occluded by WebGL,
    so a card dragged across it would otherwise slide behind a fully-lit screen. */
 .sceneCarrying .screen { opacity: .35; filter: saturate(.6); }
 

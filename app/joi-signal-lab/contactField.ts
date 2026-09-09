@@ -81,7 +81,7 @@ const FIELD_FRAGMENT = /* glsl */ `
   // with the .contactBackdrop fallback and with the binding's coil spacing, so the
   // holes land between rules rather than drifting across them.
   float signalRule(vec2 uv) {
-    float cell = fract((uv.y * uResolution.y) / 44.0);
+    float cell = fract(((1.0 - uv.y) * uResolution.y) / 44.0);
     float edge = min(cell, 1.0 - cell);
     return 1.0 - smoothstep(0.0, 0.030, edge);
   }
@@ -97,7 +97,7 @@ const FIELD_FRAGMENT = /* glsl */ `
 
     // The grid moves, never the copy above it. A velocity wake bends at most a few
     // screen pixels, then the feedback texture brings it home without a second tween.
-    vec2 warpedUv = vUv + gradient * 0.045;
+    vec2 warpedUv = vUv; // Ink and rules share a stable sheet.
     float rule = signalRule(warpedUv);
     float redRule = signalRule(warpedUv + gradient * 0.0045);
     float blueRule = signalRule(warpedUv - gradient * 0.0045);
@@ -147,6 +147,14 @@ const FIELD_FRAGMENT = /* glsl */ `
       sin(angle * 13.0 + uTime * 0.8) * 0.5
     ) * 0.08 * uBurnProgress;
     float radialDistance = (length(relative) + wobble) * 1.3;
+
+    // Noise only adds a nonnegative amount to burnField. These completed pixels
+    // already pass its threshold, so their identical paper result needs no FBM.
+    // Keep the original edge calculation at tall viewport corners where it can matter.
+    if (uBurnProgress >= 0.9999 && radialDistance <= uBurnProgress * 1.3) {
+      gl_FragColor = vec4(mix(vec3(2.0), colour, uFlashFade), 1.0);
+      return;
+    }
 
     vec2 noiseUv = vUv;
     noiseUv.x *= uResolution.x / uResolution.y;
@@ -374,7 +382,7 @@ export function createContactField(renderer: any) {
     const dy = (targetY - smoothY) * viewportHeight;
     const lag = Math.hypot(dx, dy) / viewportWidth;
     const speed = Math.tanh(Math.max(0, lag - 0.025) / 0.08);
-    const amplitude = pointerInside && !reducedMotion ? speed * speed : 0;
+    const amplitude = 0; // Contact is clean stationery; motion belongs to the badge.
     energy = Math.max(amplitude, energy * Math.exp(-4 * delta));
 
     if (!reducedMotion && energy > 0.001) {

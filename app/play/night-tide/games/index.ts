@@ -35,12 +35,12 @@ export type GodotGame = {
   blurb: string;
   blurbZh: string;
   accent: string;
-  controls: Array<{ keys: string; action: string }>;
+  controls: Array<{ keys: string; keysZh?: string; action: string; actionZh: string }>;
   /** Site-root-relative; the shell prefixes `basePath` and a cache-busting version. */
   build: string;
   /** Shown on the input monitor while the wasm downloads. */
   loading: string;
-  buttons: Partial<Record<GameButton, { key: string; code: string; label: string }>>;
+  buttons: Partial<Record<GameButton, { key: string; code: string; label: string; labelZh: string }>>;
 };
 
 export const nightTideEntry: GodotGame = {
@@ -53,32 +53,32 @@ export const nightTideEntry: GodotGame = {
   build: "/games/night-tide/index.html?v=embedded-font-2",
   loading: "LOADING BUILD",
   controls: [
-    { keys: "WASD", action: "移动" },
-    { keys: "SPACE / A", action: "跳跃" },
-    { keys: "SHIFT / B", action: "闪避" },
-    { keys: "J / X", action: "轻攻击" },
-    { keys: "K / Y", action: "重攻击" },
-    { keys: "L / L1", action: "弹反" },
-    { keys: "Q / L2", action: "牵引" },
-    { keys: "E / R1", action: "相位斩" },
-    { keys: "R / R2", action: "引力坍缩" },
-    { keys: "ESC / START", action: "暂停" },
+    { keys: "WASD", action: "Move", actionZh: "移动" },
+    { keys: "SPACE / A", action: "Jump", actionZh: "跳跃" },
+    { keys: "SHIFT / B", action: "Dodge", actionZh: "闪避" },
+    { keys: "J / X", action: "Light attack", actionZh: "轻攻击" },
+    { keys: "K / Y", action: "Heavy attack", actionZh: "重攻击" },
+    { keys: "L / L1", action: "Parry", actionZh: "弹反" },
+    { keys: "Q / L2", action: "Pull", actionZh: "牵引" },
+    { keys: "E / R1", action: "Phase slash", actionZh: "相位斩" },
+    { keys: "R / R2", action: "Gravity collapse", actionZh: "引力坍缩" },
+    { keys: "ESC / START", action: "Pause", actionZh: "暂停" },
   ],
   /** Mirrors `scripts/app/app_state.gd` in the Night Tide source project. */
   buttons: {
-    up: { key: "w", code: "KeyW", label: "移动 上" },
-    down: { key: "s", code: "KeyS", label: "移动 下" },
-    left: { key: "a", code: "KeyA", label: "移动 左" },
-    right: { key: "d", code: "KeyD", label: "移动 右" },
-    a: { key: " ", code: "Space", label: "跳跃" },
-    b: { key: "Shift", code: "ShiftLeft", label: "闪避" },
-    x: { key: "j", code: "KeyJ", label: "轻攻击" },
-    y: { key: "k", code: "KeyK", label: "重攻击" },
-    l1: { key: "l", code: "KeyL", label: "弹反" },
-    l2: { key: "q", code: "KeyQ", label: "牵引" },
-    r1: { key: "e", code: "KeyE", label: "相位斩" },
-    r2: { key: "r", code: "KeyR", label: "引力坍缩" },
-    start: { key: "Escape", code: "Escape", label: "暂停" },
+    up: { key: "w", code: "KeyW", label: "Move up", labelZh: "移动 上" },
+    down: { key: "s", code: "KeyS", label: "Move down", labelZh: "移动 下" },
+    left: { key: "a", code: "KeyA", label: "Move left", labelZh: "移动 左" },
+    right: { key: "d", code: "KeyD", label: "Move right", labelZh: "移动 右" },
+    a: { key: " ", code: "Space", label: "Jump", labelZh: "跳跃" },
+    b: { key: "Shift", code: "ShiftLeft", label: "Dodge", labelZh: "闪避" },
+    x: { key: "j", code: "KeyJ", label: "Light attack", labelZh: "轻攻击" },
+    y: { key: "k", code: "KeyK", label: "Heavy attack", labelZh: "重攻击" },
+    l1: { key: "l", code: "KeyL", label: "Parry", labelZh: "弹反" },
+    l2: { key: "q", code: "KeyQ", label: "Pull", labelZh: "牵引" },
+    r1: { key: "e", code: "KeyE", label: "Phase slash", labelZh: "相位斩" },
+    r2: { key: "r", code: "KeyR", label: "Gravity collapse", labelZh: "引力坍缩" },
+    start: { key: "Escape", code: "Escape", label: "Pause", labelZh: "暂停" },
   },
 };
 
@@ -92,15 +92,15 @@ export const starVeinEntry: GodotGame = {
   build: "/games/star-vein/index.html?v=ui-scale-1",
   loading: "LOADING BUILD",
   controls: [
-    { keys: "A / D / ←→", action: "移动" },
-    { keys: "SPACE / A", action: "跳跃" },
-    { keys: "鼠标左键", action: "挖掘" },
-    { keys: "鼠标右键", action: "放置方块" },
-    { keys: "L1~R2", action: "快捷栏 1~4" },
-    { keys: "X / E", action: "背包" },
-    { keys: "Y / C", action: "合成" },
-    { keys: "B / F", action: "与 NPC 交互" },
-    { keys: "ESC / START", action: "暂停" },
+    { keys: "A / D / ←→", action: "Move", actionZh: "移动" },
+    { keys: "SPACE / A", action: "Jump", actionZh: "跳跃" },
+    { keys: "Left click", keysZh: "鼠标左键", action: "Mine", actionZh: "挖掘" },
+    { keys: "Right click", keysZh: "鼠标右键", action: "Place block", actionZh: "放置方块" },
+    { keys: "L1~R2", action: "Hotbar 1–4", actionZh: "快捷栏 1~4" },
+    { keys: "X / E", action: "Inventory", actionZh: "背包" },
+    { keys: "Y / C", action: "Craft", actionZh: "合成" },
+    { keys: "B / F", action: "Talk to an NPC", actionZh: "与 NPC 交互" },
+    { keys: "ESC / START", action: "Pause", actionZh: "暂停" },
   ],
   /*
    * Mirrors `scripts/engine/game_state.gd::_register_actions` in the star_vein project.
@@ -111,18 +111,18 @@ export const starVeinEntry: GodotGame = {
    * because the game binds no downward action — an unmapped button is simply not sent.
    */
   buttons: {
-    up: { key: "ArrowUp", code: "ArrowUp", label: "跳跃" },
-    left: { key: "a", code: "KeyA", label: "移动 左" },
-    right: { key: "d", code: "KeyD", label: "移动 右" },
-    a: { key: " ", code: "Space", label: "跳跃" },
-    b: { key: "f", code: "KeyF", label: "交互" },
-    x: { key: "e", code: "KeyE", label: "背包" },
-    y: { key: "c", code: "KeyC", label: "合成" },
-    l1: { key: "1", code: "Digit1", label: "快捷栏 1" },
-    l2: { key: "2", code: "Digit2", label: "快捷栏 2" },
-    r1: { key: "3", code: "Digit3", label: "快捷栏 3" },
-    r2: { key: "4", code: "Digit4", label: "快捷栏 4" },
-    start: { key: "Escape", code: "Escape", label: "暂停" },
+    up: { key: "ArrowUp", code: "ArrowUp", label: "Jump", labelZh: "跳跃" },
+    left: { key: "a", code: "KeyA", label: "Move left", labelZh: "移动 左" },
+    right: { key: "d", code: "KeyD", label: "Move right", labelZh: "移动 右" },
+    a: { key: " ", code: "Space", label: "Jump", labelZh: "跳跃" },
+    b: { key: "f", code: "KeyF", label: "Interact", labelZh: "交互" },
+    x: { key: "e", code: "KeyE", label: "Inventory", labelZh: "背包" },
+    y: { key: "c", code: "KeyC", label: "Craft", labelZh: "合成" },
+    l1: { key: "1", code: "Digit1", label: "Hotbar 1", labelZh: "快捷栏 1" },
+    l2: { key: "2", code: "Digit2", label: "Hotbar 2", labelZh: "快捷栏 2" },
+    r1: { key: "3", code: "Digit3", label: "Hotbar 3", labelZh: "快捷栏 3" },
+    r2: { key: "4", code: "Digit4", label: "Hotbar 4", labelZh: "快捷栏 4" },
+    start: { key: "Escape", code: "Escape", label: "Pause", labelZh: "暂停" },
   },
 };
 

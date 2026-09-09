@@ -11,6 +11,7 @@ import {
   panelSurface,
 } from "./roomBoard";
 import styles from "./room-whiteboard.module.css";
+import { useLocale } from "../i18n";
 
 type Props = {
   open: boolean;
@@ -29,6 +30,7 @@ type Props = {
  * on close rather than copied, so there is no second version of the drawing to drift.
  */
 export function WhiteboardSheet({ open, onClose }: Props) {
+  const { t } = useLocale();
   const holderRef = useRef<HTMLDivElement>(null);
   const drawing = useRef<{ id: number; last: [number, number] } | null>(null);
   const [ink, setInk] = useState<string>(BOARD_INKS[0]);
@@ -101,7 +103,7 @@ export function WhiteboardSheet({ open, onClose }: Props) {
       <button className={styles.backdrop} type="button" aria-label="Close whiteboard" onClick={onClose} />
       <div className={styles.panel}>
         <header className={styles.head}>
-          <span>WHITEBOARD / 画板</span>
+          <span>{t.whiteboardTitle}</span>
           <button className={styles.close} type="button" onClick={onClose}>CLOSE · ESC</button>
         </header>
 
@@ -133,7 +135,7 @@ export function WhiteboardSheet({ open, onClose }: Props) {
             CLEAR
           </button>
         </footer>
-        <p className={styles.hint}>画上去的东西会留在墙上的板子上 · Your marks stay on the board</p>
+        <p className={styles.hint}>{t.whiteboardHint}</p>
       </div>
     </div>
   );

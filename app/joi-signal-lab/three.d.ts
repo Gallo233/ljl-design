@@ -5,3 +5,7 @@ declare module "three/examples/jsm/loaders/KTX2Loader.js";
 declare module "three/examples/jsm/loaders/SVGLoader.js";
 declare module "three/examples/jsm/geometries/RoundedBoxGeometry.js";
 declare module "three/examples/jsm/renderers/CSS3DRenderer.js";
+declare module "three/examples/jsm/postprocessing/EffectComposer.js";
+declare module "three/examples/jsm/postprocessing/RenderPass.js";
+declare module "three/examples/jsm/postprocessing/UnrealBloomPass.js";
+declare module "three/examples/jsm/postprocessing/OutputPass.js";

@@ -5,18 +5,22 @@
  * with no footage behind them, which is why it is neither's file. Same shape as
  * `roomObjects.ts`: a table with no behaviour, so there is one place a frame is defined.
  *
+ * `titleZh` / `subtitleZh` carry the Chinese the switch reads. Frames 01 and 02 repeat
+ * their English title on purpose: Joi Presence and Joi Mobile are product names, and a
+ * name that gets translated is how a site starts calling one thing two things.
+ *
  * Every frame is a real destination now: 01–03 are work,
  * 04 is the lab, and 05/06 land on sections of this same page — the open handler
  * turns those two into scrolls rather than route pushes, because pushing /about-me
  * would remount the whole lab and reboot both scenes.
  */
 export const projects = [
-  { index: "01", title: "Joi Presence", subtitle: "Multimodal AI Companion", href: "/work/joi", palette: ["#07121d", "#f2eee7", "#ea6448"] },
-  { index: "02", title: "Joi Mobile", subtitle: "Native Character Companion", href: "/work/joi-mobile", palette: ["#d8d6ef", "#17152c", "#6558f5"] },
-  { index: "03", title: "Game Center", subtitle: "One Handheld · Four Cartridges", href: "/play/night-tide", palette: ["#071a2b", "#d9edf2", "#2f9ed0"] },
-  { index: "04", title: "The Lab", subtitle: "Research & Experiments", href: "/lab", palette: ["#0b2236", "#dce9ef", "#7caed0"] },
-  { index: "05", title: "My Room", subtitle: "About · 我的房间", href: "/about-me", palette: ["#2b2033", "#f1dfda", "#ee795c"] },
-  { index: "06", title: "Contact", subtitle: "Call Sheet · 联系", href: "/contact", palette: ["#e9e3d8", "#111214", "#e55f43"] },
+  { index: "01", title: "Joi Presence", titleZh: "Joi Presence", subtitle: "Multimodal AI Companion", subtitleZh: "多模态 AI 伙伴", href: "/work/joi", palette: ["#07121d", "#f2eee7", "#ea6448"] },
+  { index: "02", title: "Joi Mobile", titleZh: "Joi Mobile", subtitle: "Native Character Companion", subtitleZh: "原生角色伙伴", href: "/work/joi-mobile", palette: ["#d8d6ef", "#17152c", "#6558f5"] },
+  { index: "03", title: "Game Center", titleZh: "游戏厅", subtitle: "One Handheld · Four Cartridges", subtitleZh: "一台掌机 · 四张卡带", href: "/play/night-tide", palette: ["#071a2b", "#d9edf2", "#2f9ed0"] },
+  { index: "04", title: "The Lab", titleZh: "实验室", subtitle: "Research & Experiments", subtitleZh: "研究与实验", href: "/lab", palette: ["#0b2236", "#dce9ef", "#7caed0"] },
+  { index: "05", title: "My Room", titleZh: "我的房间", subtitle: "About", subtitleZh: "关于我", href: "/about-me", palette: ["#2b2033", "#f1dfda", "#ee795c"] },
+  { index: "06", title: "Contact", titleZh: "联系", subtitle: "Say hello", subtitleZh: "打个招呼", href: "/contact", palette: ["#e9e3d8", "#111214", "#e55f43"] },
 ] as const;
 
 export type ProjectSignal = (typeof projects)[number];
@@ -65,5 +69,10 @@ export function previousProject(href: string) {
   const index = projects.findIndex((project) => project.href === href);
   if (index <= 0) return null;
   const previous = projects[index - 1];
-  return { href: previous.href, index: previous.index, title: previous.title };
+  return {
+    href: previous.href,
+    index: previous.index,
+    title: previous.title,
+    titleZh: previous.titleZh,
+  };
 }

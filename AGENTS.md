@@ -21,6 +21,35 @@ reverse-engineered; see **Research** below before re-deriving anything.
 
 ---
 
+## September 9 visual/content update
+
+This supersedes the older LAB/reel descriptions below:
+
+- Reel 04 and 06 are live renderer-free still lifes from `reelStillLife.ts`: a metal
+  archive drawer with three project folders and a spiral address book. Their targets
+  follow the same nearby-frame rendering rule as the handheld and room.
+- `/lab` now files **余钟 / Yu Zhong (UE5 ARPG)**, **余响 / Still Here (Three.js
+  exploration)** and **来生酒吧 / Afterlife (Blender reconstruction)**. `labData.ts` owns
+  these entries; genuine project images are in `public/work/lab/`. Source paths and scope
+  notes are in `docs/design-audits/lab-projects-2026-09.md`.
+- Contact has neutral paper, no brown vignette, stable 44px top-origin rules and measured
+  DOM baselines (`useNotebookBaselines.ts`). The badge reverse uses `HoloBack.tsx`, adapted
+  from the explicitly requested RedSkill `holo-card@1.0.1`; keep original artwork and rope,
+  keyboard flip, stickers, reduced-motion and static-image fallback.
+  The September 9 follow-up uses actual Blender card geometry and four registered
+  layers. The final artwork comes from the original image's RGB plus a mask, under
+  `assets/3d/holo-badge-original/` and `public/media/holo-badge-original/`; do not restore
+  the rejected image-generated character from `holo-badge-v2`. Only concealed background
+  is reconstructed. `HoloBack.tsx` retains its renderer across flips and pauses while
+  hidden. Preserve source sRGB brightness; do not apply ACES to the printed illustration.
+  Contact pointer movement no longer dirties the retired full-screen wake effect.
+- About uses `public/models/about-room-props.glb`, authored with
+  `scripts/blender/build_room_props.py`; editable local source is
+  `assets/3d/about-room-props.blend`. Baseball + glove replaces camera/paper, Blender
+  geometry upgrades basketball/MacBook, and the tall lamp beside the ball is retired.
+  Preserve `screen.001` and the live laptop handoff. `roomPropShadows.ts` repairs the old
+  props' baked marks on the same table/floor surfaces. Check `verify-room-props.mjs`.
+
 ## Routes
 
 ```
@@ -71,16 +100,21 @@ app/
     joi-signal-lab.module.css
     three.d.ts
   work/[slug]/page.tsx      project detail
-  play/night-tide/          Game Center: a WebGL+CSS3D 3D handheld (console3d.ts builds the
-    GameHandheld.tsx        machine, drag-a-cartridge to play), games/ holds three canvas
+  play/night-tide/          Game Center: a WebGL+DOM 3D handheld (console3d.ts runs the
+    GameHandheld.tsx        Blender-authored machine, drag-a-cartridge to play), games/ holds three canvas
     console3d.ts, games/    games (snake/tetris/pacman) + two Godot builds in iframes
                             (night-tide, star-vein) described by `godotGames`, each carrying
                             its own build path and its own shell-button-to-key map. The screen
-                            stays live DOM (CSS3DRenderer) because an iframe cannot be a
+                            stays live DOM (screenProjection.ts) because an iframe cannot be a
                             WebGL texture; on WebGL failure the shell folds to a flat screen.
                             Godot exports live in public/games/<id>/ and are re-patched with
                             scripts/godot/patch-web-shell.mjs after every export — that script
                             injects the postMessage input bridge the shell talks to.
+                            handheldAsset.ts loads public/models/pocket-nt.glb for this route
+                            and the reel. Editable source: assets/3d/pocket-nt.blend (untracked);
+                            rebuild with sh scripts/blender/build_handheld.sh. Screen/socket
+                            dimensions and 14 control pivots are checked by
+                            scripts/dev/verify-handheld-glb.mjs. Asset failure uses flat DOM.
   classic/page.tsx          previous homepage
   site.ts                   SITE_URL, canonicalPath(), SHARE_CARD   <-- see below
   robots.ts, sitemap.ts     generated /robots.txt and /sitemap.xml

@@ -76,7 +76,7 @@ function experienceProject(slug: "joi" | "joi-mobile"): WorkExperienceProject {
     next: {
       href: "/play/night-tide",
       index: "03",
-      title: "GAME CENTER — 游戏厅",
+      title: "游戏厅",
     },
     // Frame 01. `joi` above has no `previous`, being the first frame in the reel.
     previous: {

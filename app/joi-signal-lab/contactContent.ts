@@ -1,21 +1,25 @@
 export const CONTACT_EMAIL = "18520455682@163.com";
 
-/** Contact is a quiet final invitation, not a second project index or intake form. */
-export const CONTACT_CONTENT = {
-  kicker: "04 / CONTACT",
-  title: "Let’s make technology people can live with.",
-  statement: "在找 AI 产品 / 产品设计的机会，也接有意思的项目。来聊。",
-  meta: "GUANGZHOU · GMT+8 · 2026",
-  actions: [
-    {
-      value: "GITHUB / GALLO233",
-      href: "https://github.com/Gallo233",
-      external: true,
-    },
-    {
-      value: "RESUME / PDF",
-      href: "/resume/gallo-liu-resume-cn.pdf",
-      download: true,
-    },
-  ],
-} as const;
+/**
+ * Contact's links.
+ *
+ * The words that used to live here — kicker, title, statement, meta — moved into the
+ * strings table when the language switch landed, because they are things the interface
+ * says and it now says them twice. What stays is the address and the two destinations,
+ * which read the same in either language; only the résumé's label is translated, and it
+ * carries its own key rather than a second copy of the string.
+ */
+export const CONTACT_ACTIONS = [
+  {
+    labelKey: null,
+    value: "GITHUB / GALLO233",
+    href: "https://github.com/Gallo233",
+    external: true,
+  },
+  {
+    labelKey: "contactActionResume",
+    value: "RESUME / PDF",
+    href: "/resume/gallo-liu-resume-cn.pdf",
+    download: true,
+  },
+] as const;

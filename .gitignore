@@ -21,3 +21,12 @@ joi-doorway-video/dist/
 .img2threejs/
 .zcode/
 .impeccable/
+
+# Locally installed user-requested skill store package; not website source.
+/skills/
+
+# Blender working sources and QA renders. AGENTS.md keeps assets/3d/ out of the
+# repo on purpose; these rules stop 145 MB of it showing up as untracked noise.
+# Files already tracked here (about-room.blend, about-room-bakes/) are unaffected.
+/assets/3d/
+__pycache__/

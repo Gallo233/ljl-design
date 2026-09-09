@@ -9,6 +9,7 @@ import {
   type TerminalLine,
 } from "./terminalProgram";
 import styles from "./room-terminal.module.css";
+import { useLocale } from "../i18n";
 
 type Props = {
   open: boolean;
@@ -33,6 +34,7 @@ type Block = { id: number; prompt?: string; lines: TerminalLine[] };
  * IME composition and screen readers all work without a bridge.
  */
 export function TerminalSheet({ open, onClose, onOpenHref }: Props) {
+  const { locale, t } = useLocale();
   const [blocks, setBlocks] = useState<Block[]>([]);
   const [input, setInput] = useState("");
   const [recallIndex, setRecallIndex] = useState<number | null>(null);
@@ -56,7 +58,7 @@ export function TerminalSheet({ open, onClose, onOpenHref }: Props) {
     setInput("");
     setRecallIndex(null);
     nextId.current += 1;
-    setBlocks([{ id: nextId.current, lines: welcomeLines() }]);
+    setBlocks([{ id: nextId.current, lines: welcomeLines(locale) }]);
     // Focus after paint: the panel animates in, and focusing a not-yet-laid-out field
     // scrolls the page behind the overlay on Safari.
     const frame = requestAnimationFrame(() => inputRef.current?.focus());
@@ -91,6 +93,7 @@ export function TerminalSheet({ open, onClose, onOpenHref }: Props) {
       close: onClose,
       clear: () => setBlocks([]),
       history: historyRef.current,
+      locale,
     };
     const lines = runCommand(trimmed, context);
     historyRef.current = [...historyRef.current, trimmed];
@@ -160,7 +163,7 @@ export function TerminalSheet({ open, onClose, onOpenHref }: Props) {
       <button className={styles.backdrop} type="button" aria-label="Close terminal" onClick={onClose} />
       <div className={styles.panel}>
         <header className={styles.head}>
-          <span>TERMINAL / 终端</span>
+          <span>{t.terminalTitle}</span>
           <button className={styles.close} type="button" onClick={onClose}>CLOSE · ESC</button>
         </header>
 
@@ -209,7 +212,7 @@ export function TerminalSheet({ open, onClose, onOpenHref }: Props) {
         </div>
 
         <p className={styles.hint}>
-          <span>TAB 补全 · ↑ ↓ 历史 · CTRL+L 清屏</span>
+          <span>{t.terminalHint}</span>
           <span className={styles.hintEn}>TAB · ARROWS · CTRL+L</span>
         </p>
       </div>

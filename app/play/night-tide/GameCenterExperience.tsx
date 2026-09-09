@@ -13,6 +13,7 @@ import { previousProject } from "../../joi-signal-lab/reelProjects";
 import { arcadeGames, godotGames } from "./games";
 import { GameHandheld, type GameVisualState } from "./GameHandheld";
 import styles from "./page.module.css";
+import { LocaleToggle, pick, useLocale } from "../../i18n";
 
 /** Counted, not written down: the shelf gained a fifth cartridge and the copy did not. */
 const CARTRIDGE_COUNT = godotGames.length + arcadeGames.length;
@@ -33,6 +34,17 @@ const DEFAULT_STATE: GameVisualState = {
 const previous = previousProject("/play/night-tide")!;
 
 export function GameCenterExperience() {
+  const { locale, t } = useLocale();
+  /*
+   * The tab, in the reader's language.
+   *
+   * Served metadata cannot follow a client switch, so without this the browser tab keeps
+   * saying 实验室 while the page itself reads in English — the same split the switch is
+   * meant to close. The suffix matches the root layout's title template.
+   */
+  useEffect(() => {
+    document.title = `${t.gameCenterTitle} — Gallo`;
+  }, [t.gameCenterTitle]);
   const rootRef = useRef<HTMLElement>(null);
   const identityRef = useRef<HTMLElement>(null);
   const nextRef = useRef<HTMLAnchorElement>(null);
@@ -205,35 +217,36 @@ export function GameCenterExperience() {
       <div className={styles.ambient} aria-hidden="true" />
       <div className={styles.liquidHost} ref={liquidHostRef} aria-hidden="true" />
 
-      <nav className={styles.nav} aria-label="Game Center navigation">
+      <nav className={styles.nav} aria-label={t.gameCenterNavLabel}>
         <Link className={styles.wordmark} href="/">GALLO</Link>
         <div>
-          <Link href="/selected-work">BACK TO REEL</Link>
-          <Link href="/lab">THE LAB</Link>
+          <Link href="/selected-work">{t.gameCenterBackToReel}</Link>
+          <Link href="/lab">{t.labTitle}</Link>
+          <LocaleToggle className={styles.navLocale} />
         </div>
       </nav>
 
       <header className={styles.header} ref={identityRef} data-arrival-target>
-        <p className={styles.kicker}>03 / GAME CENTER / {CARTRIDGE_COUNT} CARTRIDGES</p>
+        <p className={styles.kicker}>
+          {t.gameCenterKickerPrefix}{CARTRIDGE_COUNT}{t.gameCenterKickerSuffix}
+        </p>
         <div className={styles.heading}>
-          <h1 lang="zh-CN">游戏厅</h1>
-          <p className={styles.subtitle} lang="zh-CN">
-            把卡带拖进插槽，完整试玩夜潮、星脉、贪吃蛇、俄罗斯方块和吃豆人。
-          </p>
+          <h1>{t.gameCenterTitle}</h1>
+          <p className={styles.subtitle}>{t.gameCenterBlurb}</p>
         </div>
         <span className={styles.phaseLabel}>
           {visualState.carrying
-            ? "CARTRIDGE IN HAND"
+            ? t.gameCenterPhaseCarrying
             : visualState.phase === "play"
-              ? "GAME ONLINE"
+              ? t.gameCenterPhasePlaying
               : visualState.phase === "idle"
-                ? "WAITING FOR CARTRIDGE"
-                : "BOOTING POCKET-NT"}
+                ? t.gameCenterPhaseIdle
+                : t.gameCenterPhaseBooting}
         </span>
       </header>
 
       <section className={styles.gameSection} aria-labelledby="game-center-title">
-        <h2 id="game-center-title" className={styles.srOnly}>选择并试玩一张卡带</h2>
+        <h2 id="game-center-title" className={styles.srOnly}>{t.gameCenterChoose}</h2>
         <GameHandheld onVisualStateChange={setVisualState} />
       </section>
 
@@ -242,15 +255,15 @@ export function GameCenterExperience() {
         * go into the liquid stage above, so the field flows between them the way it already
         * flowed between the identity card and the rack.
         */}
-      <nav className={styles.frameSteps} aria-label="Reel frames">
+      <nav className={styles.frameSteps} aria-label={t.reelFramesLabel}>
         <Link className={`${styles.frameSignal} ${styles.prevSignal}`} href={previous.href}>
-          <span>PREV / {previous.index}</span>
-          <strong>{previous.title}</strong>
+          <span>{t.reelPrevPrefix}{previous.index}</span>
+          <strong>{pick(locale, previous.title, previous.titleZh)}</strong>
           <b aria-hidden="true">←</b>
         </Link>
         <Link className={`${styles.frameSignal} ${styles.nextSignal}`} href="/lab" ref={nextRef}>
-          <span>NEXT / 04</span>
-          <strong>THE LAB</strong>
+          <span>{t.reelNextPrefix}04</span>
+          <strong>{t.labTitle}</strong>
           <b aria-hidden="true">→</b>
         </Link>
       </nav>

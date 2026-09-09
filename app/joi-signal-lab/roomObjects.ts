@@ -14,7 +14,7 @@
 export type RoomObjectId =
   | "crt-monitor"
   | "joi-music-box"
-  | "camera"
+  | "baseball"
   | "bookshelf"
   | "whiteboard"
   | "basketball";
@@ -28,7 +28,7 @@ export type RoomObjectDef = {
 export const ROOM_OBJECTS: RoomObjectDef[] = [
   { id: "crt-monitor", label: "AI PRODUCT & DESIGN", labelZh: "AI 产品与设计" },
   { id: "joi-music-box", label: "JOI RECORDS", labelZh: "JOI 唱片" },
-  { id: "camera", label: "PHOTOGRAPHY", labelZh: "摄影" },
+  { id: "baseball", label: "BASEBALL", labelZh: "棒球" },
   { id: "bookshelf", label: "READING", labelZh: "阅读" },
   { id: "whiteboard", label: "DRAW ON IT", labelZh: "画板" },
   // COPY-REVIEW — the author is drafting this one; the pair below is a placeholder

@@ -19,6 +19,7 @@ import {
   type Slot,
 } from "../../app/joi-signal-lab/deckLibrary";
 import styles from "./global-music.module.css";
+import { useLocale } from "../../app/i18n";
 
 const SIDE_SECONDS = 240;
 /** Matches the lift / label swap / bounce timeline in `roomTurntable.ts`. */
@@ -492,6 +493,7 @@ export function GlobalMusicProvider({ children }: { children: ReactNode }) {
  * single button used to draw for itself.
  */
 function GlobalMusicSticker() {
+  const { t } = useLocale();
   const { loaded, isPlaying, isSwitching, source, toggle, step } = useGlobalMusic();
   const sourceLabel = isSwitching
     ? "CHANGING SIDE"
@@ -508,13 +510,13 @@ function GlobalMusicSticker() {
       data-playing={isPlaying ? "true" : "false"}
       data-switching={isSwitching ? "true" : "false"}
       role="group"
-      aria-label="全站音乐"
+      aria-label={t.musicLabel}
     >
       <button
         type="button"
         className={styles.main}
         onClick={() => { void toggle(); }}
-        aria-label={isPlaying ? `暂停 ${slotTitle(loaded)}` : `播放 ${slotTitle(loaded)}`}
+        aria-label={`${isPlaying ? t.musicPause : t.musicPlay} ${slotTitle(loaded)}`}
         aria-pressed={isPlaying}
       >
         <span className={styles.disc} aria-hidden="true">
@@ -531,7 +533,7 @@ function GlobalMusicSticker() {
         className={styles.skip}
         onClick={() => { void step(1); }}
         disabled={isSwitching}
-        aria-label="下一首"
+        aria-label={t.musicNext}
       >
         <span aria-hidden="true">⏭</span>
       </button>

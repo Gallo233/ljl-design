@@ -9,6 +9,8 @@
  * source/scroll-and-transitions.md
  */
 
+import type { StringKey } from "../i18n/strings";
+
 export type SectionId = "hero" | "selected-work" | "about-me" | "contact";
 
 /**
@@ -29,8 +31,16 @@ export type SnapConfig = {
 export type Section = {
   id: SectionId;
   path: string;
-  label: string;
-  title: string;
+  /*
+   * The nav label and the document title, as keys rather than text.
+   *
+   * This table is imported by the scroll driver as well as the shell, and the driver has
+   * no business knowing which language is on screen. Keeping keys here means the table
+   * stays what it has always been — positions, paths and snap windows — while the words
+   * live in one place with every other word the interface says.
+   */
+  labelKey: StringKey;
+  titleKey: StringKey;
   /** Screens from the top. */
   position: number;
   /** Null means "nav target, not a snap target" — the reference does the same. */
@@ -62,8 +72,8 @@ export const SECTIONS: Section[] = [
   {
     id: "hero",
     path: "/",
-    label: "HOME",
-    title: "Gallo — AI Product & Product Design",
+    labelKey: "navHome",
+    titleKey: "docTitleHome",
     position: 0,
     snap: {
       forward: { range: [-10000, 0.1], multiplier: 1 },
@@ -74,8 +84,8 @@ export const SECTIONS: Section[] = [
   {
     id: "selected-work",
     path: "/selected-work",
-    label: "SELECTED WORK",
-    title: "Selected Work",
+    labelKey: "navSelectedWork",
+    titleKey: "docTitleSelectedWork",
     position: 2,
     snap: {
       forward: { range: [-1.8, 0.6], multiplier: 1 },
@@ -86,8 +96,8 @@ export const SECTIONS: Section[] = [
   {
     id: "about-me",
     path: "/about-me",
-    label: "ABOUT ME",
-    title: "About Me",
+    labelKey: "navAboutMe",
+    titleKey: "docTitleAboutMe",
     position: 5.2,
     snap: null,
     travel: { toPrevious: 3000, toNext: 2400 },
@@ -95,8 +105,8 @@ export const SECTIONS: Section[] = [
   {
     id: "contact",
     path: "/contact",
-    label: "CONTACT",
-    title: "Contact",
+    labelKey: "navContact",
+    titleKey: "docTitleContact",
     position: 7.6,
     snap: null,
     travel: { toPrevious: 2400 },

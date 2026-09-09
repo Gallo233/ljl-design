@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LIBRARY, LIBRARY_YEARS, type LibraryBook } from "./roomLibrary";
 import styles from "./room-bookshelf.module.css";
+import { pick, useLocale } from "../i18n";
 
 type Props = {
   open: boolean;
@@ -24,6 +25,7 @@ type Props = {
  * opens it on the first book of the newest year.
  */
 export function BookshelfSheet({ open, onClose, initialBookId }: Props) {
+  const { locale, t } = useLocale();
   const [selectedId, setSelectedId] = useState<string>(LIBRARY[0]?.id ?? "");
   const railRef = useRef<HTMLDivElement>(null);
 
@@ -85,7 +87,7 @@ export function BookshelfSheet({ open, onClose, initialBookId }: Props) {
       <button className={styles.backdrop} type="button" aria-label="Close shelf" onClick={onClose} />
       <div className={styles.panel}>
         <header className={styles.head}>
-          <span>SHELF / 书架</span>
+          <span>{t.shelfTitle}</span>
           <button className={styles.close} type="button" onClick={onClose}>CLOSE · ESC</button>
         </header>
 
@@ -115,8 +117,12 @@ export function BookshelfSheet({ open, onClose, initialBookId }: Props) {
                       >
                         {/* The spine's own colour, so the list and the shelf are the same shelf. */}
                         <i className={styles.swatch} style={{ background: book.spine }} aria-hidden="true" />
-                        <span className={styles.entryTitle}>{book.title}</span>
-                        <span className={styles.entryAuthor}>{book.author}</span>
+                        <span className={styles.entryTitle}>
+                          {pick(locale, book.titleOriginal ?? book.title, book.title)}
+                        </span>
+                        <span className={styles.entryAuthor}>
+                          {pick(locale, book.authorOriginal ?? book.author, book.author)}
+                        </span>
                       </button>
                     </li>
                   ))}
@@ -143,19 +149,26 @@ export function BookshelfSheet({ open, onClose, initialBookId }: Props) {
                 />
               )}
               <p className={styles.detailYear}>{selected.year}</p>
-              <h2 className={styles.detailTitle}>{selected.title}</h2>
-              {selected.titleOriginal && (
+              <h2 className={styles.detailTitle}>
+                {pick(locale, selected.titleOriginal ?? selected.title, selected.title)}
+              </h2>
+              {/*
+                The other title, only when it is genuinely a different one. Reading in
+                Chinese, the original is worth seeing; reading in English, the English
+                title is already the heading and repeating it would be the old habit.
+              */}
+              {locale === "zh" && selected.titleOriginal && (
                 <p className={styles.detailOriginal}>{selected.titleOriginal}</p>
               )}
               <p className={styles.detailAuthor}>
-                {selected.author}
-                {selected.authorOriginal && <span> · {selected.authorOriginal}</span>}
+                {pick(locale, selected.authorOriginal ?? selected.author, selected.author)}
               </p>
 
               {selected.quote ? (
                 <blockquote className={styles.quote}>
-                  {selected.quoteZh && <p className={styles.quoteZh}>{selected.quoteZh}</p>}
-                  <p className={styles.quoteEn}>{selected.quote}</p>
+                  <p className={styles.quoteEn}>
+                    {pick(locale, selected.quote, selected.quoteZh ?? selected.quote)}
+                  </p>
                 </blockquote>
               ) : (
                 /*
@@ -163,14 +176,14 @@ export function BookshelfSheet({ open, onClose, initialBookId }: Props) {
                  * blank rather than inventing a quotation for it, and a panel that quietly
                  * dropped the block would hide the fact that it is waiting for one.
                  */
-                <p className={styles.quoteEmpty}>还没记下这本里的句子</p>
+                <p className={styles.quoteEmpty}>{t.shelfNoQuote}</p>
               )}
             </article>
           )}
         </div>
 
         <p className={styles.hint}>
-          <span>点书脊或列表 · ← → 翻</span>
+          <span>{t.shelfHint}</span>
           <span className={styles.hintEn}>CLICK A SPINE · ARROWS</span>
         </p>
       </div>

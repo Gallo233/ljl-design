@@ -103,13 +103,20 @@ export const tetris: ArcadeGame = {
   blurbZh: "七种方块轮流发牌，不会连续缺件。",
   accent: PALETTE.indigo,
   controls: [
-    { keys: "← → / D-PAD", action: "左右移动" },
-    { keys: "↓", action: "软降" },
-    { keys: "A / X", action: "旋转" },
-    { keys: "B", action: "硬降" },
-    { keys: "START", action: "重开" },
+    { keys: "← → / D-PAD", action: "Move left / right", actionZh: "左右移动" },
+    { keys: "↓", action: "Soft drop", actionZh: "软降" },
+    { keys: "A / X", action: "Rotate", actionZh: "旋转" },
+    { keys: "B", action: "Hard drop", actionZh: "硬降" },
+    { keys: "START", action: "Restart", actionZh: "重开" },
   ],
-  mount(canvas: HTMLCanvasElement, { input, setStatus, audio }: GameContext) {
+  mount(canvas: HTMLCanvasElement, shell: GameContext) {
+    const { input, setStatus, audio } = shell;
+    /*
+     * Read, never destructured: `shell.locale` is a live getter on the shell's side, so
+     * pulling it out here would freeze the language at the moment the cartridge was
+     * seated and leave the run writing status lines in the language it started in.
+     */
+    const zh = () => shell.locale === "zh";
     const context = canvas.getContext("2d");
     if (!context) return { destroy: () => {} };
 
@@ -165,7 +172,7 @@ export const tetris: ArcadeGame = {
         // The record only means anything at the end of a run, so that is where it shows.
         const record = bestScore.submit(score);
         setStatus(
-          `GAME OVER / ${score}${record ? " · NEW BEST" : ` · BEST ${bestScore.get()}`} · START 重开`,
+          `${zh() ? "游戏结束" : "GAME OVER"} / ${score}${record ? (zh() ? " · 新纪录" : " · NEW BEST") : `${zh() ? " · 最佳 " : " · BEST "}${bestScore.get()}`} · ${zh() ? "START 重开" : "START TO RESTART"}`,
         );
         return;
       }
@@ -356,7 +363,13 @@ export const tetris: ArcadeGame = {
         context.fillText("GAME OVER", SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2 - 14);
         context.fillStyle = PALETTE.muted;
         context.font = "500 16px ui-monospace, SFMono-Regular, Menlo, monospace";
-        context.fillText(`${score} 分 · ${lines} 行 · START 重开`, SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2 + 22);
+        context.fillText(
+          zh()
+            ? `${score} 分 · ${lines} 行 · START 重开`
+            : `${score} PTS · ${lines} LINES · START TO RESTART`,
+          SCREEN_WIDTH / 2,
+          SCREEN_HEIGHT / 2 + 22,
+        );
         context.textAlign = "left";
       }
     };

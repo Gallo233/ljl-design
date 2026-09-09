@@ -1,4 +1,6 @@
 "use client";
+import { createReelStillLife } from "./reelStillLife";
+import { useNotebookBaselines } from "./useNotebookBaselines";
 
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
@@ -9,7 +11,7 @@ import { createHeroScene } from "./heroScene";
 import { createOceanScene, SEA_STATES } from "./oceanScene";
 import { createPostChain } from "./postfx";
 import { createContactField } from "./contactField";
-import { CONTACT_CONTENT, CONTACT_EMAIL } from "./contactContent";
+import { CONTACT_ACTIONS, CONTACT_EMAIL } from "./contactContent";
 import { detectQuality } from "./quality";
 import { LanyardBadge } from "./badge/LanyardBadge";
 import { JoiMusicPlayer } from "./JoiMusicPlayer";
@@ -20,7 +22,7 @@ import { createScrollSignal } from "./scrollSignal";
 import { ROOM_OBJECTS, type RoomObjectId } from "./roomObjects";
 import { projects, reelMotionSources, reelPosterSources, type ProjectSignal } from "./reelProjects";
 import { createReelMotion, modulo, type ReelMotion } from "./reelMotion";
-import { ATLAS_FRAME_HEIGHT, ATLAS_FRAME_WIDTH, buildAtlas, drawCoverImage } from "./reelArt";
+import { ATLAS_FRAME_HEIGHT, ATLAS_FRAME_WIDTH, buildAtlas, drawCoverImage, paintAtlas } from "./reelArt";
 import { buildHandheldModel } from "./handheldModel";
 import { useGlobalMusic } from "../../components/global-music/GlobalMusic";
 
@@ -50,6 +52,7 @@ import {
   type SectionId,
 } from "./sections";
 import { useScrollDriver } from "./useScrollDriver";
+import { LocaleToggle, pick, useLocale } from "../i18n";
 import styles from "./joi-signal-lab.module.css";
 
 type JoiSignalLabProps = {
@@ -75,18 +78,21 @@ function ProjectTitleContent({
   project: ProjectSignal;
   onProjectOpen: (href: string) => void;
 }) {
+  const { locale, t } = useLocale();
+  const subtitle = pick(locale, project.subtitle, project.subtitleZh);
+  const viewProjectLabel = t.reelViewProject;
   return (
     <>
       <span>{project.index} / {String(projects.length).padStart(2, "0")}</span>
-      <h2>{project.title}</h2>
-      <p>{project.subtitle} <i>·</i> <a
+      <h2>{pick(locale, project.title, project.titleZh)}</h2>
+      <p>{subtitle} <i>·</i> <a
         href={project.href}
         onClick={(event) => {
           if (event.button !== 0 || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
           event.preventDefault();
           onProjectOpen(project.href);
         }}
-      >View project <b>→</b></a></p>
+      >{viewProjectLabel} <b>→</b></a></p>
     </>
   );
 }
@@ -270,6 +276,18 @@ function FilmCanvas({
   /** Lets the scroll driver suspend snapping while the reader is dragging the reel. */
   onDragStateChange: (active: boolean) => void;
 }) {
+  /*
+   * The reel's frame art is baked into an atlas texture, so it cannot follow a React
+   * render. The ref keeps the language current for the initial build, and the effect
+   * below repaints that same canvas when the switch is used — a rebuild of the whole
+   * scene would restart the boot and throw the reader back to the top of the hero.
+   */
+  const { locale: canvasLocale } = useLocale();
+  const localeRef = useRef(canvasLocale);
+  localeRef.current = canvasLocale;
+  const repaintAtlasRef = useRef<(locale: "zh" | "en") => void>(() => {});
+  useEffect(() => { repaintAtlasRef.current(canvasLocale); }, [canvasLocale]);
+
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const posterRefs = useRef<Array<HTMLImageElement | null>>([]);
   const stepRef = useRef(step);
@@ -320,10 +338,8 @@ function FilmCanvas({
     const tier = detectQuality();
     const reducedMotion = tier.reducedMotion;
     const isMobile = tier.isMobile;
-    const pointerFieldEnabled = !reducedMotion &&
-      window.matchMedia("(hover: hover) and (pointer: fine)").matches;
-    // Coarse pointers still receive the scroll-driven burn. They only lose the later
-    // pointer wake; reduced-motion is the one mode that replaces the transition itself.
+    // Pointer wakes were retired with the yellow paper wash. The field now changes
+    // only during the scroll-driven burn or resize; pointer work belongs to the badge.
     const staticContactField = reducedMotion;
     // One context for the whole stage. MSAA over a full-screen canvas costs more on a
     // phone than the softer edges are worth — and the post chain resolves most edges
@@ -407,8 +423,12 @@ function FilmCanvas({
     const curve = buildCurve();
     const curveLength = curve.getLength();
     const geometry = buildFilmGeometry(curve);
-    const atlas = buildAtlas(posterRefs.current);
+    const atlas = buildAtlas(posterRefs.current, localeRef.current);
     const texture = new THREE.CanvasTexture(atlas);
+    repaintAtlasRef.current = (nextLocale) => {
+      paintAtlas(atlas, posterRefs.current, nextLocale);
+      texture.needsUpdate = true;
+    };
     texture.colorSpace = THREE.SRGBColorSpace;
     // The drawn frames spend most of their time receding around the curve. A static
     // atlas can afford a mip pyramid, which lets the existing anisotropic filter follow
@@ -534,6 +554,20 @@ function FilmCanvas({
     roomTarget.texture.colorSpace = THREE.SRGBColorSpace;
     roomTarget.texture.generateMipmaps = false;
 
+    let stillLives = [createReelStillLife("lab", canvasLocale), createReelStillLife("contact", canvasLocale)];
+    const repaintAtlas = repaintAtlasRef.current;
+    repaintAtlasRef.current = (nextLocale) => {
+      repaintAtlas(nextLocale);
+      stillLives.forEach(still => still.dispose());
+      stillLives = [createReelStillLife("lab", nextLocale), createReelStillLife("contact", nextLocale)];
+    };
+    const stillTargets = stillLives.map(() => {
+      const target = new THREE.WebGLRenderTarget(LIVE_FRAME_WIDTH, LIVE_FRAME_HEIGHT, { depthBuffer: true });
+      target.texture.colorSpace = THREE.SRGBColorSpace;
+      target.texture.generateMipmaps = false;
+      return target;
+    });
+
     let frontT = 0;
     let frontScore = -Infinity;
     for (let index = 0; index <= 500; index += 1) {
@@ -551,6 +585,8 @@ function FilmCanvas({
       uJoiMapVideoReady: { value: 0 },
       uNightTideMap: { value: nightTideTarget.texture },
       uRoomMap: { value: roomTarget.texture },
+      uLabMap: { value: stillTargets[0].texture },
+      uContactMap: { value: stillTargets[1].texture },
       uCurveLength: { value: curveLength },
       uFrameWidth: { value: FRAME_WIDTH },
       uTextureCount: { value: projects.length },
@@ -572,6 +608,8 @@ function FilmCanvas({
       joiMapVideoReady: uniforms.uJoiMapVideoReady,
       nightTide: uniforms.uNightTideMap,
       room: uniforms.uRoomMap,
+      lab: uniforms.uLabMap,
+      contact: uniforms.uContactMap,
     });
 
     const material = new THREE.ShaderMaterial({
@@ -603,6 +641,8 @@ function FilmCanvas({
         uniform float uJoiMapVideoReady;
         uniform sampler2D uNightTideMap;
         uniform sampler2D uRoomMap;
+        uniform sampler2D uLabMap;
+        uniform sampler2D uContactMap;
         uniform float uCurveLength;
         uniform float uFrameWidth;
         uniform float uTextureCount;
@@ -645,6 +685,10 @@ function FilmCanvas({
             image = mix(fallback, video, uJoiMapVideoReady);
           } else if (abs(frameIndex - 2.0) < 0.5) {
             image = texture2D(uNightTideMap, contentUv).rgb;
+          } else if (abs(frameIndex - 3.0) < 0.5) {
+            image = texture2D(uLabMap, contentUv).rgb;
+          } else if (abs(frameIndex - 5.0) < 0.5) {
+            image = texture2D(uContactMap, contentUv).rgb;
           } else if (abs(frameIndex - 4.0) < 0.5) {
             image = texture2D(uRoomMap, contentUv).rgb;
           } else {
@@ -829,17 +873,6 @@ function FilmCanvas({
       hero.setPointer(x, y);
       ocean.setPointer(x, y);
     };
-
-    // Contact's semantic DOM sits above the canvas. A window listener keeps the quiet
-    // background wake continuous while the pointer crosses the address and links.
-    const handleContactPointerMove = (event: PointerEvent) => {
-      if (!pointerFieldEnabled || staticContactField || contactTurnRef.current < 0.94) return;
-      contactField.setPointer(event.clientX, event.clientY, boundsLeft, boundsTop);
-    };
-    const handleContactPointerOut = (event: PointerEvent) => {
-      if (event.relatedTarget === null) contactField.leavePointer();
-    };
-    const handleContactPointerLeave = () => contactField.leavePointer();
 
     /**
      * The reel owns the pointer only in the stretch between the other two.
@@ -1109,9 +1142,6 @@ function FilmCanvas({
     canvas.addEventListener("pointerleave", handleLeave);
     canvas.addEventListener("click", handleClick);
     canvas.addEventListener("wheel", handleWheel, { passive: false });
-    window.addEventListener("pointermove", handleContactPointerMove, { passive: true });
-    window.addEventListener("pointerout", handleContactPointerOut);
-    window.addEventListener("blur", handleContactPointerLeave);
     // A lost context only costs the optional field; Contact's copy and static fallback
     // are ordinary DOM beneath and above this canvas.
     const handleContextLost = (event: Event) => {
@@ -1159,8 +1189,6 @@ function FilmCanvas({
         frame = window.requestAnimationFrame(render);
         return;
       }
-      stageDormant = false;
-
       const contactFieldPresence = contactFieldPresenceFor(contactTurn);
       const drawContact = (clearScreen: boolean) => {
         if (staticContactField) return false;
@@ -1184,6 +1212,7 @@ function FilmCanvas({
         frame = window.requestAnimationFrame(render);
         return;
       }
+      stageDormant = false;
       if (contactTurn < 0.82 && canvas.style.cursor === "default") canvas.style.cursor = "";
       roomScene.setPlatterSpinning(recordPlayingRef.current);
 
@@ -1360,6 +1389,17 @@ function FilmCanvas({
        * reel hands over it is the whole stage — the reader walks out of the machine
        * and into the room it was sitting in. One scene, two cameras, updated once.
        */
+      stillLives.forEach((still, index) => {
+        const frame = index === 0 ? 3 : 5;
+        const distance = Math.min(modulo(activeProject - frame, projects.length), modulo(frame - activeProject, projects.length));
+        if (reelVisible && distance <= 1) {
+          still.update(performance.now() / 1000);
+          renderer.setRenderTarget(stillTargets[index]);
+          renderer.clear(); renderer.render(still.scene, still.camera);
+          renderer.setRenderTarget(null);
+        }
+      });
+
       const roomDistance = Math.min(
         modulo(activeProject - 4, projects.length),
         modulo(4 - activeProject, projects.length),
@@ -1581,9 +1621,6 @@ function FilmCanvas({
       canvas.removeEventListener("wheel", handleWheel);
       canvas.removeEventListener("webglcontextlost", handleContextLost);
       canvas.removeEventListener("webglcontextrestored", handleContextRestored);
-      window.removeEventListener("pointermove", handleContactPointerMove);
-      window.removeEventListener("pointerout", handleContactPointerOut);
-      window.removeEventListener("blur", handleContactPointerLeave);
       window.clearTimeout(wheel.resetTimer);
       geometry.dispose();
       material.dispose();
@@ -1596,6 +1633,8 @@ function FilmCanvas({
       ocean.dispose();
       oceanTarget.dispose();
       roomScene.dispose();
+      stillLives.forEach(still => still.dispose());
+      stillTargets.forEach(target => target.dispose());
       roomTarget.dispose();
       hero.dispose();
       post.dispose();
@@ -1689,6 +1728,11 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
   const [filmReady, setFilmReady] = useState(false);
   /** Which room object the reader picked — lights the matching interest chip. */
   const [hoveredInterest, setHoveredInterest] = useState<RoomObjectId | null>(null);
+  const hoveredObject = hoveredInterest
+    ? ROOM_OBJECTS.find((entry) => entry.id === hoveredInterest) ?? null
+    : null;
+  const { locale, t } = useLocale();
+  useNotebookBaselines(experienceRef, locale);
   const [musicPlayerOpen, setMusicPlayerOpen] = useState(false);
   /**
    * Mail remains the conventional primary link; copying is the explicit escape hatch
@@ -1696,7 +1740,6 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
    */
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
   const copyResetRef = useRef<number | null>(null);
-  const [badgeInteractive, setBadgeInteractive] = useState(false);
 
   const copyEmail = async () => {
     if (copyResetRef.current !== null) window.clearTimeout(copyResetRef.current);
@@ -1717,13 +1760,6 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
     if (copyResetRef.current !== null) window.clearTimeout(copyResetRef.current);
   }, []);
 
-  useEffect(() => {
-    const query = window.matchMedia("(hover: hover) and (pointer: fine)");
-    const sync = () => setBadgeInteractive(query.matches);
-    sync();
-    query.addEventListener("change", sync);
-    return () => query.removeEventListener("change", sync);
-  }, []);
   const [whiteboardOpen, setWhiteboardOpen] = useState(false);
   const [terminalOpen, setTerminalOpen] = useState(false);
   const [shelfOpen, setShelfOpen] = useState(false);
@@ -2094,10 +2130,12 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
   // entries — scrolling is not navigation.
   useEffect(() => {
     const section = getSection(activeSection);
+    // The title is rewritten even when the path already matches: the language can change
+    // without the reader moving, and the tab should not keep the old one.
+    document.title = t[section.titleKey];
     if (window.location.pathname === section.path) return;
     window.history.replaceState(null, "", section.path);
-    document.title = section.title;
-  }, [activeSection]);
+  }, [activeSection, t]);
 
   const openProject = (href: string) => {
     // Frames whose destination is a section of this page scroll instead of
@@ -2140,14 +2178,14 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
           aria-labelledby="joi9000-title"
           aria-hidden={activeSection === "hero" ? undefined : true}
         >
-          <p>PERSONAL AI SYSTEM · GUANGZHOU / 2026</p>
+          <p>{t.heroKicker}</p>
           <h1 id="joi9000-title">
-            <span>I DESIGN</span>
-            <span>HOW AI ENTERS</span>
-            <span>HUMAN LIFE.</span>
+            <span>{t.heroLine1}</span>
+            <span>{t.heroLine2}</span>
+            <span>{t.heroLine3}</span>
           </h1>
           <div className={styles.heroScrollPrompt}>
-            <span>SCROLL TO ENTER SELECTED WORK</span>
+            <span>{t.heroScroll}</span>
             <i aria-hidden="true" />
           </div>
         </section>
@@ -2158,10 +2196,10 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
           aria-hidden={activeSection === "hero" ? undefined : true}
         >
           <div>
-            <span>JOI9000 / OPTICAL CORE</span>
+            <span>{t.hudOpticalCore}</span>
             <strong>{seaStateLabels[seaState]}</strong>
           </div>
-          <p><span>MOVE</span> WIND · <span>CLICK</span> SEA STATE</p>
+          <p><span>{t.hudMove}</span> {t.hudWind} · <span>{t.hudClick}</span> {t.hudSeaState}</p>
           <em>{String(seaState + 1).padStart(2, "0")} / 04</em>
         </aside>
 
@@ -2361,17 +2399,21 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
         <div
           className={`${styles.aboutScene} ${activeSection === "about-me" ? styles.aboutSceneActive : ""}`}
         >
-          {hoveredInterest && (
+          {/*
+            One language, not both. This used to print the Chinese label with the English
+            one underneath it — the same thing said twice — and once there is a switch in
+            the header, showing both is a way of saying the switch does not work.
+          */}
+          {hoveredObject && (
             <p className={styles.roomLabel} aria-hidden="true">
-              {ROOM_OBJECTS.find((entry) => entry.id === hoveredInterest)?.labelZh}
-              <span>{ROOM_OBJECTS.find((entry) => entry.id === hoveredInterest)?.label}</span>
+              {pick(locale, hoveredObject.label, hoveredObject.labelZh)}
             </p>
           )}
         </div>
 
         <section
           className={`${styles.closingPanel} ${styles.aboutPanel} ${activeSection === "about-me" ? styles.closingPanelActive : ""}`}
-          aria-label="About me"
+          aria-label={t.aboutLabel}
           aria-hidden={activeSection === "about-me" ? undefined : true}
           inert={activeSection === "about-me" ? undefined : true}
         >
@@ -2385,9 +2427,9 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
             download is not copy.
           */}
           <div className={styles.closingActions}>
-            <a href="/resume/gallo-liu-resume-cn.pdf" download>RESUME / PDF</a>
-            <a href="https://github.com/Gallo233" target="_blank" rel="noreferrer">GITHUB</a>
-            <a href="mailto:18520455682@163.com">EMAIL</a>
+            <a href="/resume/gallo-liu-resume-cn.pdf" download>{t.actionResume}</a>
+            <a href="https://github.com/Gallo233" target="_blank" rel="noreferrer">{t.actionGithub}</a>
+            <a href={`mailto:${CONTACT_EMAIL}`}>{t.actionEmail}</a>
           </div>
         </section>
 
@@ -2398,47 +2440,46 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
         >
           <section
             className={`${styles.closingPanel} ${styles.contactPanel} ${activeSection === "contact" ? styles.closingPanelActive : ""}`}
-            aria-label="Contact"
+            data-notebook-copy
+            aria-label={t.contactLabel}
             inert={activeSection === "contact" ? undefined : true}
           >
-            <p className={styles.closingKicker}>{CONTACT_CONTENT.kicker}</p>
-            <h2>{CONTACT_CONTENT.title}</h2>
-            <p className={styles.contactStatement} lang="zh-CN">
-              {CONTACT_CONTENT.statement}
-            </p>
+            <p data-ruled-text className={styles.closingKicker}>{t.contactKicker}</p>
+            <h2 data-ruled-text>{t.contactTitle}</h2>
+            <p data-ruled-text className={styles.contactStatement}>{t.contactStatement}</p>
 
             <div className={styles.contactAddress}>
               <a
-                className={styles.contactEmail}
+                data-ruled-text className={styles.contactEmail}
                 href={`mailto:${CONTACT_EMAIL}`}
               >
                 {CONTACT_EMAIL}
               </a>
               <button type="button" onClick={copyEmail}>
-                {copyState === "copied" ? "已复制" : copyState === "failed" ? "复制失败" : "复制邮箱"}
+                {copyState === "copied" ? t.contactCopied : copyState === "failed" ? t.contactCopyFailed : t.contactCopy}
               </button>
             </div>
             {/* Announced, not drawn: the button's own label already carries the state. */}
             <p className={styles.srOnly} role="status" aria-live="polite">
-              {copyState === "copied" ? "邮箱已复制到剪贴板" : ""}
-              {copyState === "failed" ? `复制失败，邮箱是 ${CONTACT_EMAIL}` : ""}
+              {copyState === "copied" ? t.contactCopiedAnnounce : ""}
+              {copyState === "failed" ? `${t.contactCopyFailedAnnounce} ${CONTACT_EMAIL}` : ""}
             </p>
 
             <div className={styles.closingActions}>
-              {CONTACT_CONTENT.actions.map((action) => (
+              {CONTACT_ACTIONS.map((action) => (
                 <a
-                  key={action.href}
+                  data-ruled-text key={action.href}
                   href={action.href}
                   {...("external" in action && action.external
                     ? { target: "_blank", rel: "noreferrer" }
                     : {})}
                   {...("download" in action && action.download ? { download: true } : {})}
                 >
-                  {action.value}
+                  {action.labelKey ? t[action.labelKey] : action.value}
                 </a>
               ))}
             </div>
-            <p className={styles.closingMeta}>{CONTACT_CONTENT.meta}</p>
+            <p data-ruled-text className={styles.closingMeta}>{t.contactMeta}</p>
           </section>
 
           {/* Visually independent; placed after the content for a useful reading order. */}
@@ -2446,17 +2487,30 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
             className={`${styles.contactScene} ${activeSection === "contact" ? styles.contactSceneActive : ""}`}
           >
             <div className={styles.badgeBox}>
-              <LanyardBadge active={activeSection === "contact" && badgeInteractive} />
+              <LanyardBadge active={activeSection === "contact"} />
             </div>
           </div>
         </div>
 
+        {/*
+          Three lanes, and the middle one is not the header's to use.
+
+          The music sticker is `position: fixed` at the top centre with a z-index above
+          this header, so whatever the header puts in the middle is simply covered — the
+          section nav was landing there because `space-between` spread four children
+          across the full width, and the sticker sat on top of half of it.
+
+          The brand and the language switch are one group on the left; the nav owns the
+          right. Because the nav and the menu button are never displayed at the same
+          width, `space-between` gets it right in both states without a second wrapper.
+        */}
         <header className={styles.header}>
-          <a className={styles.brand} href="/" aria-label="Back to Gallo home">
+          <a className={styles.brand} href="/" aria-label={t.brandHomeLabel}>
             <i aria-hidden="true" />
             <span>GALLO</span>
           </a>
-          <nav className={styles.sectionNav} aria-label="Sections">
+          <LocaleToggle className={styles.headerLocale} />
+          <nav className={styles.sectionNav} aria-label={t.navSectionsLabel}>
             {SECTIONS.map((section) => (
               <a
                 key={section.id}
@@ -2468,7 +2522,7 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
                   scrollToSection.current(section.id);
                 }}
               >
-                {section.label}
+                {t[section.labelKey]}
               </a>
             ))}
           </nav>
@@ -2481,7 +2535,7 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
             type="button"
             className={styles.menu}
             aria-expanded={menuOpen}
-            aria-label={menuOpen ? "关闭菜单" : "打开菜单"}
+            aria-label={menuOpen ? t.menuClose : t.menuOpen}
             onClick={() => setMenuOpen((value) => !value)}
           >
             <i aria-hidden="true" />
@@ -2496,7 +2550,7 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
             className={styles.menuSheet}
             role="dialog"
             aria-modal="true"
-            aria-label="Sections"
+            aria-label={t.navSectionsLabel}
             onClick={(event) => {
               if (event.target === event.currentTarget) setMenuOpen(false);
             }}
@@ -2513,11 +2567,11 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
                     scrollToSection.current(section.id);
                   }}
                 >
-                  {section.label}
+                  {t[section.labelKey]}
                 </a>
               ))}
-              <a href="/lab">THE LAB</a>
-              <a href="/play/night-tide">GAME CENTER</a>
+              <a href="/lab">{t.menuTheLab}</a>
+              <a href="/play/night-tide">{t.menuGameCenter}</a>
             </nav>
           </div>
         )}
@@ -2540,12 +2594,12 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
               <i />
               <strong>
                 <span>
-                  BOOTING JOI9000
+                  {t.loaderBooting}
                   <b className={styles.loaderCursor} aria-hidden="true" />
                 </span>
                 {/*
                   The three systems by name rather than as a count.
-                  
+
                   They are the same three signals the gate has always been built from —
                   the film, the terminal, the fonts — and naming them makes the wait
                   legible: a reader who sits here for a moment can see *what* is slow.
@@ -2556,11 +2610,11 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
                   instead of announcing three separate lines as they land.
                 */}
                 <ul className={styles.loaderSystems} aria-hidden="true">
-                  <li className={filmReady ? styles.loaderSystemUp : ""}>FILM TRANSPORT</li>
-                  <li className={computerReady ? styles.loaderSystemUp : ""}>OPTICAL CORE</li>
-                  <li className={fontsReady ? styles.loaderSystemUp : ""}>TYPE SETTER</li>
+                  <li className={filmReady ? styles.loaderSystemUp : ""}>{t.loaderFilmTransport}</li>
+                  <li className={computerReady ? styles.loaderSystemUp : ""}>{t.loaderOpticalCore}</li>
+                  <li className={fontsReady ? styles.loaderSystemUp : ""}>{t.loaderTypeSetter}</li>
                 </ul>
-                <em>{loadedSystems}/3 SYSTEMS</em>
+                <em>{loadedSystems}{t.loaderSystemsSuffix}</em>
               </strong>
             </>
           )}

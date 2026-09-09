@@ -793,7 +793,7 @@
    */
   background:
     repeating-linear-gradient(
-      0deg,
+      180deg,
       rgba(150, 166, 201, .22) 0 1.4px,
       transparent 1.4px var(--contact-rule-pitch, 44px)
     ),
@@ -1547,7 +1547,15 @@
   border-bottom-color: var(--coral) !important;
 }
 
-@media (min-width: 900px) {
+/*
+ * 960, not 900.
+ *
+ * Below this the brand group, the centred music sticker and the nav cannot all sit in
+ * one row without the sticker covering the nav — the English labels are close to half as
+ * wide again as the Chinese ones, so the tight case is English. The menu button takes
+ * over below it, and it already carries every section plus the two side routes.
+ */
+@media (min-width: 960px) {
   .sectionNav { display: flex; }
 }
 
@@ -1672,7 +1680,6 @@
   left: 0;
   display: flex;
   align-items: center;
-  justify-content: space-between;
   height: clamp(88px, 15.2svh, 122px);
   padding: 0 clamp(24px, 3.5vw, 54px);
   border-bottom: 1px solid rgba(238, 244, 250, .16);
@@ -1686,7 +1693,7 @@
 .experience[data-active-section="contact"] .header {
   color: #30261d;
   border-bottom-color: rgba(62, 47, 34, .17);
-  background: linear-gradient(180deg, rgba(250, 241, 225, .68), rgba(250, 241, 225, 0));
+  background: linear-gradient(180deg, rgba(250, 250, 249, .55), rgba(250, 250, 249, 0));
 }
 
 .experience[data-active-section="contact"] .brand {
@@ -1710,13 +1717,44 @@
 }
 
 .experience[data-active-section="contact"] .vignette {
-  box-shadow:
-    inset 0 0 0 1px rgba(70, 52, 34, .12),
-    inset 0 0 90px rgba(92, 66, 39, .16),
-    inset 0 -80px 110px rgba(112, 76, 45, .1);
-  background:
-    linear-gradient(180deg, rgba(82, 58, 36, .08), transparent 18%, transparent 78%, rgba(82, 58, 36, .05)),
-    radial-gradient(ellipse at center, transparent 56%, rgba(76, 52, 31, .12) 100%);
+  box-shadow: inset 0 0 0 1px rgba(70, 78, 90, .1);
+  background: none;
+}
+
+/*
+ * Which side the switch sits on, and why it changes.
+ *
+ * The header is one flex row whose middle belongs to nothing: the music sticker is fixed
+ * at the top centre above this layer, so anything the header puts there is covered. The
+ * `auto` margins below are what keep the row's own content out of that lane.
+ *
+ * Wide: brand + switch on the left, and the switch's `margin-right: auto` throws the free
+ * space forward so the nav lands on the right. The switch used to sit *between* the nav
+ * and the menu, which pushed the nav left into the sticker — that is the overlap this
+ * fixes, and moving it here is worth roughly 100px to the nav.
+ *
+ * Narrow: the nav is gone and only the menu button follows, so the switch takes
+ * `margin-left: auto` instead and rides the right edge beside it. On a phone the sticker
+ * collapses to a 48px disc that still sits dead centre, and a switch parked next to the
+ * brand would run straight under it.
+ *
+ * It stays out of the menu sheet in both cases: on a phone that sheet is the only other
+ * control, and burying a language switch inside a menu labelled in the language you
+ * cannot read is precisely the wrong place for it.
+ */
+.headerLocale {
+  pointer-events: auto;
+  margin-left: auto;
+  margin-right: clamp(10px, 2.4vw, 18px);
+  font-family: var(--font-signal-mono), monospace;
+  color: inherit;
+}
+
+@media (min-width: 960px) {
+  .headerLocale {
+    margin-left: clamp(12px, 1.6vw, 22px);
+    margin-right: auto;
+  }
 }
 
 .headerProgress {
@@ -1797,7 +1835,9 @@
 .menu[aria-expanded="true"] i:nth-child(2) { opacity: 0; }
 .menu[aria-expanded="true"] i:nth-child(3) { transform: translateY(-6px) rotate(-45deg); }
 
-@media (min-width: 900px) {
+/* Kept in step with the nav's own breakpoint: exactly one of the two is ever shown, and
+   that is what lets `space-between` put the right thing on the right in both states. */
+@media (min-width: 960px) {
   /* Desktop reads the section nav; the hamburger is the small-screen door. */
   .menu { display: none; }
 }
@@ -2141,3 +2181,33 @@
 }
 
 .experience ::selection { color: #f2eee8; background: #ed654a; }
+
+/* Paper typography: every wrapped line advances by one physical notebook rule.
+   The hook measures real font baselines after fonts load; no guessed font offsets. */
+.contactPanel { bottom: 88px; gap: 0; width: min(60vw, 790px); }
+.contactPanel h2 {
+  max-width: 26ch; font-family: var(--font-signal-display), "Kaiti SC", STKaiti, serif;
+  font-size: clamp(30px, 3.5vw, 44px); font-weight: 400; line-height: 44px;
+  letter-spacing: -.025em; text-shadow: none; text-wrap: pretty;
+  margin-bottom: 44px;
+}
+.contactPanel .closingKicker, .contactStatement, .contactPanel .closingMeta {
+  line-height: 44px; margin: 0;
+}
+.contactStatement { max-width: 60ch; font-size: clamp(13px, 1.1vw, 16px); }
+.contactAddress { min-height: 44px; margin: 0; gap: 0 20px; }
+.contactEmail { font-size: clamp(17px, 2.2vw, 28px); line-height: 44px; padding: 0; border: 0; }
+.contactPanel .closingActions { min-height: 44px; margin: 0; align-items: baseline; }
+.contactPanel .closingActions a { line-height: 44px; padding: 0; border: 0; }
+.contactPanel a:hover { color: var(--coral); }
+@media (max-width: 600px) {
+  .contactPanel { top: 264px; bottom: auto; right: 16px; width: auto; gap: 0; }
+  .contactPanel h2 { font-size: 30px; line-height: 44px; margin-bottom: 0; }
+  .contactStatement { font-size: 12px; line-height: 44px; }
+  .contactEmail { font-size: clamp(13px, 3.6vw, 18px); }
+  .contactAddress { gap: 0 8px; }
+  .contactAddress button { font-size: 8px; min-height: 28px; padding: 4px 7px; }
+  .contactPanel .closingActions { gap: 0 16px; }
+}
+
+@media (max-width: 600px) { .badgeBox { top: -130px; right: 16px; width: 148px; overflow: visible; opacity: 1; } }

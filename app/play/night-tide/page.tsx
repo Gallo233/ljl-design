@@ -9,9 +9,9 @@ import { GameCenterExperience } from "./GameCenterExperience";
  * Night Tide is one cartridge on the shelf rather than the whole shelf.
  */
 
-const title = "Game Center / 游戏厅";
+const title = "游戏厅";
 const description =
-  "A handheld in the browser: Zero Hour: Night Tide and Star Vein, plus Snake, Tetris and Pac-Man.";
+  "浏览器里的一台掌机：《零刻：夜潮》和《星脉》，加上贪吃蛇、俄罗斯方块和吃豆人。";
 
 export const metadata: Metadata = {
   title,

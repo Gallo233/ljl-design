@@ -52,6 +52,12 @@
 
 /* ── nav ─────────────────────────────────────────────────────────────────── */
 
+/* The switch rides the lab's own nav row and inherits its ink. The row is already
+   `space-between`, so it needs no margin of its own to find the right edge. */
+.navLocale {
+  font-family: inherit;
+}
+
 .nav {
   position: fixed;
   z-index: 70;

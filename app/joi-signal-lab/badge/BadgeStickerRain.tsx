@@ -4,6 +4,7 @@ import type { CSSProperties, PointerEvent as ReactPointerEvent, RefObject } from
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import styles from "./badge.module.css";
+import { useLocale } from "../../i18n";
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
@@ -72,6 +73,7 @@ export function BadgeStickerRain({
   face: "front" | "back";
   onPaste: (sticker: Omit<PastedSticker, "id">) => void;
 }) {
+  const { t } = useLocale();
   const [mounted, setMounted] = useState(false);
   const [falling, setFalling] = useState<FallingSticker | null>(null);
   const elementRef = useRef<HTMLButtonElement>(null);
@@ -271,7 +273,7 @@ export function BadgeStickerRain({
         ref={elementRef}
         type="button"
         className={styles.fallingSticker}
-        aria-label="拖动这张贴纸，把它贴到工牌上"
+        aria-label={t.stickerDrag}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={(event) => release(event)}

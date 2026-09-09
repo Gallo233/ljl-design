@@ -91,10 +91,17 @@ export const pacman: ArcadeGame = {
   blurbZh: "四只鬼，四种追法。",
   accent: PALETTE.amber,
   controls: [
-    { keys: "WASD / D-PAD", action: "移动" },
-    { keys: "A", action: "重开" },
+    { keys: "WASD / D-PAD", action: "Move", actionZh: "移动" },
+    { keys: "A", action: "Restart", actionZh: "重开" },
   ],
-  mount(canvas: HTMLCanvasElement, { input, setStatus, audio }: GameContext) {
+  mount(canvas: HTMLCanvasElement, shell: GameContext) {
+    const { input, setStatus, audio } = shell;
+    /*
+     * Read, never destructured: `shell.locale` is a live getter on the shell's side, so
+     * pulling it out here would freeze the language at the moment the cartridge was
+     * seated and leave the run writing status lines in the language it started in.
+     */
+    const zh = () => shell.locale === "zh";
     const context = canvas.getContext("2d");
     if (!context) return { destroy: () => {} };
 
@@ -230,7 +237,7 @@ export const pacman: ArcadeGame = {
           else {
             const record = bestScore.submit(score);
             setStatus(
-              `GAME OVER / ${score}${record ? " · NEW BEST" : ` · BEST ${bestScore.get()}`} · A 重开`,
+              `${zh() ? "游戏结束" : "GAME OVER"} / ${score}${record ? (zh() ? " · 新纪录" : " · NEW BEST") : `${zh() ? " · 最佳 " : " · BEST "}${bestScore.get()}`} · ${zh() ? "A 重开" : "A TO RESTART"}`,
             );
           }
         }
@@ -263,7 +270,7 @@ export const pacman: ArcadeGame = {
         if (pelletsLeft === 0) {
           won = true;
           bestScore.submit(score);
-          setStatus(`CLEARED / ${score} · A 再来`);
+          setStatus(zh() ? `通关 / ${score} · A 再来` : `CLEARED / ${score} · A FOR ANOTHER`);
           return;
         }
       }
@@ -296,7 +303,11 @@ export const pacman: ArcadeGame = {
           // The run is over, not just this life — stop the loop rather than let it play
           // under the game-over readout.
           if (lives <= 0) audio.music(null);
-          setStatus(lives > 0 ? `CAUGHT / ♥${lives}` : `GAME OVER / ${score} · A 重开`);
+          setStatus(
+            lives > 0
+              ? `${zh() ? "被抓" : "CAUGHT"} / ♥${lives}`
+              : `${zh() ? "游戏结束" : "GAME OVER"} / ${score} · ${zh() ? "A 重开" : "A TO RESTART"}`,
+          );
         }
       });
     };
@@ -414,7 +425,11 @@ export const pacman: ArcadeGame = {
         context.fillText(won ? "MAZE CLEARED" : "GAME OVER", SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2 - 14);
         context.fillStyle = PALETTE.muted;
         context.font = "500 16px ui-monospace, SFMono-Regular, Menlo, monospace";
-        context.fillText(`${score} 分 · 按 A 重开`, SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2 + 22);
+        context.fillText(
+          zh() ? `${score} 分 · 按 A 重开` : `${score} PTS · PRESS A TO RESTART`,
+          SCREEN_WIDTH / 2,
+          SCREEN_HEIGHT / 2 + 22,
+        );
         context.textAlign = "left";
       }
     };

@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import styles from "./badge.module.css";
+import { HoloBack } from "./HoloBack";
+import { useLocale } from "../../i18n";
 import { BadgeStickerRain, type PastedSticker } from "./BadgeStickerRain";
 import { createRope } from "./verletRope";
 
@@ -25,24 +27,26 @@ const MAX_CARD_ANGLE = 18;
 /**
  * The visitor badge: a DOM card hanging from a verlet rope, drawn as SVG.
  *
- * Why DOM and not a mesh: the back face is a CSS holographic trading card — layered
- * repeating-gradients under color-dodge/screen blends chasing the pointer — and that
- * technique belongs to CSS. So the card stays DOM, the rope stays SVG, and the physics
- * is arithmetic in `verletRope.ts`.
+ * DOM keeps the original visitor portrait, keyboard flip and pasted stickers.
+ * The reverse renders the Blender card with registered image layers and view-space
+ * foil. SVG carries the rope; `verletRope.ts` owns the suspension physics.
  *
  * Interactions: drag anywhere on the card (pointer capture; a fling carries velocity),
  * a sub-6px release counts as a click and flips the card. The sim sleeps when still —
  * rAF stops entirely — and wakes on pointer or on the section becoming active.
  */
 export function LanyardBadge({ active }: { active: boolean }) {
+  const { t } = useLocale();
   const rootRef = useRef<HTMLDivElement>(null);
   const svgPathRef = useRef<SVGPathElement>(null);
   const braidLeftRef = useRef<SVGPathElement>(null);
   const braidRightRef = useRef<SVGPathElement>(null);
   const weaveRef = useRef<SVGPathElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
+  const surfaceRef = useRef<HTMLDivElement>(null);
   const [flipped, setFlipped] = useState(false);
   const [hasBackArt, setHasBackArt] = useState(true);
+  const [stickerPointer, setStickerPointer] = useState(false);
   const [pastedStickers, setPastedStickers] = useState<PastedSticker[]>([]);
   const pastedStickerIdRef = useRef(0);
   const backArtRef = useRef<HTMLImageElement>(null);
@@ -57,6 +61,16 @@ export function LanyardBadge({ active }: { active: boolean }) {
       ...current.slice(-7),
       { ...sticker, id: ++pastedStickerIdRef.current },
     ]);
+  }, []);
+
+  // A touch can drag and flip the badge. Only the optional falling stickers need
+  // a hover-capable pointer; they should not take over a phone's small viewport.
+  useEffect(() => {
+    const query = window.matchMedia("(hover: hover) and (pointer: fine)");
+    const sync = () => setStickerPointer(query.matches);
+    sync();
+    query.addEventListener("change", sync);
+    return () => query.removeEventListener("change", sync);
   }, []);
 
   // An image that 404s before hydration errors into the void — onError never fires.
@@ -81,7 +95,16 @@ export function LanyardBadge({ active }: { active: boolean }) {
     let anchorX = root.clientWidth / 2;
     const anchorY = -6;
     const rope = createRope(anchorX, anchorY, ROPE_SEGMENTS, SEGMENT_LENGTH);
+    let rootBounds = root.getBoundingClientRect();
+    let cardWidth = card.offsetWidth;
+    let cardHeight = card.offsetHeight;
+    const measureLayout = () => {
+      rootBounds = root.getBoundingClientRect();
+      cardWidth = card.offsetWidth;
+      cardHeight = card.offsetHeight;
+    };
     const resize = () => {
+      measureLayout();
       anchorX = root.clientWidth / 2;
       rope.setAnchor(anchorX, anchorY);
       wake();
@@ -93,9 +116,13 @@ export function LanyardBadge({ active }: { active: boolean }) {
     let running = false;
     let stillFrames = 0;
     let lastTime = 0;
+    let pointerFrame = 0;
+    let pendingPointer: { x: number; y: number } | null = null;
+    let lastPointerX = ".5", lastPointerY = ".5";
 
     // Pointer bookkeeping: recent samples give release velocity; distance gates the flip.
     let dragging = false;
+    let draggingPointer: number | null = null;
     let downAt = { x: 0, y: 0, time: 0 };
     let moved = 0;
     let cardAngle = 0;
@@ -104,9 +131,40 @@ export function LanyardBadge({ active }: { active: boolean }) {
     let elasticDirection = { x: 0, y: 1 };
     const samples: Array<{ x: number; y: number; t: number }> = [];
 
-    const localPoint = (event: PointerEvent) => {
-      const bounds = root.getBoundingClientRect();
-      return { x: event.clientX - bounds.left, y: event.clientY - bounds.top };
+    const localPoint = (event: PointerEvent) => ({
+      x: event.clientX - rootBounds.left,
+      y: event.clientY - rootBounds.top,
+    });
+
+    const writePointer = (x: string, y: string) => {
+      if (x !== lastPointerX) { card.style.setProperty("--px", x); lastPointerX = x; }
+      if (y !== lastPointerY) { card.style.setProperty("--py", y); lastPointerY = y; }
+    };
+    const paintPointer = () => {
+      if (!pendingPointer) return;
+      // The rig has only a translation and a Z rotation around its top centre.
+      // Its bounds follow directly from the same pose we paint, without flushing
+      // layout after the rope or the card's CSS transform has changed.
+      const tail = rope.points[rope.points.length - 1];
+      const angle = Number(cardAngle.toFixed(2)) * Math.PI / 180;
+      const sine = Math.sin(angle), cosine = Math.cos(angle);
+      const halfWidth = Math.abs(cosine) * cardWidth / 2;
+      const left = rootBounds.left + Number(tail.x.toFixed(1)) - halfWidth + Math.min(0, -sine * cardHeight);
+      const top = rootBounds.top + Number(tail.y.toFixed(1)) - Math.abs(sine) * cardWidth / 2;
+      const width = Math.abs(cosine) * cardWidth + Math.abs(sine) * cardHeight;
+      const height = Math.abs(sine) * cardWidth + cosine * cardHeight;
+      const x = Math.max(0, Math.min(1, (pendingPointer.x - left) / Math.max(1, width)));
+      const y = Math.max(0, Math.min(1, (pendingPointer.y - top) / Math.max(1, height)));
+      pendingPointer = null;
+      writePointer(x.toFixed(3), y.toFixed(3));
+    };
+    const schedulePointer = (event: PointerEvent) => {
+      pendingPointer = { x: event.clientX, y: event.clientY };
+      if (running || pointerFrame) return;
+      pointerFrame = window.requestAnimationFrame(() => {
+        pointerFrame = 0;
+        paintPointer();
+      });
     };
 
     const elasticTail = (x: number, y: number) => {
@@ -204,6 +262,7 @@ export function LanyardBadge({ active }: { active: boolean }) {
       lastTime = time;
       const moving = rope.step(dt);
       draw();
+      paintPointer();
       if (moving) stillFrames = 0;
       else stillFrames += 1;
       if (stillFrames > 30 && !dragging) {
@@ -232,9 +291,11 @@ export function LanyardBadge({ active }: { active: boolean }) {
     }
 
     const onPointerDown = (event: PointerEvent) => {
-      if (!activeRef.current) return;
+      if (!activeRef.current || dragging || event.button !== 0 || !event.isPrimary) return;
+      measureLayout();
       const point = localPoint(event);
       dragging = true;
+      draggingPointer = event.pointerId;
       moved = 0;
       downAt = { x: point.x, y: point.y, time: performance.now() };
       samples.length = 0;
@@ -254,17 +315,8 @@ export function LanyardBadge({ active }: { active: boolean }) {
       // Preserve the initial card: its holographic finish follows the pointer across
       // Contact, while inactive sections return before performing any layout work.
       if (!dragging && !activeRef.current) return;
-      const cardBounds = card.getBoundingClientRect();
-      const relX = Math.max(
-        0,
-        Math.min(1, (event.clientX - cardBounds.left) / Math.max(1, cardBounds.width)),
-      );
-      const relY = Math.max(
-        0,
-        Math.min(1, (event.clientY - cardBounds.top) / Math.max(1, cardBounds.height)),
-      );
-      card.style.setProperty("--px", relX.toFixed(3));
-      card.style.setProperty("--py", relY.toFixed(3));
+      if (dragging && event.pointerId !== draggingPointer) return;
+      schedulePointer(event);
       if (!dragging) return;
       const point = localPoint(event);
       moved = Math.max(moved, Math.hypot(point.x - downAt.x, point.y - downAt.y));
@@ -276,12 +328,13 @@ export function LanyardBadge({ active }: { active: boolean }) {
       wake();
     };
     const finishPointer = (event: PointerEvent, cancelled: boolean) => {
-      if (!dragging) return;
+      if (!dragging || event.pointerId !== draggingPointer) return;
       dragging = false;
+      draggingPointer = null;
       if (card.hasPointerCapture(event.pointerId)) card.releasePointerCapture(event.pointerId);
       card.classList.remove(styles.dragging);
-      card.style.setProperty("--px", ".5");
-      card.style.setProperty("--py", ".5");
+      pendingPointer = null;
+      writePointer(".5", ".5");
       let vx = 0;
       let vy = 0;
       if (!cancelled && samples.length >= 2) {
@@ -324,8 +377,8 @@ export function LanyardBadge({ active }: { active: boolean }) {
     const onPointerCancel = (event: PointerEvent) => finishPointer(event, true);
     const onPointerLeave = () => {
       if (dragging) return;
-      card.style.setProperty("--px", ".5");
-      card.style.setProperty("--py", ".5");
+      pendingPointer = null;
+      writePointer(".5", ".5");
     };
 
     card.addEventListener("pointerdown", onPointerDown);
@@ -336,6 +389,7 @@ export function LanyardBadge({ active }: { active: boolean }) {
 
     return () => {
       window.cancelAnimationFrame(frame);
+      window.cancelAnimationFrame(pointerFrame);
       resizeObserver.disconnect();
       card.removeEventListener("pointerdown", onPointerDown);
       card.removeEventListener("pointerleave", onPointerLeave);
@@ -368,7 +422,7 @@ export function LanyardBadge({ active }: { active: boolean }) {
         className={`${styles.cardRig} ${flipped ? styles.flipped : ""}`}
         role="button"
         tabIndex={active ? 0 : -1}
-        aria-label={flipped ? "工牌背面 — 点按翻回正面" : "访客工牌 — 点按翻到背面"}
+        aria-label={flipped ? t.badgeBack : t.badgeFront}
         onKeyDown={(event) => {
           if (!active) return;
           if (event.key !== "Enter" && event.key !== " ") return;
@@ -377,7 +431,7 @@ export function LanyardBadge({ active }: { active: boolean }) {
         }}
       >
         <span className={styles.clasp} aria-hidden="true" />
-        <div className={styles.card}>
+        <div ref={surfaceRef} className={styles.card}>
           <div className={`${styles.face} ${styles.front}`}>
             <span className={styles.punchHole} aria-hidden="true" />
             <img className={styles.portrait} src={FRONT_SRC} alt="Gallo" draggable={false} />
@@ -416,10 +470,7 @@ export function LanyardBadge({ active }: { active: boolean }) {
                 onError={() => setHasBackArt(false)}
               />
             )}
-            <span className={styles.holo} aria-hidden="true" />
-            <span className={styles.laser} aria-hidden="true" />
-            <span className={styles.glare} aria-hidden="true" />
-            <span className={styles.backTag}>JOI LAB · 2026</span>
+            <HoloBack active={active && hasBackArt} flipped={flipped} surface={surfaceRef} />
             <span className={styles.stickerPasteLayer} aria-hidden="true">
               {pastedStickers.filter((sticker) => sticker.face === "back").map((sticker) => (
                 <img
@@ -440,7 +491,7 @@ export function LanyardBadge({ active }: { active: boolean }) {
         </div>
       </div>
       <BadgeStickerRain
-        active={active}
+        active={active && stickerPointer}
         cardRef={cardRef}
         face={flipped ? "back" : "front"}
         onPaste={pasteSticker}

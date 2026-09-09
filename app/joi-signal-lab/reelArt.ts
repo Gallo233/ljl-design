@@ -30,7 +30,14 @@ export function drawGrid(context: CanvasRenderingContext2D, x: number, y: number
   }
 }
 
-export function drawProjectArt(context: CanvasRenderingContext2D, projectIndex: number, x: number, y: number, width: number, height: number) {
+/**
+ * The frames' own artwork, in the reader's language.
+ *
+ * The words here are baked into the atlas texture, so they cannot be swapped by a React
+ * render — the shell rebuilds the atlas when the language changes instead. Frame 04 used
+ * to read "LAB / 实验室", which was the whole mixture in two words.
+ */
+export function drawProjectArt(context: CanvasRenderingContext2D, projectIndex: number, x: number, y: number, width: number, height: number, locale: "zh" | "en" = "zh") {
   const project = projects[projectIndex];
   const [background, ink, accent] = project.palette;
   context.fillStyle = background;
@@ -133,12 +140,11 @@ export function drawProjectArt(context: CanvasRenderingContext2D, projectIndex: 
     context.font = "600 15px ui-monospace, monospace";
     context.textAlign = "left";
     context.textBaseline = "top";
-    context.fillText("LAB / 实验室", fx + 18, fy + 5);
+    context.fillText(locale === "zh" ? "实验室" : "THE LAB", fx + 18, fy + 5);
     const entries = [
-      "A-01  CRT / SHADER RESEARCH",
-      "A-02  LIVE2D BINDING · 3D CHECK",
-      "A-03  PARTICLE PROLOGUE / QTE",
-      "A-04  LEITOWER POSTMORTEM",
+      "A-01  YU ZHONG / UE5 ARPG",
+      "A-02  STILL HERE / THREE.JS",
+      "A-03  AFTERLIFE / BLENDER",
     ];
     context.font = "500 21px ui-monospace, monospace";
     entries.forEach((entry, line) => {
@@ -210,7 +216,7 @@ export function drawProjectArt(context: CanvasRenderingContext2D, projectIndex: 
     context.font = "400 64px Georgia, serif";
     context.textAlign = "center";
     context.textBaseline = "middle";
-    context.fillText("我的房间", x + width / 2, y + height * 0.24);
+    context.fillText(locale === "zh" ? "我的房间" : "MY ROOM", x + width / 2, y + height * 0.24);
   } else {
     // 06 · CONTACT — a clapperboard: the reel needs an ending, and the ending is a call sheet.
     const bx = x + width * 0.16;
@@ -282,12 +288,21 @@ export function drawCoverImage(
   context.drawImage(image, sourceX, sourceY, sourceWidth, sourceHeight, x, y, width, height);
 }
 
-export function buildAtlas(posters: Array<HTMLImageElement | null>) {
-  const canvas = document.createElement("canvas");
-  canvas.width = ATLAS_FRAME_WIDTH * projects.length;
-  canvas.height = ATLAS_FRAME_HEIGHT;
+/**
+ * Paint the six frames into a canvas that already exists.
+ *
+ * Separate from `buildAtlas` because the language switch has to repaint the atlas the
+ * film's texture is already pointing at. Allocating a fresh canvas would leave the
+ * texture on the old one and the reel in the old language.
+ */
+export function paintAtlas(
+  canvas: HTMLCanvasElement,
+  posters: Array<HTMLImageElement | null>,
+  locale: "zh" | "en" = "zh",
+) {
   const context = canvas.getContext("2d");
   if (!context) return canvas;
+  context.clearRect(0, 0, canvas.width, canvas.height);
   projects.forEach((_, index) => {
     drawProjectArt(
       context,
@@ -296,6 +311,7 @@ export function buildAtlas(posters: Array<HTMLImageElement | null>) {
       0,
       ATLAS_FRAME_WIDTH,
       ATLAS_FRAME_HEIGHT,
+      locale,
     );
     const poster = posters.find((image, posterIndex) => reelPosterSources[posterIndex]?.projectIndex === index && image?.complete);
     if (poster) {
@@ -303,4 +319,11 @@ export function buildAtlas(posters: Array<HTMLImageElement | null>) {
     }
   });
   return canvas;
+}
+
+export function buildAtlas(posters: Array<HTMLImageElement | null>, locale: "zh" | "en" = "zh") {
+  const canvas = document.createElement("canvas");
+  canvas.width = ATLAS_FRAME_WIDTH * projects.length;
+  canvas.height = ATLAS_FRAME_HEIGHT;
+  return paintAtlas(canvas, posters, locale);
 }

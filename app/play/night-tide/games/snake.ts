@@ -38,10 +38,17 @@ export const snake: ArcadeGame = {
   blurbZh: "吃、变长，然后没地方走。",
   accent: PALETTE.mint,
   controls: [
-    { keys: "WASD / D-PAD", action: "转向" },
-    { keys: "A / SPACE", action: "重开" },
+    { keys: "WASD / D-PAD", action: "Turn", actionZh: "转向" },
+    { keys: "A / SPACE", action: "Restart", actionZh: "重开" },
   ],
-  mount(canvas: HTMLCanvasElement, { input, setStatus, audio }: GameContext) {
+  mount(canvas: HTMLCanvasElement, shell: GameContext) {
+    const { input, setStatus, audio } = shell;
+    /*
+     * Read, never destructured: `shell.locale` is a live getter on the shell's side, so
+     * pulling it out here would freeze the language at the moment the cartridge was
+     * seated and leave the run writing status lines in the language it started in.
+     */
+    const zh = () => shell.locale === "zh";
     const context = canvas.getContext("2d");
     if (!context) return { destroy: () => {} };
 
@@ -128,7 +135,7 @@ export const snake: ArcadeGame = {
         audio.sfx("die");
         const record = bestScore.submit(score);
         setStatus(
-          `GAME OVER / ${String(score).padStart(3, "0")}${record ? " · NEW BEST" : ""} · A 重开`,
+          `${zh() ? "游戏结束" : "GAME OVER"} / ${String(score).padStart(3, "0")}${record ? (zh() ? " · 新纪录" : " · NEW BEST") : ""} · ${zh() ? "A 重开" : "A TO RESTART"}`,
         );
         return;
       }
@@ -214,7 +221,11 @@ export const snake: ArcadeGame = {
         context.fillText("GAME OVER", SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2 - 14);
         context.fillStyle = PALETTE.muted;
         context.font = "500 16px ui-monospace, SFMono-Regular, Menlo, monospace";
-        context.fillText(`长度 ${body.length} · 按 A 重开`, SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2 + 22);
+        context.fillText(
+          zh() ? `长度 ${body.length} · 按 A 重开` : `LENGTH ${body.length} · PRESS A TO RESTART`,
+          SCREEN_WIDTH / 2,
+          SCREEN_HEIGHT / 2 + 22,
+        );
         context.textAlign = "left";
       }
     };

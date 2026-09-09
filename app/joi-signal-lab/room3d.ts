@@ -1,3 +1,5 @@
+import { retirePropShadows } from "./roomPropShadows";
+import { createSurfaceMaterial } from "./roomSurface";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { DRACOLoader } from "three/examples/jsm/loaders/DRACOLoader.js";
@@ -126,6 +128,8 @@ export type RoomFilmSources = {
   joiVideoReady: { value: number };
   joiMapVideoReady: { value: number };
   nightTide: { value: any };
+  lab: { value: any };
+  contact: { value: any };
   room: { value: any };
 };
 
@@ -255,6 +259,8 @@ const FILM_HANDOFF_FRAGMENT_SHADER = /* glsl */ `
   uniform sampler2D uJoiMapVideo;
   uniform sampler2D uNightTideMap;
   uniform sampler2D uRoomMap;
+  uniform sampler2D uLabMap;
+  uniform sampler2D uContactMap;
   uniform float uJoiVideoReady;
   uniform float uJoiMapVideoReady;
   uniform float uActiveFrame;
@@ -296,6 +302,10 @@ const FILM_HANDOFF_FRAGMENT_SHADER = /* glsl */ `
       image = mix(texture2D(uMap, atlasUv).rgb, texture2D(uJoiMapVideo, mobileVideoUv).rgb, uJoiMapVideoReady);
     } else if (abs(frameIndex - 2.0) < 0.5) {
       image = texture2D(uNightTideMap, sampleUv).rgb;
+    } else if (abs(frameIndex - 3.0) < 0.5) {
+      image = texture2D(uLabMap, sampleUv).rgb;
+    } else if (abs(frameIndex - 5.0) < 0.5) {
+      image = texture2D(uContactMap, sampleUv).rgb;
     } else if (abs(frameIndex - 4.0) < 0.5) {
       image = texture2D(uRoomMap, sampleUv).rgb;
     } else {
@@ -411,6 +421,8 @@ export function createRoomScene(filmSources?: RoomFilmSources): RoomScene {
         uJoiMapVideoReady: filmSources.joiMapVideoReady,
         uNightTideMap: filmSources.nightTide,
         uRoomMap: filmSources.room,
+        uLabMap: filmSources.lab,
+        uContactMap: filmSources.contact,
         uActiveFrame: { value: 0 },
         uOpacity: { value: 1 },
         uDock: { value: 0 },
@@ -541,10 +553,12 @@ export function createRoomScene(filmSources?: RoomFilmSources): RoomScene {
   const loader = new GLTFLoader();
   loader.setDRACOLoader(dracoLoader);
 
-  Promise.all([loader.loadAsync(MODEL_URL), Promise.all(BASE_ATLAS_IDS.map(loadAtlas))])
-    .then(([gltf, atlasEntries]: any[]) => {
+  Promise.all([loader.loadAsync(MODEL_URL), Promise.all(BASE_ATLAS_IDS.map(loadAtlas)),
+    loader.loadAsync(`${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/models/about-room-props.glb?v=20260909-sports-v3`).catch(() => null)])
+    .then(([gltf, atlasEntries, props]: any[]) => {
       if (disposed) {
         disposeObject(gltf.scene);
+        if (props) disposeObject(props.scene);
         ownedTextures.forEach((texture) => texture.dispose());
         return;
       }
@@ -938,8 +952,46 @@ export function createRoomScene(filmSources?: RoomFilmSources): RoomScene {
         console.warn("[about-room] no captured books to replace; the shelf is not rebuilt");
       }
 
+      // Blender replacements load before hotspot binding. The captured live screen
+      // keeps its geometry and handoff material; only its physical casing changes.
+      if (props) {
+        retirePropShadows(model, ownedTextures);
+        const converted = new Map<any, any>();
+        props.scene.traverse((node: any) => {
+          if (!node.isMesh) return;
+          const convert = (original: any) => {
+            if (!converted.has(original)) converted.set(original, createSurfaceMaterial({
+              color: `#${original.color.getHexString()}`,
+              vertexColors: !!node.geometry.getAttribute("color"),
+              grainScale: original.name.startsWith("Basketball") ? 155 : 180,
+              grainStrength: original.name.startsWith("Basketball") ? .009
+                : original.name.startsWith("Glove") ? .004
+                : original.name.includes("ivory hide") ? .0015 : 0,
+              metal: original.metalness ?? 0,
+              gloss: 8 + (1 - (original.roughness ?? .6)) * 60,
+              specular: .12 + (original.metalness ?? 0) * .15,
+            }));
+            return converted.get(original);
+          };
+          node.material = Array.isArray(node.material) ? node.material.map(convert) : convert(node.material);
+        });
+        converted.forEach((_replacement, original) => original.dispose());
+        for (const name of ["camera", "film", "film.001", "StackOfPaper_blinn2_0", "pen",
+          "macbook", "screen", "Cube.008", "Cylinder", "Curve",
+          "Lamp_stand_Circle.006", "Lamphead_Circle.007"]) {
+          const retired = model.getObjectByName(sanitizeNodeName(name));
+          if (retired) retired.visible = false;
+        }
+        // Keep the old ground shadow until the geometry-baked shadow texture loads.
+        const oldBall = model.getObjectByName("about-room-basketball");
+        if (oldBall) { oldBall.visible = false; oldBall.name = "retired-procedural-basketball"; }
+        model.add(props.scene);
+        model.updateMatrixWorld(true);
+      }
+
       Object.entries(BASE_HOTSPOT_NODES).forEach(([id, names]) => {
-        const nodes = (names ?? []).map((name) => model.getObjectByName(name)).filter(Boolean);
+        const fallbackNames = !props && id === "baseball" ? ["camera", "film", "film001"] : !props && id === "crt-monitor" ? ["screen001", "screen", "macbook"] : names;
+        const nodes = (fallbackNames ?? []).map((name) => model.getObjectByName(name)).filter(Boolean);
         if (nodes.length === 0) {
           if (process.env.NODE_ENV !== "production") {
             console.warn(`[about-room] hotspot "${id}" matched no nodes`);
