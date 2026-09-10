@@ -71,7 +71,6 @@ export const STRINGS = {
 
   // ── about panel ───────────────────────────────────────────────────────────
   aboutLabel: { zh: "关于我", en: "About me" },
-  actionResume: { zh: "简历 / PDF", en: "RESUME / PDF" },
   actionGithub: { zh: "GITHUB", en: "GITHUB" },
   actionEmail: { zh: "邮箱", en: "EMAIL" },
 
@@ -93,7 +92,6 @@ export const STRINGS = {
   contactCopiedAnnounce: { zh: "邮箱已复制到剪贴板", en: "Email address copied to clipboard" },
   /** Followed by the address itself, so the reader still gets it when copying fails. */
   contactCopyFailedAnnounce: { zh: "复制失败，邮箱是", en: "Copy failed. The address is" },
-  contactActionResume: { zh: "简历 / PDF", en: "RESUME / PDF" },
 
   // ── the room's sheets ─────────────────────────────────────────────────────
   shelfTitle: { zh: "书架", en: "SHELF" },

@@ -23,8 +23,7 @@ import { ROOM_OBJECTS } from "./roomObjects";
  * **There is no `education`.** The reference has one; we do not have the data, and this
  * file's whole rule is that every line below is already somewhere else in this repo —
  * `reelProjects.ts`, `projectData.ts`, `labData.ts`, `roomObjects.ts`, the contact panel.
- * Nothing here is written for the terminal, so nothing here can be invented for it. When
- * an English resume lands (`docs/asset-requests.md`, item 7) that command has a slot.
+ * Nothing here is written for the terminal, so nothing here can be invented for it.
  */
 
 export type TerminalTone = "normal" | "dim" | "accent" | "error";
@@ -91,7 +90,6 @@ const LISTS = {
   socials: () => [
     { label: "GitHub — github.com/Gallo233", href: "https://github.com/Gallo233" },
     { label: "Email — 18520455682@163.com", href: "mailto:18520455682@163.com" },
-    { label: "Resume — PDF (CN)", href: "/resume/gallo-liu-resume-cn.pdf" },
   ],
 } as const;
 

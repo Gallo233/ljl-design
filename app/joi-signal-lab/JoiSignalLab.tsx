@@ -2341,8 +2341,8 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
           open={terminalOpen}
           onClose={() => setTerminalOpen(false)}
           onOpenHref={(href) => {
-            // Anything that is not a route of this site — an address, a mail link, the
-            // resume PDF — leaves in its own tab rather than through the reel's transport,
+            // Anything that is not a route of this site — an address, a mail link, a
+            // downloadable file — leaves in its own tab rather than through the reel's transport,
             // which arms `reel:return` and expects to land on a page that reads it.
             if (/^(https?:|mailto:)/.test(href) || href.endsWith(".pdf")) {
               window.open(href, "_blank", "noopener,noreferrer");
@@ -2423,11 +2423,10 @@ export function JoiSignalLab({ className = "", initialSection = "hero" }: JoiSig
             and the rest will join it — so a block of prose sitting over the desk was
             describing what the room is about to say for itself.
 
-            The links stay: they are the only route to the CV from this section, and a
-            download is not copy.
+            The links stay: they are the only route out of this section, and an address
+            is not copy.
           */}
           <div className={styles.closingActions}>
-            <a href="/resume/gallo-liu-resume-cn.pdf" download>{t.actionResume}</a>
             <a href="https://github.com/Gallo233" target="_blank" rel="noreferrer">{t.actionGithub}</a>
             <a href={`mailto:${CONTACT_EMAIL}`}>{t.actionEmail}</a>
           </div>

@@ -253,7 +253,6 @@ export function drawProjectArt(context: CanvasRenderingContext2D, projectIndex: 
       "",
       "18520455682@163.com",
       "GITHUB.COM/GALLO233",
-      "RESUME / PDF",
     ];
     slate.forEach((line, index) => {
       context.fillStyle = index === 3 ? accent : `${background}${index < 2 ? "d8" : "b8"}`;

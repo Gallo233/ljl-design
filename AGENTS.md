@@ -314,7 +314,7 @@ a restoration from git — the old prose stays gone deliberately.
 | `/work/joi` | Full bilingual case study, plus the live Joi session. |
 | `/work/joi-mobile` | Full bilingual case study. No figures yet — the four iOS screenshots it wants are in `docs/asset-requests.md`. Do not stand in Joi Map imagery; that is a retired, different product. |
 | `/about-me` | Copy, the interest chips, the 3D room and the lanyard badge. The internship timeline is still an explicit placeholder slot. |
-| `/contact` | The call sheet: email, GitHub, resume. |
+| `/contact` | The call sheet: email, GitHub. |
 
 Two rules that outlived the clearing:
 

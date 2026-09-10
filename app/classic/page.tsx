@@ -126,7 +126,6 @@ export default function Page() {
           <div className="about-grid">
             <p>I am Gallo, an AI product builder and product designer in Guangzhou. I care about the distance between what a system says, what it intends, and what a person actually feels.</p>
             <div className="about-links">
-              <a className="magnetic" href="/resume/gallo-liu-resume-cn.pdf" target="_blank">RESUME ↗</a>
               <a className="magnetic" href="https://github.com/Gallo233" target="_blank" rel="noreferrer">GITHUB ↗</a>
               <a className="magnetic" href="mailto:18520455682@163.com">EMAIL ↗</a>
             </div>
