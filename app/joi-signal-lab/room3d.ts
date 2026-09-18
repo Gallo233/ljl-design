@@ -128,7 +128,8 @@ export type RoomFilmSources = {
   joiVideoReady: { value: number };
   joiMapVideoReady: { value: number };
   nightTide: { value: any };
-  lab: { value: any };
+  labVideo: { value: any };
+  labVideoReady: { value: number };
   contact: { value: any };
   room: { value: any };
 };
@@ -259,10 +260,11 @@ const FILM_HANDOFF_FRAGMENT_SHADER = /* glsl */ `
   uniform sampler2D uJoiMapVideo;
   uniform sampler2D uNightTideMap;
   uniform sampler2D uRoomMap;
-  uniform sampler2D uLabMap;
+  uniform sampler2D uLabVideo;
   uniform sampler2D uContactMap;
   uniform float uJoiVideoReady;
   uniform float uJoiMapVideoReady;
+  uniform float uLabVideoReady;
   uniform float uActiveFrame;
   uniform float uOpacity;
   uniform float uDock;
@@ -303,7 +305,7 @@ const FILM_HANDOFF_FRAGMENT_SHADER = /* glsl */ `
     } else if (abs(frameIndex - 2.0) < 0.5) {
       image = texture2D(uNightTideMap, sampleUv).rgb;
     } else if (abs(frameIndex - 3.0) < 0.5) {
-      image = texture2D(uLabMap, sampleUv).rgb;
+      image = mix(texture2D(uMap, atlasUv).rgb, texture2D(uLabVideo, sampleUv).rgb, uLabVideoReady);
     } else if (abs(frameIndex - 5.0) < 0.5) {
       image = texture2D(uContactMap, sampleUv).rgb;
     } else if (abs(frameIndex - 4.0) < 0.5) {
@@ -421,7 +423,8 @@ export function createRoomScene(filmSources?: RoomFilmSources): RoomScene {
         uJoiMapVideoReady: filmSources.joiMapVideoReady,
         uNightTideMap: filmSources.nightTide,
         uRoomMap: filmSources.room,
-        uLabMap: filmSources.lab,
+        uLabVideo: filmSources.labVideo,
+        uLabVideoReady: filmSources.labVideoReady,
         uContactMap: filmSources.contact,
         uActiveFrame: { value: 0 },
         uOpacity: { value: 1 },

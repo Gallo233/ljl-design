@@ -127,8 +127,8 @@ export const STRINGS = {
   labRouteTitle: { zh: "实验室", en: "The Lab" },
   labKicker: { zh: "04 / 研究与实验", en: "04 / RESEARCH & EXPERIMENTS" },
   labIntro: {
-    zh: "三个关于游戏与空间的实验：用 UE5 打磨战斗，用 Three.js 构建可探索的世界，用 Blender 对照参考重建场景。",
-    en: "Three studies in games and space: combat in UE5, an explorable world in Three.js, and a reference-led environment in Blender.",
+    zh: "四个关于游戏与空间的实验：用 UE5 打磨战斗，用 Three.js 构建可探索的世界，用 Blender 对照参考重建场景，把一个角色从参考图一路做进引擎。",
+    en: "Four studies in games and space: combat in UE5, an explorable world in Three.js, a reference-led environment in Blender, and a character carried from reference sheet into the engine.",
   },
   labNavLabel: { zh: "实验室导航", en: "Lab navigation" },
   labBackToReel: { zh: "回到胶片", en: "BACK TO REEL" },

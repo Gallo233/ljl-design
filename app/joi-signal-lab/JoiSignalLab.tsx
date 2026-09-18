@@ -554,12 +554,15 @@ function FilmCanvas({
     roomTarget.texture.colorSpace = THREE.SRGBColorSpace;
     roomTarget.texture.generateMipmaps = false;
 
-    let stillLives = [createReelStillLife("lab", canvasLocale), createReelStillLife("contact", canvasLocale)];
+    // Contact is the one still life left. Frame 04 used to be a second one — an archive
+    // drawer holding the lab's three folders — and is footage now, so it moved to
+    // `reelMotionSources` and the drawer scene went with it.
+    let stillLives = [createReelStillLife(canvasLocale)];
     const repaintAtlas = repaintAtlasRef.current;
     repaintAtlasRef.current = (nextLocale) => {
       repaintAtlas(nextLocale);
       stillLives.forEach(still => still.dispose());
-      stillLives = [createReelStillLife("lab", nextLocale), createReelStillLife("contact", nextLocale)];
+      stillLives = [createReelStillLife(nextLocale)];
     };
     const stillTargets = stillLives.map(() => {
       const target = new THREE.WebGLRenderTarget(LIVE_FRAME_WIDTH, LIVE_FRAME_HEIGHT, { depthBuffer: true });
@@ -581,12 +584,13 @@ function FilmCanvas({
       uMap: { value: texture },
       uJoiVideo: { value: reelMotions[0]?.texture ?? texture },
       uJoiMapVideo: { value: reelMotions[1]?.texture ?? texture },
+      uLabVideo: { value: reelMotions[2]?.texture ?? texture },
       uJoiVideoReady: { value: 0 },
       uJoiMapVideoReady: { value: 0 },
+      uLabVideoReady: { value: 0 },
       uNightTideMap: { value: nightTideTarget.texture },
       uRoomMap: { value: roomTarget.texture },
-      uLabMap: { value: stillTargets[0].texture },
-      uContactMap: { value: stillTargets[1].texture },
+      uContactMap: { value: stillTargets[0].texture },
       uCurveLength: { value: curveLength },
       uFrameWidth: { value: FRAME_WIDTH },
       uTextureCount: { value: projects.length },
@@ -600,6 +604,20 @@ function FilmCanvas({
       uPointer: { value: new THREE.Vector2(0, 0) },
     };
 
+    /*
+     * Which uniform pair each moving frame writes into.
+     *
+     * The frames are named uniforms rather than an array because the shader branches on
+     * frame index by name, so this is the one place the two namings meet. A frame missing
+     * from here simply never has its texture pushed, which is why the loop skips instead
+     * of guessing a slot.
+     */
+    const motionSlots = new Map<number, { map: { value: any }; ready: { value: number } }>([
+      [0, { map: uniforms.uJoiVideo, ready: uniforms.uJoiVideoReady }],
+      [1, { map: uniforms.uJoiMapVideo, ready: uniforms.uJoiMapVideoReady }],
+      [3, { map: uniforms.uLabVideo, ready: uniforms.uLabVideoReady }],
+    ]);
+
     const roomScene = createRoomScene({
       atlas: uniforms.uMap,
       joiVideo: uniforms.uJoiVideo,
@@ -608,7 +626,8 @@ function FilmCanvas({
       joiMapVideoReady: uniforms.uJoiMapVideoReady,
       nightTide: uniforms.uNightTideMap,
       room: uniforms.uRoomMap,
-      lab: uniforms.uLabMap,
+      labVideo: uniforms.uLabVideo,
+      labVideoReady: uniforms.uLabVideoReady,
       contact: uniforms.uContactMap,
     });
 
@@ -637,11 +656,12 @@ function FilmCanvas({
         uniform sampler2D uMap;
         uniform sampler2D uJoiVideo;
         uniform sampler2D uJoiMapVideo;
+        uniform sampler2D uLabVideo;
         uniform float uJoiVideoReady;
         uniform float uJoiMapVideoReady;
+        uniform float uLabVideoReady;
         uniform sampler2D uNightTideMap;
         uniform sampler2D uRoomMap;
-        uniform sampler2D uLabMap;
         uniform sampler2D uContactMap;
         uniform float uCurveLength;
         uniform float uFrameWidth;
@@ -686,7 +706,10 @@ function FilmCanvas({
           } else if (abs(frameIndex - 2.0) < 0.5) {
             image = texture2D(uNightTideMap, contentUv).rgb;
           } else if (abs(frameIndex - 3.0) < 0.5) {
-            image = texture2D(uLabMap, contentUv).rgb;
+            // Authored 4:3 to match the cell, so no inset — unlike frame 01's 16:9 master.
+            vec3 fallback = texture2D(uMap, atlasUv).rgb;
+            vec3 video = texture2D(uLabVideo, contentUv).rgb;
+            image = mix(fallback, video, uLabVideoReady);
           } else if (abs(frameIndex - 5.0) < 0.5) {
             image = texture2D(uContactMap, contentUv).rgb;
           } else if (abs(frameIndex - 4.0) < 0.5) {
@@ -1236,16 +1259,12 @@ function FilmCanvas({
 
       // The texture is re-read every frame because the mobile backend can swap from video
       // to sprite sheets mid-playback; a reference captured at setup would go stale.
-      const joiMotion = reelMotions[0];
-      const mobileMotion = reelMotions[1];
-      if (joiMotion) {
-        uniforms.uJoiVideo.value = joiMotion.texture;
-        uniforms.uJoiVideoReady.value = joiMotion.ready ? 1 : 0;
-      }
-      if (mobileMotion) {
-        uniforms.uJoiMapVideo.value = mobileMotion.texture;
-        uniforms.uJoiMapVideoReady.value = mobileMotion.ready ? 1 : 0;
-      }
+      reelMotions.forEach((motion) => {
+        const slot = motionSlots.get(motion.projectIndex);
+        if (!slot) return;
+        slot.map.value = motion.texture;
+        slot.ready.value = motion.ready ? 1 : 0;
+      });
 
       const activeProject = modulo(stepRef.current, projects.length);
       const wantsMotion = reelVisible && revealRef.current > 0.4 && !reducedMotion;
@@ -1385,21 +1404,28 @@ function FilmCanvas({
       }
 
       /*
-       * The room has two jobs: it is the picture inside reel frame 05, and once the
-       * reel hands over it is the whole stage — the reader walks out of the machine
-       * and into the room it was sitting in. One scene, two cameras, updated once.
+       * Contact's address book is the last still life, and it feeds frame 06 alone, so it
+       * follows the same nearby-frame rule as the handheld above. Frame 04 used to hold a
+       * second one — the lab's archive drawer — and plays footage now.
        */
-      stillLives.forEach((still, index) => {
-        const frame = index === 0 ? 3 : 5;
-        const distance = Math.min(modulo(activeProject - frame, projects.length), modulo(frame - activeProject, projects.length));
-        if (reelVisible && distance <= 1) {
+      const contactDistance = Math.min(
+        modulo(activeProject - 5, projects.length),
+        modulo(5 - activeProject, projects.length),
+      );
+      if (reelVisible && contactDistance <= 1) {
+        stillLives.forEach((still, index) => {
           still.update(performance.now() / 1000);
           renderer.setRenderTarget(stillTargets[index]);
           renderer.clear(); renderer.render(still.scene, still.camera);
           renderer.setRenderTarget(null);
-        }
-      });
+        });
+      }
 
+      /*
+       * The room has two jobs: it is the picture inside reel frame 05, and once the
+       * reel hands over it is the whole stage — the reader walks out of the machine
+       * and into the room it was sitting in. One scene, two cameras, updated once.
+       */
       const roomDistance = Math.min(
         modulo(activeProject - 4, projects.length),
         modulo(4 - activeProject, projects.length),

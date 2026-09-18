@@ -25,13 +25,15 @@ reverse-engineered; see **Research** below before re-deriving anything.
 
 This supersedes the older LAB/reel descriptions below:
 
-- Reel 04 and 06 are live renderer-free still lifes from `reelStillLife.ts`: a metal
-  archive drawer with three project folders and a spiral address book. Their targets
-  follow the same nearby-frame rendering rule as the handheld and room.
+- Reel 06 is a live renderer-free still life from `reelStillLife.ts` — a spiral address
+  book — and its target follows the same nearby-frame rendering rule as the handheld and
+  room. Reel 04 was a second one, a metal archive drawer, and plays footage now: see the
+  September 16 update below.
 - `/lab` now files **余钟 / Yu Zhong (UE5 ARPG)**, **余响 / Still Here (Three.js
-  exploration)** and **来生酒吧 / Afterlife (Blender reconstruction)**. `labData.ts` owns
-  these entries; genuine project images are in `public/work/lab/`. Source paths and scope
-  notes are in `docs/design-audits/lab-projects-2026-09.md`.
+  exploration)**, **来生酒吧 / Afterlife (Blender reconstruction)** and **玄照 / Xuanzhao
+  (Blender → UE5 character)**. `labData.ts` owns these entries; genuine project images are
+  in `public/work/lab/`. Source paths and scope notes are in
+  `docs/design-audits/lab-projects-2026-09.md`.
 - Contact has neutral paper, no brown vignette, stable 44px top-origin rules and measured
   DOM baselines (`useNotebookBaselines.ts`). The badge reverse uses `HoloBack.tsx`, adapted
   from the explicitly requested RedSkill `holo-card@1.0.1`; keep original artwork and rope,
@@ -49,6 +51,28 @@ This supersedes the older LAB/reel descriptions below:
   geometry upgrades basketball/MacBook, and the tall lamp beside the ball is retired.
   Preserve `screen.001` and the live laptop handoff. `roomPropShadows.ts` repairs the old
   props' baked marks on the same table/floor surfaces. Check `verify-room-props.mjs`.
+
+## September 16 update — reel 04 is footage
+
+This supersedes the reel-04 half of the September 9 note above.
+
+- **Frame 04 plays video.** `/reel/04-lab/` holds the Xuanzhao UE5 face-capture session,
+  cropped to the viewport so the editor's own panels never reach the film cell, and
+  authored **4:3** to match the cell — so both shaders sample it with `contentUv` directly,
+  unlike frame 02's 16:9 master and its `0.125 + x * 0.75` inset. It is a third entry in
+  `reelMotionSources`, which means it gets the poster, mobile re-encode and sprite-sheet
+  fallbacks the other two already had.
+- **The lab still life is gone.** `reelStillLife.ts` builds contact's address book only,
+  and no longer reads `labItems`. `uLabMap` became `uLabVideo` / `uLabVideoReady` in both
+  the reel shader and `room3d.ts`'s film handoff; contact's render target is
+  `stillTargets[0]` now. `motionSlots` in `JoiSignalLab.tsx` is where a frame index meets
+  its uniform pair — a frame missing from that map never has its texture pushed.
+- **Sheet cell size is per-source.** `reelMotion.ts` keeps columns, rows and fps (the bake
+  recipe), but 01/02 are 480×270 and the lab's is 480×360; one baked-in size would have
+  stretched one of them. Bake recipe: `fps=10,scale=<cell>,tile=4x3`, five sheets.
+- **`/lab` files four projects now**, and the intro copy in `app/i18n/strings.ts` plus the
+  served description in `app/lab/page.tsx` both say four. Both are places a fifth entry
+  would have to be counted by hand.
 
 ## Routes
 

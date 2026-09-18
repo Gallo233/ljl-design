@@ -17,7 +17,7 @@ import { LabFolder } from "./LabFolder";
  * that by saying both at once, which is the mixture the switch exists to replace.
  */
 const description =
-  "余钟：UE5 动作 RPG；余响：Three.js 探索游戏；来生酒吧：Blender 三维场景重建。三个关于游戏与空间的制作实验。";
+  "余钟：UE5 动作 RPG；余响：Three.js 探索游戏；来生酒吧：Blender 三维场景重建；玄照：从参考图到 UE5 的角色管线。四个关于游戏与空间的制作实验。";
 
 export const metadata: Metadata = {
   // The root layout's title template appends "— Gallo".

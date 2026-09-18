@@ -14,11 +14,14 @@ import { reelMotionSources } from "./reelProjects";
 
 type ReelMotionSource = (typeof reelMotionSources)[number];
 
-/** Sheet geometry, fixed by how the sheets were baked (ffmpeg `fps=10,scale=480:270,tile=4x3`). */
+/**
+ * Sheet layout, fixed by how every sheet is baked (ffmpeg `fps=10,tile=4x3`).
+ *
+ * Cell size is *not* here: it is per-source, because the frames are not all one shape —
+ * 01 and 02 are 16:9 and the lab's is 4:3. See `sheets` in `reelProjects.ts`.
+ */
 const SHEET_COLUMNS = 4;
 const SHEET_ROWS = 3;
-const SHEET_FRAME_WIDTH = 480;
-const SHEET_FRAME_HEIGHT = 270;
 const SHEET_FPS = 10;
 
 /**
@@ -152,14 +155,15 @@ export function createVideoMotion(
 /**
  * Sprite-sheet backend — the same footage as plain images.
  *
- * The GPU only ever sees one 480×270 canvas: each tick blits the current cell out of the
- * decoded sheet rather than uploading the 1920×810 sheet itself. Sheets load in order and
+ * The GPU only ever sees one cell-sized canvas: each tick blits the current cell out of the
+ * decoded sheet rather than uploading the whole 4×3 sheet itself. Sheets load in order and
  * playback starts as soon as the first one decodes, so this is usable before it is complete.
  */
 export function createSheetMotion(source: ReelMotionSource): ReelMotion {
+  const { frameWidth, frameHeight } = source.sheets;
   const canvas = document.createElement("canvas");
-  canvas.width = SHEET_FRAME_WIDTH;
-  canvas.height = SHEET_FRAME_HEIGHT;
+  canvas.width = frameWidth;
+  canvas.height = frameHeight;
   const context = canvas.getContext("2d");
 
   const texture = new THREE.CanvasTexture(canvas);
@@ -191,14 +195,14 @@ export function createSheetMotion(source: ReelMotionSource): ReelMotion {
       const cell = frame % perSheet;
       context.drawImage(
         sheet,
-        (cell % SHEET_COLUMNS) * SHEET_FRAME_WIDTH,
-        Math.floor(cell / SHEET_COLUMNS) * SHEET_FRAME_HEIGHT,
-        SHEET_FRAME_WIDTH,
-        SHEET_FRAME_HEIGHT,
+        (cell % SHEET_COLUMNS) * frameWidth,
+        Math.floor(cell / SHEET_COLUMNS) * frameHeight,
+        frameWidth,
+        frameHeight,
         0,
         0,
-        SHEET_FRAME_WIDTH,
-        SHEET_FRAME_HEIGHT,
+        frameWidth,
+        frameHeight,
       );
       texture.needsUpdate = true;
     },

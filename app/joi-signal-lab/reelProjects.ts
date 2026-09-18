@@ -26,9 +26,9 @@ export const projects = [
 export type ProjectSignal = (typeof projects)[number];
 
 /**
- * The reel's two moving frames, and the three ways they can be delivered.
+ * The reel's three moving frames, and the three ways each can be delivered.
  *
- * `src` is the desktop master. `mobileSrc` is the same footage at 960×540 — the Joi Mobile
+ * `src` is the desktop master. `mobileSrc` is the same footage smaller — the Joi Mobile
  * master is **2560×1440**, and decoding that every frame *and* uploading it as a WebGL
  * texture is more than a phone GPU will do while a second WebGL context is also running.
  * That is most of why the mobile reel both stalled and dropped frames.
@@ -39,6 +39,10 @@ export type ProjectSignal = (typeof projects)[number];
  * reporting a healthy `readyState` while the WebGL texture receives nothing — which is
  * exactly how the frame rendered *black* instead of falling back. Sprite sheets are plain
  * images, so no video policy can reach them.
+ *
+ * Sheet cell size travels with the source rather than sitting in `reelMotion.ts`: frames 01
+ * and 02 are 16:9 footage, and the lab's is 4:3, so one baked-in cell size would stretch one
+ * of them. Columns, rows and fps are still fixed by the bake recipe and stay in that file.
  */
 export const reelMotionSources = [
   {
@@ -46,14 +50,28 @@ export const reelMotionSources = [
     src: "/reel/01-joi/showcase.mp4",
     mobileSrc: "/reel/01-joi/showcase-mobile.mp4",
     poster: "/reel/01-joi/still.avif",
-    sheets: { dir: "/reel/01-joi/sheets-mobile", count: 5 },
+    sheets: { dir: "/reel/01-joi/sheets-mobile", count: 5, frameWidth: 480, frameHeight: 270 },
   },
   {
     projectIndex: 1,
     src: "/reel/02-joi-mobile/showcase.mp4",
     mobileSrc: "/reel/02-joi-mobile/showcase-mobile.mp4",
     poster: "/reel/02-joi-mobile/still.avif",
-    sheets: { dir: "/reel/02-joi-mobile/sheets-mobile", count: 5 },
+    sheets: { dir: "/reel/02-joi-mobile/sheets-mobile", count: 5, frameWidth: 480, frameHeight: 270 },
+  },
+  /*
+   * Frame 04 is the lab, and its footage is the Xuanzhao face-capture session running in
+   * UE5 — cropped to the viewport so the editor's own panels never reach the film cell.
+   * It is authored 4:3 to match the cell, so the shader samples it with no inset, unlike
+   * frame 02's 16:9 master. This frame used to be a three.js still life; the drawer scene
+   * is gone, and the atlas art plus this poster are what stand in before the first frame.
+   */
+  {
+    projectIndex: 3,
+    src: "/reel/04-lab/showcase.mp4",
+    mobileSrc: "/reel/04-lab/showcase-mobile.mp4",
+    poster: "/reel/04-lab/still.avif",
+    sheets: { dir: "/reel/04-lab/sheets-mobile", count: 5, frameWidth: 480, frameHeight: 360 },
   },
 ] as const;
 export const reelPosterSources = reelMotionSources.map(({ projectIndex, poster }) => ({ projectIndex, poster }));

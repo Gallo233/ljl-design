@@ -36,5 +36,20 @@ export const LAB_ITEMS: LabItem[] = [
     learnedZh: ["以参考图为依据的场景重建，部分局部表面使用参考图 UV。", "持续研究几何、光照和构图；不宣称未经验证的还原度。"],
     thumb: "/work/lab/afterlife.webp", enabled: true,
   },
+  {
+    id: "xuanzhao", index: "A-04", title: "Xuanzhao", titleZh: "玄照",
+    year: "2026", status: "ONGOING", tag: "BLENDER → UE5 / CHARACTER",
+    summary: "A stylised character carried end to end: parts generated from a reference pack, assembled and rigged in Blender, then played in Unreal Engine 5. The build runs in PIE with locomotion, combo and charged attacks, and spring-driven hair and fox ears; a MediaPipe face bridge maps 52 capture coefficients onto 25 morph targets and splits head rotation across two neck joints through a native Control Rig.",
+    summaryZh: "一个从参考图做到可玩的角色：分件生成后在 Blender 组装、绑定，再进入 Unreal Engine 5。构建已在 PIE 中跑通位移、连段与蓄力攻击，头发与狐耳由弹簧驱动；面捕桥接把 MediaPipe 的 52 个系数映射到 25 个形态键，并经原生 Control Rig 把头部旋转分配到两段脖子。",
+    learned: [
+      "115 bones and 25 morph targets, measured in PIE at 555.66 cm/s running and 89.79 cm jumping, over Epic's Game Animation Sample locomotion set.",
+      "Still native DefaultLit, and the skirt and ornaments have no realtime cloth yet — the NPR material pass and the live-input face session are the next stage.",
+    ],
+    learnedZh: [
+      "115 骨骼、25 个形态键；PIE 实测跑速 555.66 cm/s、跳高 89.79 cm，位移动作基于 Epic 的 Game Animation Sample。",
+      "目前仍是原生 DefaultLit，裙摆与饰物尚无实时布料；NPR 材质与实时输入的面捕接入是下一阶段。",
+    ],
+    thumb: "/work/lab/xuanzhao.webp", enabled: true,
+  },
 ];
 export const labItems = LAB_ITEMS.filter(item => item.enabled);
